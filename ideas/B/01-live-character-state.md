@@ -34,7 +34,7 @@ Key move: the owner's self-awareness is **the same epistemic filter the decision
 - **Light and noise the character emits** (torch, armour clank). Perceptibility of the *whole person*, not an element.
 - **Carried load** and **chain of custody** of items (stolen, gifted, sealed; who knows it is stolen).
 - **Obligations**: promises, debts, oaths, orders. They are facts with two parties; they belong in the panel because they shape behaviour.
-- **Magic state specific to the Witcher world**: Signs strain, medallion reaction, mutations. The word is "engine is world-agnostic": put these under `other` with world-pack-defined display labels.
+- **Magic state specific to the Witcher world**: Signs strain, medallion reaction, mutations. The engine is world-agnostic, so these go under `other` with display labels supplied by the world pack.
 - **Companions carry the same panel** (a horse's wound, a companion's fear). The panel structure is per character and recursive; the companion panel obeys the same self-awareness rule (the PC sees only what the PC can see of a companion).
 - **Short change strip**: what changed since the last scene (new wound, effect ended). Matters more on a phone than the full panel.
 
