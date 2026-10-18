@@ -170,15 +170,20 @@ class LLMJudge(Judge):
             "State:\n" + "\n".join(f"- {s}" for s in state) + "\n\nQuestions:\n" + qs +
             '\n\nReply with one JSON object: {"<question name>": <its answer object>, ...}'
         )
-        raw = self.provider.complete(
-            self.model, [{"role": "system", "content": self.SYSTEM},
-                         {"role": "user", "content": prompt}])
-        m = re.search(r"\{.*\}", raw, re.DOTALL)
-        try:
-            data = json.loads(m.group(0)) if m else None
-            return {n: self._parse(q, data[n]) for n, q in questions.items()}
-        except (TypeError, KeyError, ValueError, AttributeError) as e:
-            raise JudgeError(f"unparseable LLM judgment: {raw[:200]!r}") from e
+        raw = ""
+        for attempt in range(2):  # one retry with a stricter instruction, like a strict matcher
+            raw = self.provider.complete(
+                self.model, [{"role": "system", "content": self.SYSTEM},
+                             {"role": "user", "content": prompt + (
+                                 "\nJSON object only: no prose, no code fences, every question "
+                                 "name present." if attempt else "")}])
+            m = re.search(r"\{.*\}", raw, re.DOTALL)
+            try:
+                data = json.loads(m.group(0)) if m else None
+                return {n: self._parse(q, data[n]) for n, q in questions.items()}
+            except (TypeError, KeyError, ValueError, AttributeError):
+                continue
+        raise JudgeError(f"unparseable LLM judgment: {raw[:200]!r}")
 
     @staticmethod
     def _parse(q: Question, a: Mapping[str, Any]) -> Judgment:
@@ -221,16 +226,17 @@ class EscalatingJudge(Judge):
                 else:
                     out[n] = j
         if redo:
+            cause = ""
             try:
                 answers = self.fallback.ask(state, redo)
-            except JudgeError:
-                answers = {}
+            except JudgeError as e:
+                answers, cause = {}, f" (LLM: {e})"
             for n, j in answers.items():
                 out[n] = Judgment(j.answer, j.probabilities, j.probability, True, j.backend)
             for n in redo:
                 if n not in out:  # LLM failed too: keep Jev's low-confidence answer if any
                     if n not in jev_answers:
-                        raise JudgeError(f"no backend could answer {n!r}")
+                        raise JudgeError(f"no backend could answer {n!r}{cause}")
                     out[n] = jev_answers[n]
         return out
 

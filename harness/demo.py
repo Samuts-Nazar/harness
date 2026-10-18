@@ -124,7 +124,15 @@ def main(argv: list[str] | None = None) -> None:
     # the demo starts fresh; the log is in memory, so stale memory files would only confuse
     eng = Engine(provider, PROFILES, Scene("Roadside inn", ("innkeeper", "bard"), 18 * 60),
                  models=models, judge=judge, campaign_dir=camp)
+    # background knowledge the characters bring to the scene (without it, the output check
+    # correctly refuses every local detail an NPC invents)
     eng.facts.add_canon("Witchers hunt monsters for coin.", knowers=[("innkeeper", "told")])
+    eng.facts.add_canon(
+        "For three nights running, sheep and a dog east of the village were found torn apart.",
+        knowers=[("innkeeper", "told"), ("bard", "told")])
+    eng.facts.add_canon(
+        "The old mill east of the village stands empty since the miller's daughter vanished.",
+        knowers=[("bard", "told"), ("innkeeper", "told")])
 
     # Geralt arrives with a bloody drawn sword (observable) and an old scar (hidden)
     eng.apply_state_change(StateChange(PLAYER, EQUIPMENT, "add", "a bloody drawn sword", True))

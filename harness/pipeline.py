@@ -35,7 +35,8 @@ from .models import (
     Scene,
 )
 from .narrator import (
-    NarrationError, NarratorOutput, has_quotes, has_speaker_line, parse_narration, strip_speech,
+    NarrationError, NarratorOutput, clean_npc_line, has_quotes, has_speaker_line, parse_narration,
+    strip_speech,
 )
 from .perception import ACTION, DESCRIPTION, SPEECH, perceivers
 from .providers import Provider
@@ -243,8 +244,8 @@ class Engine:
         fall back to a minimal in-character non-answer)."""
         rejected: list[str] = []
         for _ in range(self.check_retries + 1):
-            text = self.provider.complete(
-                self.models.npc, self.ctx.character(npc, self.scene, mem)).strip()
+            text = clean_npc_line(self.provider.complete(
+                self.models.npc, self.ctx.character(npc, self.scene, mem)))
             if not self._unknown_claim(npc, mem, text):
                 return text
             rejected.append(text)

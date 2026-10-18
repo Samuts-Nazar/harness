@@ -11,7 +11,9 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Collection
 
-QUOTE_RE = re.compile(r'"[^"\n]+"|“[^”\n]+”|«[^»\n]+»')
+# double quotes, curly, guillemets, and single quotes (not apostrophes: those touch a letter)
+QUOTE_RE = re.compile(r'"[^"\n]+"|“[^”\n]+”|«[^»\n]+»|(?<!\w)\'[^\'\n]{3,}?\'(?!\w)')
+STAGE_RE = re.compile(r"\([^)\n]*\)|\*[^*\n]+\*")
 
 
 class NarrationError(ValueError):
@@ -69,3 +71,13 @@ def strip_speech(text: str, npc_names: Collection[str]) -> str:
     text = _speaker_line_re(npc_names).sub("", text) if npc_names else text
     text = QUOTE_RE.sub("", text)
     return re.sub(r"[ \t]{2,}", " ", re.sub(r"\s+([,.;!?])", r"\1", text)).strip()
+
+
+def clean_npc_line(text: str) -> str:
+    """Keep only what is said aloud: drop (stage directions) and *actions*, and the quote marks a
+    model sometimes wraps around its own line. Returns the original if nothing would be left."""
+    out = STAGE_RE.sub(" ", text)
+    out = re.sub(r"\s+", " ", out).strip()
+    if len(out) >= 2 and out[0] in "\"“«" and out[-1] in "\"”»" and not QUOTE_RE.search(out[1:-1]):
+        out = out[1:-1].strip()
+    return out or text.strip()

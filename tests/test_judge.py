@@ -151,9 +151,22 @@ def test_llm_judge_parses_batched_answers():
     assert "state line" in prov.calls[0][1][1]["content"]
 
 
-def test_llm_judge_rejects_garbage():
+def test_llm_judge_rejects_garbage_after_one_stricter_retry():
+    prov = FakeProvider(script={"llm": ["no json here", "still prose"]})
     with pytest.raises(JudgeError):
-        LLMJudge(FakeProvider(script={"llm": ["no json here"]}), "llm").yes_no("q?")
+        LLMJudge(prov, "llm").yes_no("q?")
+    assert len(prov.calls) == 2 and "JSON object only" in prov.calls[1][1][1]["content"]
+    ok = FakeProvider(script={"llm": ["sorry", '{"q": {"answer": "no", "p_yes": 0.1}}']})
+    assert LLMJudge(ok, "llm").yes_no("q?").answer is False
+
+
+def test_escalation_failure_names_the_cause():
+    class Bad(Judge):
+        def ask(self, state, questions):
+            raise JudgeError("LLM exploded")
+    ej = EscalatingJudge(Scripted({}), Bad())
+    with pytest.raises(JudgeError, match="LLM exploded"):
+        ej.ask([], {"m": score_q("how much?", legend=("a", "b"), tag="relationship_magnitude")})
 
 
 def test_stub_judge_keeps_working():
