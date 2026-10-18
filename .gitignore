@@ -11,3 +11,5 @@ __pycache__/
 .mypy_cache/
 .cache/
 .direnv/
+experiments/results/
+experiments/*/results/
