@@ -8,6 +8,8 @@ from typing import Iterator, Protocol
 
 import httpx
 
+from .policy import Spend, check_model
+
 Messages = list[dict[str, str]]
 
 
@@ -19,24 +21,32 @@ class Provider(Protocol):
 class OpenRouterProvider:
     URL = "https://openrouter.ai/api/v1/chat/completions"
 
-    def __init__(self, api_key: str | None = None, timeout: float = 120.0) -> None:
+    def __init__(self, api_key: str | None = None, timeout: float = 120.0,
+                 spend: Spend | None = None) -> None:
         key = api_key or os.environ.get("OPENROUTER_API_KEY")
         if not key:
             raise RuntimeError("OPENROUTER_API_KEY is not set")
         self._headers = {"Authorization": f"Bearer {key}"}
         self._timeout = timeout
+        self.spend = spend or Spend()
 
     def complete(self, model: str, messages: Messages) -> str:
-        r = httpx.post(
-            self.URL,
-            headers=self._headers,
-            json={"model": model, "messages": messages},
-            timeout=self._timeout,
-        )
+        check_model(model)  # cheap models only, enforced here
+        self.spend.check()
+        body = {"model": model, "messages": messages, "usage": {"include": True},
+                "reasoning": {"enabled": False}}  # short outputs; no hidden thinking tokens
+        r = httpx.post(self.URL, headers=self._headers, json=body, timeout=self._timeout)
+        if r.status_code == 400:  # a model that insists on reasoning: retry with defaults
+            body.pop("reasoning")
+            r = httpx.post(self.URL, headers=self._headers, json=body, timeout=self._timeout)
         r.raise_for_status()
-        return r.json()["choices"][0]["message"]["content"] or ""
+        j = r.json()
+        self.spend.add(j.get("usage"))
+        return j["choices"][0]["message"]["content"] or ""
 
     def stream(self, model: str, messages: Messages) -> Iterator[str]:
+        check_model(model)
+        self.spend.check()
         with httpx.stream(
             "POST",
             self.URL,

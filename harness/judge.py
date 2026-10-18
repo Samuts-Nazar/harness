@@ -18,6 +18,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 import httpx
 
+from .policy import Spend, check_model
 from .providers import Provider
 
 YES_NO, CHOICE, SCORE = "yes_no", "choice", "score"
@@ -113,8 +114,10 @@ class JevJudge(Judge):
 
     def __init__(self, api_key: str, model: str = "typesafe/jev-1.14", *,
                  client: httpx.Client | None = None, url: str = JEV_URL,
-                 timeout: float = 60.0) -> None:
+                 timeout: float = 60.0, spend: Spend | None = None) -> None:
+        check_model(model)
         self.model, self.url = model, url
+        self.spend = spend or Spend()
         self._headers = {"Authorization": f"Bearer {api_key}"}
         self._client = client or httpx.Client(timeout=timeout)
         self.calls = 0
@@ -126,10 +129,13 @@ class JevJudge(Judge):
             "questions": {n: _jev_question(q) for n, q in questions.items()},
         }
         self.calls += 1
+        self.spend.check()
         try:
             r = self._client.post(self.url, headers=self._headers, json=body)
             r.raise_for_status()
-            answers = r.json()["answers"]
+            j = r.json()
+            self.spend.add(j.get("usage"))
+            answers = j["answers"]
         except (httpx.HTTPError, KeyError, ValueError) as e:
             raise JudgeError(f"Jev call failed: {e}") from e
         try:
