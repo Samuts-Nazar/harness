@@ -52,6 +52,14 @@ def test_narrator_speakers_must_be_present_npcs():
     assert any(n["kind"] == "narrator_bad_speakers" for n in eng.devlog)
 
 
+def test_speakers_given_by_display_name_are_resolved():
+    script = {"narrator": [narr("Rain.", [], ["Dandelion", "INNKEEPER", "Nobody"])],
+              "npc": ["Evening!", "Hm."], "extractor": [diff()]}
+    eng, _ = make_engine(script)
+    res = eng.turn("hello")
+    assert [u.payload["speaker"] for u in res.utterances] == ["bard", "innkeeper"]
+
+
 def test_narrator_speech_is_rejected_and_regenerated():
     bad = narr('The innkeeper grunts.\nInnkeeper: "Get out of my inn!"')
     script = {"narrator": [bad, narr("The innkeeper grunts and points at the door.")],
@@ -94,6 +102,8 @@ def test_narrator_speech_stripped_and_logged_after_two_retries():
 def test_single_quoted_speech_is_detected_but_apostrophes_are_not():
     names = ["Innkeeper", "innkeeper"]
     assert has_quotes("He swallows. 'A room, is it? Coin up front, witcher.' The fire crackles.")
+    # an apostrophe inside the quoted words must not hide the speech
+    assert has_quotes("He leans in. 'Three nights now, something's tearing sheep apart. It isn't wolves.'")
     assert not has_quotes("Dandelion's lute falls silent and the innkeeper's hand hovers; it isn't odd.")
     assert strip_speech("He swallows. 'A room, is it?' The fire crackles.", names) \
         == "He swallows. The fire crackles."

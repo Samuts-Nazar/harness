@@ -12,7 +12,10 @@ from dataclasses import dataclass, field
 from typing import Any, Collection
 
 # double quotes, curly, guillemets, and single quotes (not apostrophes: those touch a letter)
-QUOTE_RE = re.compile(r'"[^"\n]+"|“[^”\n]+”|«[^»\n]+»|(?<!\w)\'[^\'\n]{3,}?\'(?!\w)')
+QUOTE_RE = re.compile(
+    r'"[^"\n]+"|“[^”\n]+”|«[^»\n]+»'
+    r"|(?<!\w)'(?:[^'\n]|(?<=\w)'(?=\w)){3,}?'(?!\w)"  # apostrophes inside words stay inside
+)
 STAGE_RE = re.compile(r"\([^)\n]*\)|\*[^*\n]+\*")
 
 

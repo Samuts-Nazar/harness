@@ -127,7 +127,8 @@ class ContextBuilder:
             '{"description": <scene prose, no quoted speech>,\n'
             ' "observable_actions": [<one short sentence per thing a character does that anyone '
             "in the room could see or hear, naming the actor>],\n"
-            f' "speakers": [<ids of characters who speak next, only from: {npcs}>]}}\n'
+            f' "speakers": [<ids (the word before the parentheses) of characters who speak next, '
+            f"only from: {npcs}>]}}\n"
             "Never write speech for anyone but the player: NPC lines are produced separately."
         )
         system = "You are the narrator of a role-playing game. Write vivid prose."

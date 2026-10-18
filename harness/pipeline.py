@@ -213,8 +213,13 @@ class Engine:
         return self._valid_speakers(stripped)
 
     def _valid_speakers(self, out: NarratorOutput) -> NarratorOutput:
-        ok = [s for s in out.speakers if s in self.scene.present and s != PLAYER]
-        if len(ok) != len(out.speakers):
+        by_name = {p.name.lower(): c for c, p in self.profiles.items()}
+        ok: list[str] = []
+        for s in out.speakers:  # models often answer with the display name instead of the id
+            cid = s if s in self.profiles else by_name.get(s.strip().lower(), s)
+            if cid in self.scene.present and cid != PLAYER and cid not in ok:
+                ok.append(cid)
+        if ok != out.speakers:
             self._note("narrator_bad_speakers", proposed=out.speakers, kept=ok)
         out.speakers = ok
         return out
