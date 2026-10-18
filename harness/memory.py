@@ -127,7 +127,7 @@ class MemoryWriter:
             if f.source_event_id is not None:
                 event_ids.add(f.source_event_id)
             if k.source is not None:
-                how = f"{k.how} from {self._who(k.source)}"
+                how = f"{'told by' if k.how == 'told' else 'heard from'} {self._who(k.source)}"
             else:
                 how = "perceived directly" if k.how == "witnessed" else k.how
             ev = f", {self._ev_link(k.event_id)}" if k.event_id is not None else ""

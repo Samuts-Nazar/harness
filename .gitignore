@@ -13,3 +13,4 @@ __pycache__/
 .direnv/
 experiments/results/
 experiments/*/results/
+campaigns/

@@ -311,7 +311,9 @@ class Engine:
             cause_id=cause.id,
         )
         who = self.ctx.name(ch.character)
-        observers = [c for c in self.scene.present if c != ch.character]
+        # only someone in the room can be seen; an absent character's change waits for entry
+        observers = ([c for c in self.scene.present if c != ch.character]
+                     if ch.character in self.scene.present else [])
         if ch.op == "add" and ch.observable or ch.op == "reveal":
             self._observe(_OBSERVED[ch.category].format(who=who, item=ch.item), observers, ev)
         elif ch.op == "remove" and was:
