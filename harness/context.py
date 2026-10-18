@@ -82,7 +82,10 @@ class ContextBuilder:
             )
         if seen:
             parts.append("Recent conversation:\n" + "\n".join(self._seen(e) for e in seen))
-        parts.append(f"Say what {prof.name} says next, aloud and in character. Dialogue only.")
+        parts.append(
+            f"Say what {prof.name} says next, aloud and in character. Write only {prof.name}'s "
+            "own words as one continuous speech: no stage directions, no other characters' lines."
+        )
         system = f"You are {prof.name}. {prof.description}".strip()
         return [
             {"role": "system", "content": system},

@@ -74,7 +74,7 @@ def test_narrator_speech_is_rejected_and_regenerated():
 def test_quoted_speech_goes_to_the_judge():
     quoted = narr('The innkeeper says "get out" and glares.')
     script = {"narrator": [quoted, narr("The innkeeper glares.")], "npc": [], "extractor": [diff()]}
-    judge = FakeJudge({"narrator_speech": True})  # judge: yes, that is NPC speech
+    judge = FakeJudge({"narrator_speech": [True, False]})  # 1st: that is NPC speech; 2nd: clean
     eng, prov = make_engine(script, judge=judge)
     res = eng.turn("hello")
     assert res.narration == "The innkeeper glares."
@@ -116,6 +116,21 @@ def test_npc_line_stage_directions_and_wrapping_quotes_are_removed():
     assert clean_npc_line('"Oh, the old mill?"') == "Oh, the old mill?"
     assert clean_npc_line('He said "no" and left') == 'He said "no" and left'
     assert clean_npc_line("(sighs)") == "(sighs)"  # never returns an empty line
+    # an NPC call is one voice: other characters' long quoted lines are dropped
+    assert clean_npc_line(
+        'Three nights now, something tears the sheep. "Sounds like a tale that needs a witcher." '
+        '"What is our next verse then?"') == "Three nights now, something tears the sheep."
+    assert clean_npc_line('He called me "the butcher" once.') == 'He called me "the butcher" once.'
+
+
+def test_paraphrased_speech_goes_to_the_judge_even_without_quotes():
+    prose = narr("He tells of the old mill, how it has stood empty for a decade.")
+    script = {"narrator": [prose, narr("The bard shrugs.")], "npc": [], "extractor": [diff()]}
+    judge = FakeJudge({"narrator_speech": [True, False]})
+    eng, prov = make_engine(script, judge=judge)
+    res = eng.turn("hello")
+    assert res.narration == "The bard shrugs."
+    assert len(judge.asked) == 2 and judge.asked[0][1]["q"].tag == "narrator_speech"
 
 
 def test_malformed_narrator_output_is_retried():

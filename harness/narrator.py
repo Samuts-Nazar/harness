@@ -16,7 +16,8 @@ QUOTE_RE = re.compile(
     r'"[^"\n]+"|“[^”\n]+”|«[^»\n]+»'
     r"|(?<!\w)'(?:[^'\n]|(?<=\w)'(?=\w)){3,}?'(?!\w)"  # apostrophes inside words stay inside
 )
-STAGE_RE = re.compile(r"\([^)\n]*\)|\*[^*\n]+\*")
+_LONG_QUOTE_RE = re.compile(r'["“«]([^"“”«»\n]+)["”»]')
+STAGE_RE =re.compile(r"\([^)\n]*\)|\*[^*\n]+\*")
 
 
 class NarrationError(ValueError):
@@ -82,5 +83,8 @@ def clean_npc_line(text: str) -> str:
     out = STAGE_RE.sub(" ", text)
     out = re.sub(r"\s+", " ", out).strip()
     if len(out) >= 2 and out[0] in "\"“«" and out[-1] in "\"”»" and not QUOTE_RE.search(out[1:-1]):
-        out = out[1:-1].strip()
-    return out or text.strip()
+        return out[1:-1].strip() or text.strip()
+    # an NPC call must be one voice: long quoted passages after unquoted speech are other
+    # characters' lines the model wrote along (short quoted phrases are fine)
+    out = _LONG_QUOTE_RE.sub(lambda m: " " if len(m.group(1).split()) >= 4 else m.group(0), out)
+    return re.sub(r"\s+", " ", out).strip() or text.strip()

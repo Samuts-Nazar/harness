@@ -77,7 +77,7 @@ def fake_stack() -> tuple[Provider, Judge, ModelConfig]:
         ],
     })
     judge = FakeJudge({
-        "narrator_speech": True,
+        "narrator_speech": lambda q, st: '"' in st[0],  # the scripted offender quotes an NPC
         "unknown_claim": lambda q, st: "Ciri" in st[0].rsplit("Line:", 1)[1],
         "salience": lambda q, st: "Innkeeper" in q.text,
         "attitude_direction": "negative",

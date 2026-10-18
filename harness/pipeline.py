@@ -3,6 +3,7 @@ validation -> perception computed in code -> commit. Also live and retroactive i
 scene entry, live-state perception, and regeneration of the per-character memory files."""
 from __future__ import annotations
 
+import re
 import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -169,17 +170,17 @@ class Engine:
         text = "\n".join(out.texts())
         if has_speaker_line(text, self._npc_names):
             return True
-        if not has_quotes(text):
-            return False
+        # every output is judged: speech also hides in paraphrase ("he tells of the old mill, how...")
         try:
             return bool(self.judge.yes_no(
-                "Does the text contain words spoken aloud by a character other than the "
-                "player character?",
+                "Does the text state what a character other than the player character says "
+                "aloud, either quoted or paraphrased with its content? (Mere mention that "
+                "someone speaks, with no content, does not count.)",
                 f"Player character: {self.ctx.name(PLAYER)}\nText: {text}",
                 tag="narrator_speech").answer)
         except JudgeError as e:
             self._note("narrator_speech_check_failed", error=str(e))
-            return True  # quotes and no verdict: treat as speech
+            return has_quotes(text)  # no verdict: quotes are treated as speech
 
     def _narrate(self, player_text: str) -> NarratorOutput:
         """Structured narrator output. NPC speech is rejected and regenerated (at most
@@ -215,8 +216,9 @@ class Engine:
     def _valid_speakers(self, out: NarratorOutput) -> NarratorOutput:
         by_name = {p.name.lower(): c for c, p in self.profiles.items()}
         ok: list[str] = []
-        for s in out.speakers:  # models often answer with the display name instead of the id
-            cid = s if s in self.profiles else by_name.get(s.strip().lower(), s)
+        for s in out.speakers:  # models answer with the display name, or "id (Name)"
+            s = re.sub(r"\s*\(.*\)\s*$", "", s).strip()
+            cid = s if s in self.profiles else by_name.get(s.lower(), s)
             if cid in self.scene.present and cid != PLAYER and cid not in ok:
                 ok.append(cid)
         if ok != out.speakers:
