@@ -1,0 +1,9 @@
+[project]
+name = "harness"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["httpx", "python-dotenv"]
+
+[tool.pytest.ini_options]
+pythonpath = [".", "tests"]
+testpaths = ["tests"]
