@@ -25,10 +25,11 @@ class FactStore:
         game_time: int,
         location: str,
         notability: float,
-        knowers: Iterable[tuple[str, str]],
+        knowers: Iterable[tuple],
     ) -> int:
-        knowers = list(knowers)
-        for _, how in knowers:
+        # each knower: (character, how) or (character, how, source)
+        norm = [(k[0], k[1], k[2] if len(k) > 2 else None) for k in knowers]
+        for _, how, _ in norm:
             if how not in HOW_VALUES:
                 raise ValueError(f"bad knowledge mode: {how!r}")
         with self.conn:
@@ -38,11 +39,11 @@ class FactStore:
                 (store, content, source_event_id, game_time, location, notability),
             )
             fid = int(cur.lastrowid)  # type: ignore[arg-type]
-            for ch, how in knowers:
+            for ch, how, src in norm:
                 self.conn.execute(
-                    "INSERT OR IGNORE INTO fact_knowers (fact_id, character, how, learned_at)"
-                    " VALUES (?,?,?,?)",
-                    (fid, ch, how, game_time),
+                    "INSERT OR IGNORE INTO fact_knowers"
+                    " (fact_id, character, how, learned_at, source, event_id) VALUES (?,?,?,?,?,?)",
+                    (fid, ch, how, game_time, src, source_event_id),
                 )
         return fid
 
@@ -53,7 +54,7 @@ class FactStore:
         game_time: int = 0,
         location: str = "",
         notability: float = 0.5,
-        knowers: Iterable[tuple[str, str]] = (),
+        knowers: Iterable[tuple] = (),
     ) -> int:
         return self._insert(CANON, content, None, game_time, location, notability, knowers)
 
@@ -65,7 +66,7 @@ class FactStore:
         game_time: int,
         location: str,
         notability: float,
-        knowers: Iterable[tuple[str, str]],
+        knowers: Iterable[tuple],
     ) -> int:
         return self._insert(
             CAMPAIGN, content, source_event_id, game_time, location, notability, knowers
@@ -80,7 +81,7 @@ class FactStore:
         out: list[Fact] = []
         for r in rows:
             ks = self.conn.execute(
-                "SELECT character, how, learned_at FROM fact_knowers WHERE fact_id=?"
+                "SELECT character, how, learned_at, source, event_id FROM fact_knowers WHERE fact_id=?"
                 " ORDER BY character",
                 (r["id"],),
             ).fetchall()
@@ -93,7 +94,7 @@ class FactStore:
                     game_time=r["game_time"],
                     location=r["location"],
                     notability=r["notability"],
-                    knowers=tuple(Knower(k["character"], k["how"], k["learned_at"]) for k in ks),
+                    knowers=tuple(Knower(k["character"], k["how"], k["learned_at"], k["source"], k["event_id"]) for k in ks),
                 )
             )
         return out
@@ -122,6 +123,13 @@ class FactStore:
             (at_time,),
         ).fetchall()
         return self._hydrate(rows)
+
+    def get(self, fact_id: int) -> Fact | None:
+        """An active fact by id (None if unknown or rolled back)."""
+        rows = self.conn.execute(
+            f"SELECT f.* FROM facts f WHERE f.id = ? AND {self._ACTIVE}", (fact_id,)
+        ).fetchall()
+        return self._hydrate(rows)[0] if rows else None
 
     def search_canon(self, query: str, k: int = 5) -> list[Fact]:
         """Placeholder retrieval: token overlap. Swappable for embeddings later."""

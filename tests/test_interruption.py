@@ -13,8 +13,7 @@ def _script(extra_ext=None, lines=(LINE,)):
         "narrator": ["N.", "N2.", "N3."],
         "npc": list(lines),
         "extractor": extra_ext
-        or [diff(fact("Stranger with black sword near well", "innkeeper",
-                      [("innkeeper", "witnessed"), ("bard", "heard")]))],
+        or [diff(fact("Stranger with black sword near well", "innkeeper"))],
     }
 
 
@@ -66,9 +65,8 @@ def test_live_interrupt_cuts_stores_intent_and_records_event():
 
 def test_retroactive_interrupt_rolls_back_state_from_tail():
     script = _script(extra_ext=[
-        diff(fact("Stranger with black sword near well", "innkeeper",
-                  [("innkeeper", "witnessed"), ("bard", "heard")])),
-        diff(fact("Innkeeper saw a stranger", "innkeeper", [("innkeeper", "witnessed")])),
+        diff(fact("Stranger with black sword near well", "innkeeper")),
+        diff(fact("Innkeeper saw a stranger", "innkeeper")),
     ])
     eng, _ = make_engine(script)
     eng.turn("hello", speakers=["innkeeper"])

@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS fact_knowers (
     character TEXT NOT NULL,
     how TEXT NOT NULL CHECK (how IN ('witnessed', 'heard', 'told')),
     learned_at INTEGER NOT NULL,
+    source TEXT,                                 -- NULL: perceived directly; else who told/said it
+    event_id INTEGER REFERENCES events(id),      -- the event this knowledge came from
     PRIMARY KEY (fact_id, character)
 );
 CREATE INDEX IF NOT EXISTS idx_knowers_char ON fact_knowers(character);
