@@ -160,6 +160,12 @@ def test_llm_judge_rejects_garbage_after_one_stricter_retry():
     assert LLMJudge(ok, "llm").yes_no("q?").answer is False
 
 
+def test_llm_judge_accepts_bracketed_question_names():
+    prov = FakeProvider(script={"llm": ['```json\n{"[a:mag]": {"answer": 2}}\n```']})
+    out = LLMJudge(prov, "llm").ask([], {"a:mag": score_q("how much?", legend=("x", "y", "z"))})
+    assert out["a:mag"].answer == 2 and len(prov.calls) == 1
+
+
 def test_escalation_failure_names_the_cause():
     class Bad(Judge):
         def ask(self, state, questions):

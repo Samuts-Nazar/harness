@@ -180,6 +180,7 @@ class LLMJudge(Judge):
             m = re.search(r"\{.*\}", raw, re.DOTALL)
             try:
                 data = json.loads(m.group(0)) if m else None
+                data = {k.strip().strip("[]").strip(): v for k, v in data.items()}  # "[name]" too
                 return {n: self._parse(q, data[n]) for n, q in questions.items()}
             except (TypeError, KeyError, ValueError, AttributeError):
                 continue

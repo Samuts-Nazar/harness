@@ -1,50 +1,169 @@
-# Assumptions (task 3)
+# Assumptions (tasks 3 and 4)
 
-Choices made where `decisions.md` or the task brief was silent. All are easy to swap.
+Choices made where `decisions.md` or a task brief was silent. All are easy to swap. Items marked
+**(task 4)** are new or changed in the revision to the updated `decisions.md`.
 
-1. **No prior reports.** `reports/*/SUMMARY.md` did not exist; nothing from them was used.
-2. **Time** is integer in-game minutes since a campaign epoch. Turn-based mode only (fixed
+## Carried from task 3
+
+1. **Time** is integer in-game minutes since a campaign epoch. Turn-based mode only (fixed
    `minutes_per_turn`); flowing time is undecided and not built.
-3. **Rollback is a marker, not a delete.** The log stays append-only (SQL triggers block
-   UPDATE/DELETE). A `rollbacks` table marks events; every derived-state query filters on
-   active events. Rollback cascades through `cause_id`. Facts are tied to their source event,
-   so they vanish with it. No snapshots: derivation is cheap at this scale.
-4. **Canon visibility.** Canon facts have knowers like campaign facts; a character sees a canon
+2. **Rollback is a marker, not a delete.** The log stays append-only (SQL triggers block
+   UPDATE/DELETE). A `rollbacks` table marks events; every derived-state query filters on active
+   events. Rollback cascades through `cause_id`. Facts are tied to their source event, so they
+   vanish with it. No snapshots: derivation is cheap at this scale. **(task 4)** Live-state
+   changes, perception facts, salience notices and attitudes all carry a `cause_id`/source event
+   for the same reason, so one rollback removes everything that grew from an event.
+3. **Canon visibility.** Canon facts have knowers like campaign facts; a character sees a canon
    fact only if listed. The narrator retrieves canon via a token-overlap placeholder
-   (`FactStore.search_canon`), swappable for embeddings.
-5. **Who speaks** in a turn is passed in by the caller (`speakers=`). Choosing speakers
-   automatically is not decided.
-6. **One extractor call per turn.** Each diff fact names its `source` segment (player,
-   narration, or an NPC id) so facts attach to the utterance they came from; this is what
-   makes per-utterance rollback possible. Extraction retries once on an invalid diff; if still
-   invalid the whole turn is rolled back and `ExtractionRejected` is raised.
-7. **Diff authorization.** Only `new_facts` is allowed; unknown keys are rejected; every knower
-   must be present in the scene; each fact needs at least one knower. A fact nobody knows is
-   not representable (assumed to be a hallucination or a mistake).
-8. **Information spreading by notability** (loud events travelling over distance/time) is
-   decided in principle but has no specified algorithm and is not in the task scope. Notability
-   is stored on events and facts; nothing propagates yet. Knowledge modes `heard`/`told` can
-   only be assigned by the extractor to characters present.
-9. **NPC context** includes: facts they know, their own earlier lines, pending intents, and
-   utterances they witnessed. It does **not** include narration events, because narration may
-   describe things a character cannot perceive. The narrator sees all campaign facts, relevant
-   canon, and recent dialogue + narration.
-10. **Interruption.** Live: words are delivered one by one; when the handle fires the current
-    word is the last one delivered, the rest of the stream is drained (not shown) and kept as
-    the NPC's private intent. Retroactive: allowed only for the last NPC utterance overall, once,
-    with a cut point strictly inside it. Because the extractor cannot attribute facts to word
-    ranges, all facts derived from that utterance are rolled back and re-extracted from the kept
-    prefix only. If re-extraction fails, the cut stands with no facts from the kept part.
-    The interruption fact ("X interrupted Y after N words: ...") is visible to everyone present.
-    Words are whitespace-separated; the cut text is re-joined with single spaces.
-11. **Intents** stay pending until explicitly resolved (`Intents.resolve`); nothing resolves
-    them automatically, since when an NPC "returns to" an unsaid thought is undecided.
-12. **Agent promotion** happens when an NPC speaks in a turn with the player (after the turn
-    commits). The off-screen update hook is called for promoted agents not in the scene; the
-    stub only records the call.
-13. **Judge slot** (`harness.judge`) defines the typed interface and a stub; the skeleton
-    pipeline holds it but does not call it, because which judgments are made where is undecided.
-14. **Demo/OpenRouter.** The demo loads `.env` and uses OpenRouter when `OPENROUTER_API_KEY` is
-    set (model from `HARNESS_MODEL`, default `anthropic/claude-sonnet-4.5`; one model for all
-    roles). Real models may ignore the narrator instruction not to write NPC dialogue; no
-    enforcement is built yet.
+   (`FactStore.search_canon`), swappable for embeddings. Canon knowers are given by the caller
+   (`add_canon(knowers=...)`), not by perception.
+4. **One extractor call per turn.** Each diff entry names the segment it came from, which makes
+   per-utterance rollback possible. Extraction retries once on an invalid diff; if still invalid
+   the whole turn is rolled back and `ExtractionRejected` is raised.
+5. **Information spreading by notability** (loud events travelling over distance/time) is decided
+   in principle but has no specified algorithm. Notability is stored; the only effect today is
+   that a loud event (>= 0.7) is heard by characters *outside* the room (see 15). Nothing
+   propagates beyond the scene.
+6. **Interruption.** Live: words are delivered one by one; when the handle fires the current word
+   is the last one delivered, the rest is kept as the NPC's private intent. Retroactive: allowed
+   only for the last NPC utterance overall, once, with a cut point strictly inside it. Because the
+   extractor cannot attribute facts to word ranges, all facts and state changes derived from that
+   utterance are rolled back and re-extracted from the kept prefix only. If re-extraction fails,
+   the cut stands with no facts from the kept part. The interruption fact is perceived by
+   everyone present under normal perception rules. Words are whitespace-separated.
+7. **Intents** stay pending until explicitly resolved (`Intents.resolve`).
+8. **Agent promotion** happens when an NPC speaks in a turn with the player (after the turn
+   commits). The off-screen update hook is called for promoted agents not in the scene; the stub
+   only records the call.
+
+## Perception (task 4)
+
+9. **Scene model.** A scene is one room: `Scene.present` characters see and hear everything in
+   it; `Scene.outside` characters are nearby and hear only loud things (`notability >= 0.7`,
+   `perception.LOUD`). No zones, distances or line of sight. A character in neither list perceives
+   nothing. Scene composition is session state (`enter_scene`/`leave_scene`), not derived from the
+   log, so it is not rolled back.
+10. **Perception kinds.** `speech` (listeners are *told by* the speaker, the speaker knows their
+    own words first-hand, outside listeners *hear from* the speaker if loud), `action` (present
+    characters *witness*, outside *hear* if loud), `description` (nobody: narrator-only knowledge,
+    e.g. scenery or a character's hidden thoughts). The extractor segment key decides the kind:
+    `player` and NPC ids are speech, `narration` is description, `action1..N` are actions. A
+    character id that looks like `narration` or `actionN` would collide; ids must not.
+11. **The player's input is treated as speech** ("told by Geralt"). Physical actions of the player
+    reach others through the narrator's `observable_actions`, which the narrator is asked to
+    write for every visible act, the player's included.
+12. **Notability for perception comes from the extractor** (per fact), because it describes how
+    loud the content is. Event-level `witnesses` use the present list only.
+13. **Narrator description is narrator-only.** If a detail must reach characters, the narrator
+    must list it as an observable action. This keeps hidden things hidden by default.
+
+## Source of knowledge, belief, attitudes (task 4)
+
+14. **Schema.** `fact_knowers` gained `source` (NULL = perceived directly, else the character who
+    said/told it) and `event_id` (the event the knowledge came from). `how` stays
+    `witnessed | heard | told`. NPC context shows `(heard from X)` for any record with a source;
+    the player character goes through exactly the same code.
+15. **Belief slot.** `belief.BeliefFn(character, fact, knower) -> 0..1`, default constant 0.5
+    ("no opinion"). It is called when memory is derived and printed in the memory files; it does
+    not change what goes into an NPC prompt yet (there is nothing to change while it is neutral).
+16. **Attitudes.** After a turn commits, each new fact with notability >= 0.6 gets, for every NPC
+    who knows it, one direction judgment (positive/neutral/negative) and one magnitude judgment
+    (0..3, goes to the LLM directly). Neutral or zero-magnitude results are not stored. The
+    threshold is a cost control, not a design decision. Attitudes point to the fact id and are
+    caused by the fact's source event, so rollback drops them. The player is not assessed (no NPC
+    context to feed).
+
+## Live state (task 4)
+
+17. **Categories** `injury, clothing, inventory, equipment, internal`; **ops** `add, remove,
+    reveal, hide`. Items are matched by exact text. If the extractor spells an existing item
+    differently, "remove" is rejected as removing something that is not there, and the whole diff
+    is retried once, then the turn fails (this actually happened while building the demo script).
+    A fuzzy match is a possible later improvement, deliberately not built.
+18. **Setup/scripted changes** go through `Engine.apply_state_change`, validated the same way,
+    caused by a `scripted` marker event so they can be rolled back.
+19. **What is perceived.** An observable `add`, a `reveal`, and a `remove` of an observable item
+    become perception facts ("X is carrying Y", "X no longer has Y") for everyone else present,
+    notability 0.4, wording from small per-category templates. `hide` is not perceived (the
+    earlier observation stays true of the past). Changes to characters who are not in the room
+    wait until they enter. On `enter_scene` the room perceives the entrant's observable state and
+    the entrant perceives everyone else's.
+20. **Salience.** One batched judgment per observation, one question per NPC observer (the player
+    gets the fact but no salience question). A "noteworthy" verdict becomes a `noticed` event and
+    appears under "You have just noticed" in that NPC's next *generated line*; it is consumed
+    when that NPC speaks (rolled back with the turn if the turn fails). Non-noteworthy
+    observations are still known facts. If the judge fails, the verdict defaults to not
+    noteworthy and the failure is logged.
+
+## Narrator and NPC output checks (task 4)
+
+21. **Narrator format** `{"description", "observable_actions", "speakers"}`. Speakers may be
+    ids, display names, or `id (Name)` (models do all three); unknown or absent ones are dropped
+    and logged. `Engine.turn(speakers=[...])` overrides the narrator's list.
+22. **Speech detection.** A script-style `Name: words` line is rejected in code. Everything else
+    is judged by one yes/no question (every narrator output, since speech also hides in
+    paraphrase), because code cannot tell player quotes from NPC quotes. Rejected output is
+    regenerated at most 2 times; then speech is stripped (quoted spans and speaker lines), the
+    event is logged in `Engine.devlog`, and the turn continues. If the judge is unavailable,
+    quotes count as speech.
+23. **NPC lines.** The model's text is cleaned in code (stage directions in parentheses/asterisks,
+    wrapping quotes, long quoted passages that are other characters' lines), then output-checked
+    **before** it is streamed to the player. So the line is complete before the first word is
+    shown; "streaming at speaking pace" now means pacing an already-accepted line. This costs
+    latency; decisions.md prefers quality.
+24. **Output check.** One judgment per line against that NPC's visible knowledge: derived
+    knowledge, own condition, noticed items and conversation it witnessed. Unlearnable claim ->
+    regenerate, at most 2 retries, then the fixed fallback line "I don't know what to tell you."
+    plus a log entry. If the judge fails, the line is accepted and the failure logged. The check is
+    only as good as the judge: in the live smoke run Jev/LLM caught invented named characters
+    (a bard making up "Margo" and a blacksmith's apprentice) but let through milder embellishment
+    ("a week ago", "a blood trail").
+25. **A character with no seeded knowledge will have most local detail rejected**; the demo seeds
+    a few canon facts per character for that reason. Real campaigns need background knowledge per
+    character.
+
+## Judges (task 4)
+
+26. **Jev** `typesafe/jev-1.14`: yes/no -> `noul` (answer = p >= 0.5, probability = max(p, 1-p)),
+    choice -> `choice` with `criteria` as an object, score -> `score` with a legend list (answer =
+    first legend value + Jev's expected index, probability = largest bin). One HTTP call per batch
+    of questions about the same state. Jev's long-context mode (>= 32 KB) is not used.
+27. **Escalation.** Probability < 0.8 -> the same questions go to the LLM (default
+    `anthropic/claude-haiku-5.5`, best cheap accuracy in E2) and its answer replaces Jev's,
+    flagged `escalated`. Tag `relationship_magnitude` skips Jev. If Jev errors, everything goes to
+    the LLM. If the LLM errors too, Jev's low-confidence answer is kept when there is one, else a
+    `JudgeError` is raised and the caller degrades (see 20, 24). The LLM judge retries once with a
+    stricter instruction and tolerates `[name]` keys.
+28. **Log.** `Engine.judgments` (and `<campaign>/judgments.jsonl`) hold every judgment: tag,
+    question, answer, probability, escalated, backend.
+29. **Offline default judge** (`FakeJudge` via `default_fake_judge`): no leaks, no speech, not
+    salient, neutral attitudes. Tests script it per tag.
+
+## Memory files (task 4)
+
+30. **One derivation, two renderers.** `MemoryDeriver.derive(character)` (knowledge with
+    source/event/belief, attitudes, live state, intents, pending notices) feeds both the NPC
+    context and the Markdown files, so they cannot drift. The files are rewritten *completely*
+    (stale ones removed) after every committed turn, failed turn, retroactive interruption, scene
+    change and `Engine.rollback`. Rolling back through `Engine.log.rollback` directly bypasses the
+    refresh; use `Engine.rollback`.
+31. **Layout** under `<campaign_dir>/memory/`: `characters/<id>.md` (Knows, Attitudes, Live state,
+    Pending intents), `places/place-<slug>.md`, `events/event-<n>.md` (only events some record
+    points at). Facts are block anchors (`^fact-<id>`) inside the character file; attitudes link
+    to them as `[[<character>#^fact-<id>]]`. `campaigns/` is git-ignored. The SQLite database is
+    still in memory; persisting a campaign is not part of this task.
+
+## Models and spending (task 4)
+
+32. **Policy in code.** `harness/policy.py` holds the allowlist from `docs/decisions.md`; the
+    OpenRouter provider and the Jev client refuse anything else, and `HARNESS_EXTRA_ALLOWED`
+    cannot add Sonnet/Opus/GPT-5/Fable-class names. A `Spend` counter reads `usage.cost` and stops
+    at a cap (`--budget`, default $0.25 per demo run).
+33. **Default live models.** Extractor `anthropic/claude-haiku-5.5` (E3: 0% hallucinated facts at
+    low cost). Narrator and NPC lines `deepseek/deepseek-v4-flash` (allowed, cheap; writing
+    quality was judged only by reading the smoke run, not measured). Judge escalation
+    `anthropic/claude-haiku-5.5`. Each is a flag/`ModelConfig` field. Reasoning is switched off in
+    requests (retry without it on HTTP 400).
+34. **Demo.** Fake provider and fake judge by default; `.env` is read and the network used only
+    with `--live`. The fake script deliberately includes a narrator that writes NPC speech and an
+    NPC claim the NPC could not know, so both rejection paths show.
