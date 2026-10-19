@@ -17,7 +17,7 @@ QUESTIONS = [
     ("Ґеральт", 0, "Звідки взялася стриґа і хто така Адда?", "before Velerad's talk: nothing"),
     ("Ґеральт", 1 * D, "Звідки взялася стриґа і хто така Адда?", "after Velerad's talk: Adda, birth, burial"),
     ("Остріт", 5 * D + 18 * 60, "Що Ґеральт знає про змову проти Фольтеста?", "at dusk, before the confrontation: nothing about Geralt's knowledge"),
-    ("Остріт", 6 * D, "Що Ґеральт знає про змову проти Фольтеста?", "after the confrontation: Geralt guessed the plot"),
+    ("Остріт", 6 * D + 1400, "Що Ґеральт знає про змову проти Фольтеста?", "after the confrontation: Geralt guessed the plot"),
     ("Фольтест", 1 * D + 1380, "Як Ґеральт сказав зняти прокляття зі стриґи?", "king was told: third cockcrow, a night in the crypt"),
     ("Жмутик", 1 * D, "Що відомо про народження принцеси і Адду?", "a town guard: rumours at most, not the mayor's detail"),
     ("Велерад", 7 * D + 600, "Що відбувалося в крипті цієї ночі?", "he only knows the outcome, not the fight"),

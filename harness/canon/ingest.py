@@ -21,6 +21,7 @@ from typing import Any
 from ..policy import Spend
 from ..providers import OpenRouterProvider, Provider
 from . import chunk, extract, extract2
+from .glossary import Glossary
 from .store import add_record, create_store
 from .vocab import ATTITUDES, CHANNELS, EKINDS, PARTS, REACTIONS
 
@@ -76,12 +77,13 @@ class Ingestor:
                  *, raw_dir: str | Path | None = None, spend: TokenSpend | None = None,
                  first: int = BOOK_FIRST, last: int = BOOK_LAST,
                  chapters: list[tuple[int, str]] | None = None, log=print, replay: bool = False,
-                 v2: bool = False) -> None:
+                 v2: bool = False, glossary: bool = False) -> None:
         self.provider, self.model, self.source = provider, model, Path(source)
         self.out_db, self.raw_dir = out_db, Path(raw_dir) if raw_dir else None
         self.spend = spend or TokenSpend()
         self.first, self.last, self.chapters = first, last, chapters or CHAPTERS
         self.log = log
+        self.glossary = Glossary.load() if glossary else None  # canonical names applied to event text
         self.v2 = v2          # scene-timeline pass supplies time and place (extract2)
         self.scenes: list[dict[str, Any]] = []
         self.replay = replay  # re-use the saved raw replies in raw_dir instead of calling the model
@@ -318,6 +320,8 @@ class Ingestor:
                 self.entities[ev["place"]]["type"] == "place" else None
             if ev.get("place") and place is None:
                 flags.append("unknown_place")
+            if self.glossary:
+                ev["what"] = self.glossary.apply(ev["what"])
             rid = add_record(con, "canon_event", ev["what"].strip(), t_from=t_from, t_prec=prec, place=place,
                              notability=loud, meta={"flags": flags}, writer_ref=self.model)
             order += 1
@@ -409,13 +413,14 @@ def main() -> None:
     ap.add_argument("--out", required=True)
     ap.add_argument("--raw")
     ap.add_argument("--v2", action="store_true", help="scene-timeline pass supplies time and place")
+    ap.add_argument("--glossary", action="store_true", help="apply the canonical-name glossary to event text")
     ap.add_argument("--replay", action="store_true", help="reload from the saved raw replies, no API calls")
     ap.add_argument("--cap", type=float, default=0.2, help="spend cap in USD for this run")
     a = ap.parse_args()
     load_dotenv(os.environ.get("HARNESS_ENV", ".env"))
     spend = TokenSpend(cap=a.cap)
     prov = OpenRouterProvider(spend=spend, timeout=300)
-    rep = Ingestor(prov, a.model, a.source, a.out, raw_dir=a.raw, spend=spend, replay=a.replay, v2=a.v2).run()
+    rep = Ingestor(prov, a.model, a.source, a.out, raw_dir=a.raw, spend=spend, replay=a.replay, v2=a.v2, glossary=a.glossary).run()
     rep.pop("dropped")
     print(json.dumps(rep, ensure_ascii=False))
 

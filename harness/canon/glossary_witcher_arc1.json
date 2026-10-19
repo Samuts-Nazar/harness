@@ -25,7 +25,8 @@
     "Ґеральту",
     "Ґеральтом",
     "Ґеральте"
-   ]
+   ],
+   "proper": true
   },
   {
    "id": "char:velerad",
@@ -36,16 +37,18 @@
    ],
    "variants": [
     "Velerad",
-    "Велераду",
     "Верелад",
-    "Велерат"
+    "Велерат",
+    "Veleral",
+    "Velerad's"
    ],
    "cases": [
     "Велерада",
     "Велераду",
     "Велерадом",
     "Велераде"
-   ]
+   ],
+   "proper": true
   },
   {
    "id": "char:foltest",
@@ -57,15 +60,15 @@
    ],
    "variants": [
     "Foltest",
-    "Фолтест",
-    "Фольтеста"
+    "Фолтест"
    ],
    "cases": [
     "Фольтеста",
     "Фольтесту",
     "Фольтестом",
     "Фольтесте"
-   ]
+   ],
+   "proper": true
   },
   {
    "id": "char:ostrit",
@@ -83,7 +86,8 @@
     "Остріта",
     "Остріту",
     "Остріте"
-   ]
+   ],
+   "proper": true
   },
   {
    "id": "char:segelin",
@@ -95,14 +99,16 @@
    "variants": [
     "Segelin",
     "Сегелін",
-    "Сегелин"
+    "Сегелин",
+    "Segelen"
    ],
    "cases": [
     "Сеґеліна",
     "Сеґеліну",
     "Сеґеліне",
     "Сеґеліном"
-   ]
+   ],
+   "proper": true
   },
   {
    "id": "char:adda",
@@ -113,14 +119,16 @@
    ],
    "variants": [
     "Adda",
-    "Ада"
+    "Ада",
+    "Addy"
    ],
    "cases": [
     "Адди",
     "Адді",
     "Аддою",
     "Адду"
-   ]
+   ],
+   "proper": true
   },
   {
    "id": "char:medell",
@@ -135,7 +143,8 @@
    ],
    "cases": [
     "Меделла"
-   ]
+   ],
+   "proper": true
   },
   {
    "id": "char:vizimir",
@@ -152,7 +161,8 @@
    "cases": [
     "Визіміра",
     "Визіміром"
-   ]
+   ],
+   "proper": true
   },
   {
    "id": "char:dalka",
@@ -162,13 +172,13 @@
     "дочка Визіміра"
    ],
    "variants": [
-    "Dalka",
-    "Дальку"
+    "Dalka"
    ],
    "cases": [
     "Дальку",
     "Дальки"
-   ]
+   ],
+   "proper": true
   },
   {
    "id": "char:zhmutyk",
@@ -184,7 +194,8 @@
    ],
    "cases": [
     "Жмутику"
-   ]
+   ],
+   "proper": true
   },
   {
    "id": "coll:veduny",
@@ -197,14 +208,15 @@
    "variants": [
     "Vedun",
     "Wise Ones",
-    "Відунів",
-    "Ведуни"
+    "Ведуни",
+    "Vідуни"
    ],
    "cases": [
     "Відунів",
     "Відунам",
     "Відунами"
-   ]
+   ],
+   "proper": true
   },
   {
    "id": "creature:stryga",
@@ -223,7 +235,8 @@
     "стриґу",
     "стриґою",
     "стриґо"
-   ]
+   ],
+   "proper": false
   },
   {
    "id": "char:princess",
@@ -241,7 +254,8 @@
     "принцесу",
     "принцесі",
     "принцесою"
-   ]
+   ],
+   "proper": false
   },
   {
    "id": "place:vizim",
@@ -254,13 +268,16 @@
     "Візім",
     "Визима",
     "Візима",
-    "Визим"
+    "Визим",
+    "Vizim",
+    "Vizims"
    ],
    "cases": [
     "Визіма",
     "Визімі",
     "Визімом"
-   ]
+   ],
+   "proper": true
   },
   {
    "id": "place:temeria",
@@ -274,7 +291,8 @@
    "cases": [
     "Темерії",
     "Темерію"
-   ]
+   ],
+   "proper": true
   },
   {
    "id": "place:pontar",
@@ -286,7 +304,8 @@
    ],
    "cases": [
     "Понтару"
-   ]
+   ],
+   "proper": true
   },
   {
    "id": "place:mahakam",
@@ -301,7 +320,8 @@
     "Магакаму",
     "Магакамі",
     "Магакамом"
-   ]
+   ],
+   "proper": true
   },
   {
    "id": "place:novigrad",
@@ -315,7 +335,8 @@
    "cases": [
     "Новіграда",
     "Новіграді"
-   ]
+   ],
+   "proper": true
   },
   {
    "id": "place:redania",
@@ -329,7 +350,8 @@
    "cases": [
     "Реданії",
     "Реданію"
-   ]
+   ],
+   "proper": true
   },
   {
    "id": "place:rivia",
@@ -344,7 +366,8 @@
    "cases": [
     "Рівії",
     "Рівію"
-   ]
+   ],
+   "proper": true
   },
   {
    "id": "place:linvar-gate",
@@ -355,9 +378,12 @@
     "Linvar gate",
     "Лінварів",
     "брама Лінварів",
-    "Linwar Gate"
+    "Linwar Gate",
+    "Lynvar Gate",
+    "Linvar Gate"
    ],
-   "cases": []
+   "cases": [],
+   "proper": true
   },
   {
    "id": "place:old-narakort",
@@ -373,7 +399,8 @@
    ],
    "cases": [
     "«Старого Наракорту»"
-   ]
+   ],
+   "proper": true
   },
   {
    "id": "place:pid-lysom",
@@ -390,7 +417,8 @@
    ],
    "cases": [
     "«Під Лисом»"
-   ]
+   ],
+   "proper": true
   },
   {
    "id": "place:old-palace",
@@ -406,7 +434,8 @@
    "cases": [
     "старого палацу",
     "старому палаці"
-   ]
+   ],
+   "proper": false
   },
   {
    "id": "place:new-palace",
@@ -420,7 +449,8 @@
    ],
    "cases": [
     "нового палацу"
-   ]
+   ],
+   "proper": false
   },
   {
    "id": "place:crypt",
@@ -436,7 +466,8 @@
     "крипти",
     "крипту",
     "крипті"
-   ]
+   ],
+   "proper": false
   },
   {
    "id": "item:silver-sword",
@@ -450,7 +481,8 @@
    ],
    "cases": [
     "срібного меча"
-   ]
+   ],
+   "proper": false
   },
   {
    "id": "item:steel-sword",
@@ -462,7 +494,8 @@
    "variants": [
     "steel sword"
    ],
-   "cases": []
+   "cases": [],
+   "proper": false
   },
   {
    "id": "item:sapphire-inclusion",
@@ -478,7 +511,8 @@
    "cases": [
     "інклюзу",
     "сапфіра"
-   ]
+   ],
+   "proper": false
   },
   {
    "id": "currency:oren",
@@ -487,15 +521,14 @@
    "titles": [],
    "variants": [
     "oren",
-    "orens",
-    "орени",
-    "оренів"
+    "orens"
    ],
    "cases": [
     "оренів",
     "орени",
     "орена"
-   ]
+   ],
+   "proper": false
   },
   {
    "id": "title:witcher",
@@ -513,7 +546,8 @@
     "відьмаком",
     "відьмаче",
     "відьмаки"
-   ]
+   ],
+   "proper": false
   },
   {
    "id": "title:mayor",
@@ -529,7 +563,8 @@
     "бургомістра",
     "бургомістру",
     "бургомістре"
-   ]
+   ],
+   "proper": false
   },
   {
    "id": "term:sign-aard",
@@ -541,7 +576,8 @@
     "Sign of Aard",
     "Аарт"
    ],
-   "cases": []
+   "cases": [],
+   "proper": false
   },
   {
    "id": "term:sign-yrden",
@@ -553,7 +589,8 @@
     "Ірден",
     "Ирден"
    ],
-   "cases": []
+   "cases": [],
+   "proper": false
   }
  ]
 }
