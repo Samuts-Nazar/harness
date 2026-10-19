@@ -3,7 +3,7 @@ import json
 from collections import Counter
 
 BASE = "/home/cock/projects/harness/campaigns/canon"
-for m in ("deepseek", "luna", "qwen"):
+for m in ("deepseek", "luna", "qwen", "deepseek2", "luna2"):
     r = json.load(open(f"{BASE}/raw_{m}/report.json"))
     d = r.pop("dropped")
     print(m, r)

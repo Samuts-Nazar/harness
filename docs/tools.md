@@ -187,3 +187,18 @@ Chosen by the task 7 bake-off on our own Ukrainian test set (`reports/bakeoff/SU
 5. ~~Decide web framework and transport.~~ Done in task 11: Starlette + uvicorn, SSE plus POST, plain JS (see the roles above).
 6. **Watch httpx** (last release 2024-12-06, no 1.0). No action now; if async serving is adopted, evaluate aiohttp or the official OpenRouter SDK instead of adding custom async code.
 7. **Set WAL and foreign keys when the engine moves to a file database; consider ruff.** Minor.
+
+## Canon ingestion (task 13 pilot)
+
+### Ingestion models
+- Role: one-off structured ingestion of book text (entities, events, knowers, reactions). Candidates run on 2026-10-19 on the pilot arc (97k characters), live catalog checked the same day (469 models; cheap-policy set: input <= 0.60, output <= 2.50 USD per M):
+  - `deepseek/deepseek-v4.1-flash-1017` ($0.15/$0.60): 124 events, $0.063, 142 s.
+  - `openai/gpt-6-luna` ($0.10/$0.50): 88 events, $0.035, 348 s.
+  - `qwen/qwen3.8-omni-flash` ($0.15/$0.47): 55 events, $0.023, 359 s.
+  - Seen in the catalog but not run: `nvidia/nemotron-3.5-super-vl` ($0.10/$0.40, 1M context, newest cheap long-context model), `xiaomi/mimo-v2.6-flash` ($0.14/$0.28), `z-ai/glm-5.3-flash` ($0.048/$0.16), `inclusionai/ling-3.1-flash`, `deepseek/deepseek-v4.1-flash` ($0.038/$0.08, the non-1017 build). Candidates for the next bake-off; the cheapest ones may suit the second (mapping) pass.
+- Recommendation and error counts: `reports/canon_pilot/SUMMARY.md`.
+- Checked: 2026-10-19.
+
+### Retrieval over canon passages
+- Role: find canon passages and events for a question. Pilot choice: **SQLite FTS5** (`unicode61`) with a crude Ukrainian prefix stemmer (long words cut by two letters), plus typed lookup through `canon_knower`; no embeddings. Alternative: OpenRouter embeddings (not run). Result of the 10-question check is in the pilot report.
+- Checked: 2026-10-19.

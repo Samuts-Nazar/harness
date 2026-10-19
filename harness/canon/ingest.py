@@ -170,46 +170,63 @@ class Ingestor:
         out: list[dict[str, Any]] = []
         prior: list[str] = []
         for wi, win in enumerate(windows):
-            text = chunk.tagged(win)
-            lines = {p.line for ps in win for p in ps.paras}
             t0 = time.time()
-            obj = self._load_raw(f"window_{wi:02d}")
-            if obj is None:
-                if self.v2:
-                    sc_txt = "\n".join(f"L{x['from_line']}-L{x['to_line']}: day {x.get('day')}, {x.get('part')}, "
-                                       f"place {x.get('place')}" for x in self.scenes
-                                       if x["to_line"] >= min(lines) and x["from_line"] <= max(lines))
-                    msgs = extract2.event_prompt2(text, list(self.entities.values()), prior[-14:], sc_txt)
-                else:
-                    msgs = extract.event_prompt(text, list(self.entities.values()), prior[-14:])
-                try:
-                    obj, fails = extract.ask_json(self.provider, self.model, msgs)
-                except extract.JsonFailure as e:
-                    self.stats["window_failures"] += 1
-                    self._drop("window", "no valid json", window=wi, err=str(e)[:160])
-                    continue
-                self.stats["format_failures"] += fails
-                self._save_raw(f"window_{wi:02d}", obj)
-            for e in obj.get("new_entities") or []:
-                self._take_entity(e, f"window {wi}")
+            pieces = self._fetch(f"window_{wi:02d}", win, prior)
+            for obj, lines in pieces:
+                for e in obj.get("new_entities") or []:
+                    self._take_entity(e, f"window {wi}")
             n_new = 0
-            for ev in obj.get("events") or []:
-                if not isinstance(ev, dict) or not isinstance(ev.get("what"), str) or not ev["what"].strip():
-                    self._drop("event", "no text", window=wi)
-                    continue
-                ev["_window"] = wi
-                ev["_lines_ok"] = sorted(int(x) for x in (ev.get("lines") or [])
-                                         if isinstance(x, int) and x in lines)
-                ev["_win_lines"] = (min(lines), max(lines))
-                if self.v2:
-                    self._apply_scene(ev, lines)
-                out.append(ev)
-                n_new += 1
-                tag = f"e{len(out)} [L{(ev['_lines_ok'] or [min(lines)])[0]}]"
-                prior.append(f"{tag} {ev['what'][:140]}")
+            for obj, lines in pieces:
+                n_new += self._take_events(obj, lines, wi, out, prior)
             self.log(f"  window {wi + 1}/{len(windows)}: {n_new} events, {time.time() - t0:.0f}s, "
                      f"${self.spend.total:.4f}")
         return out
+
+    def _fetch(self, name: str, win: list[chunk.Passage], prior: list[str]) -> list[tuple[dict[str, Any], set[int]]]:
+        """The model reply for a window; if its JSON cannot be parsed (often a reply cut off at the output
+        limit) the window is split in two and each half is asked on its own."""
+        text = chunk.tagged(win)
+        lines = {p.line for ps in win for p in ps.paras}
+        obj = self._load_raw(name)
+        if obj is None:
+            if self.v2:
+                sc_txt = "\n".join(f"L{x['from_line']}-L{x['to_line']}: day {x.get('day')}, {x.get('part')}, "
+                                   f"place {x.get('place')}" for x in self.scenes
+                                   if x["to_line"] >= min(lines) and x["from_line"] <= max(lines))
+                msgs = extract2.event_prompt2(text, list(self.entities.values()), prior[-14:], sc_txt)
+            else:
+                msgs = extract.event_prompt(text, list(self.entities.values()), prior[-14:])
+            try:
+                obj, fails = extract.ask_json(self.provider, self.model, msgs)
+            except extract.JsonFailure as e:
+                self.stats["window_failures"] += 1
+                self._drop("window", "no valid json", window=name, err=str(e)[:160])
+                if len(win) > 1:
+                    mid = len(win) // 2
+                    return self._fetch(name + "a", win[:mid], prior) + self._fetch(name + "b", win[mid:], prior)
+                return []
+            self.stats["format_failures"] += fails
+            self._save_raw(name, obj)
+        return [(obj, lines)]
+
+    def _take_events(self, obj: dict[str, Any], lines: set[int], wi: int, out: list[dict[str, Any]],
+                     prior: list[str]) -> int:
+        n_new = 0
+        for ev in obj.get("events") or []:
+            if not isinstance(ev, dict) or not isinstance(ev.get("what"), str) or not ev["what"].strip():
+                self._drop("event", "no text", window=wi)
+                continue
+            ev["_window"] = wi
+            ev["_lines_ok"] = sorted(int(x) for x in (ev.get("lines") or [])
+                                     if isinstance(x, int) and x in lines)
+            ev["_win_lines"] = (min(lines), max(lines))
+            if self.v2:
+                self._apply_scene(ev, lines)
+            out.append(ev)
+            n_new += 1
+            tag = f"e{len(out)} [L{(ev['_lines_ok'] or [min(lines)])[0]}]"
+            prior.append(f"{tag} {ev['what'][:140]}")
+        return n_new
 
     # ---- load -----------------------------------------------------------------------------
     def load(self, paras: list[chunk.Para], passages: list[chunk.Passage], events: list[dict[str, Any]],
