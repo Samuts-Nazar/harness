@@ -15,12 +15,9 @@ nix develop --command python -m app --live     # реальні дешеві м�
 
 Прапорці: `--port 8765`, `--pace 0.25` (секунд на слово), `--budget 1.0` (ліміт USD для `--live`), `--host`.
 
-`--live` бере `OPENROUTER_API_KEY` з `.env` (ключ ніде не виводиться). Поки в `harness/policy.py` старий список дозволених моделей (до злиття задачі 9), додайте нові моделі в дозвіл:
+`--live` бере `OPENROUTER_API_KEY` з `.env` (ключ ніде не виводиться). Моделі та перший суддя (liquid/d1-ultra) беруться з `harness/policy.py`; додаткових дозволів не потрібно.
 
-```
-HARNESS_EXTRA_ALLOWED=openai/gpt-6-luna,deepseek/deepseek-v4.1-flash-1017 \
-  nix develop --command python -m app --live
-```
+Також прапорець `--campaigns <тека>` (за замовчуванням `campaigns/`, її немає в репозиторії).
 
 ## Телефон
 
@@ -46,12 +43,15 @@ HARNESS_EXTRA_ALLOWED=openai/gpt-6-luna,deepseek/deepseek-v4.1-flash-1017 \
 
 - `app/__main__.py` запуск; `server.py` HTTP + потік SSE; `game.py` сесія (потік ходу, події, пауза у фоні); `campaigns.py` створення кампанії (єдине місце, куди підключити збереження з диска); `stacks.py` фейк і live-моделі; `static/` сторінка.
 - Події потоку: `turn_start`, `narr_start/narr_word/narr_end`, `speaker`, `word`, `turn_done`, `error`.
-- Стан кампанії живе в пам'яті сервера: перезавантаження сторінки або перехід телефон/ноутбук його зберігає, перезапуск сервера починає нову гру (до підключення збережених кампаній).
+- Кампанія зберігається на диску (`campaigns/<назва>/campaign.db`, вказівник `campaigns/current.txt`): перезапуск сервера продовжує гру, історія відновлюється з журналу подій. Кнопка «Почати гру спочатку» створює нову кампанію, стара лишається на диску.
+- Оповідь і репліки генеруються вільним текстом (без JSON). Хто говорить далі й які дії видно всім, визначає окремий «режисер сцени» (`harness/director.py`). Оповідь іде першою; репліки NPC за порядком, і кожен наступний чує попередні того ж ходу.
+- Записи в журналі англійською, імена українською за глосарієм (`worlds/witcher/glossary.json`); панель персонажа перекладається для показу.
+- У Debug: повторюваність (n-грами, початки речень, форма абзацу) і виправлені варіанти імен.
 
 ## Тести
 
 ```
 nix develop --command pytest app/tests            # сервер, потік, перебивання, панель, debug, помилка (фейк)
 nix develop --command python app/tests/ui_check.py   # Playwright 390x844, скріншоти в app/screenshots/
-HARNESS_EXTRA_ALLOWED=... nix develop --command python app/tests/live_check.py   # 3 ходи наживо, платно
+nix develop --command python app/tests/live_check.py   # ходи наживо, платно
 ```

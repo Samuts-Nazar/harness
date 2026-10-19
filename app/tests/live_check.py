@@ -1,14 +1,13 @@
 """Live check (costs a little): 3 Ukrainian turns through the real Game session, no pacing, so the
 numbers are engine latency. Prints seconds to first word and per turn, calls, cost.
 
-    HARNESS_EXTRA_ALLOWED=openai/gpt-6-luna,deepseek/deepseek-v4.1-flash-1017 \
-        nix develop --command python app/tests/live_check.py
-(the env var is only needed until task 9 replaces the old allowlist in harness/policy.py)
+    nix develop --command python app/tests/live_check.py
 """
 from __future__ import annotations
 
 import pathlib
 import sys
+import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 from app.campaigns import open_campaign  # noqa: E402
@@ -24,7 +23,8 @@ TURNS = [
 
 def main() -> None:
     stack = live_stack(budget=0.25)
-    game = Game(lambda: open_campaign(stack), pace=0.0)
+    root = tempfile.mkdtemp(prefix='live-check-')
+    game = Game(lambda new: open_campaign(stack, root=root, new=new), pace=0.0)
     for i, text in enumerate(TURNS, 1):
         game.start_turn(text)
         game.wait_idle(180)

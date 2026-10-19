@@ -202,3 +202,6 @@ Chosen by the task 7 bake-off on our own Ukrainian test set (`reports/bakeoff/SU
 ### Retrieval over canon passages
 - Role: find canon passages and events for a question. Pilot choice: **SQLite FTS5** (`unicode61`) with a crude Ukrainian prefix stemmer (long words cut by two letters), plus typed lookup through `canon_knower`; no embeddings. Alternative: OpenRouter embeddings (not run). Result of the 10-question check is in the pilot report.
 - Checked: 2026-10-19.
+
+### Scene director and glossary (task 12, 2026-10-19)
+- Role: first-line speaker decider for the scene director. Chosen: `liquid/d1-ultra` (the existing first judge, one batched `/systemone` call, mean 0.22 s over 27 calls); fallback `perplexity/pplx-decider-v1.2` via the judge fallback. Alternatives not re-run (no new bake-off). Observable-action lister: the extractor model `deepseek/deepseek-v4.1-flash-1017` (mean 1.1 s, plain lines). No new library or tool.

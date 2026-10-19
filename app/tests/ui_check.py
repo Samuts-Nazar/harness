@@ -8,6 +8,7 @@ from __future__ import annotations
 import pathlib
 import socket
 import sys
+import tempfile
 import threading
 import time
 
@@ -45,7 +46,7 @@ def no_hscroll(page, label):
 
 def main() -> None:
     stack = fake_stack()
-    game = Game(lambda: open_campaign(stack), pace=0.08)
+    game = Game(lambda new: open_campaign(stack, root=tempfile.mkdtemp(), new=new), pace=0.08)
     port = free_port()
     server = uvicorn.Server(uvicorn.Config(create_app(game), host="127.0.0.1", port=port,
                                            log_level="warning"))

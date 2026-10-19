@@ -43,6 +43,8 @@ def _wrap(script):
 def make_engine(script, present=(PLAYER, "innkeeper", "bard"), outside=(), **kw):
     provider = FakeProvider(script=_wrap(script))
     scene = Scene("Inn", tuple(present), time=0, outside=tuple(outside))
+    kw.setdefault("narration", "json")  # these tests script the task 3 JSON narrator
+    kw.setdefault("record_language", None)
     eng = Engine(provider, PROFILES, scene, models=ModelConfig(), **kw)
     return eng, provider
 

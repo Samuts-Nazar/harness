@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import time
 
 import pytest
@@ -13,9 +14,10 @@ from app.server import create_app
 from app.stacks import FakeUk, fake_stack
 
 
-def make(pace: float = 0.0, stack=None) -> Game:
+def make(pace: float = 0.0, stack=None, root=None) -> Game:
     stack = stack or fake_stack()
-    return Game(lambda: open_campaign(stack), pace=pace)
+    root = root or tempfile.mkdtemp(prefix="harness-app-")
+    return Game(lambda new: open_campaign(stack, root=root, new=new), pace=pace)
 
 
 def sse(client: TestClient, after: int = 0) -> list[dict]:

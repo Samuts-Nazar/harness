@@ -171,6 +171,20 @@ async function loadDebug() {
     ["вартість", "$" + d.cost.toFixed(4)],
     ...(d.error ? [["помилка", d.error]] : []),
   ]));
+  if (d.repetition) {
+    const r = d.repetition;
+    body.appendChild(section("Повторюваність", [
+      ["оцінка / n-грами / початки / форма", `${r.score} / ${r.ngram} / ${r.opening} / ${r.shape}`],
+      ...r.outputs.flatMap((o) => o.examples.length ? [[o.kind, o.examples.join(" · ")]] : []),
+    ]));
+  }
+  if (d.names) {
+    body.appendChild(section("Імена", [
+      ["виправлено варіантів", String(d.names.fixed.length)],
+      ["схожі на спотворені", d.names.near_misses.map((m) => m.join("→")).join(", ") || "—"],
+      ...d.names.fixed.map((f) => [f.where, `${f.form} → ${f.canonical}`]),
+    ]));
+  }
   body.appendChild(section("Виклики моделей", d.calls.map((c) =>
     [c.role, `${c.model} · ${c.seconds} с · $${c.cost.toFixed(5)} · ${c.chars_in}→${c.chars_out} симв.`])));
   body.appendChild(section("Судження", d.judgments.map((j) =>
