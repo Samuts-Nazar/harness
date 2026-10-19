@@ -10,7 +10,7 @@ import copy
 import json
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Collection
 
 from .state import State, StateChange, StateError, apply, check_change
@@ -32,6 +32,7 @@ class FactDraft:
 class Diff:
     facts: list[FactDraft]
     changes: list[StateChange]
+    dropped: list[dict[str, Any]] = field(default_factory=list)  # invalid changes, with reasons
 
 
 _TOP_KEYS = {"new_facts", "state_changes"}
@@ -79,7 +80,8 @@ def validate_diff(
     Unknown keys are rejected (so the model cannot invent operations such as editing canon),
     and `knowers` is rejected explicitly: perception is computed in code. State changes are
     checked one by one against the state as it would be after the previous ones, so a diff
-    cannot remove what is not there. `characters` (default: `present`) are who a change may
+    cannot remove what is not there. A change that is invalid in itself or against the state is
+    dropped one by one (`Diff.dropped`); it does not reject the diff. `characters` (default: `present`) are who a change may
     be about.
     """
     if not isinstance(data, dict):
@@ -120,29 +122,37 @@ def validate_diff(
     who = set(characters if characters is not None else present)
     sim = copy.deepcopy(state or {})
     out_changes: list[StateChange] = []
+    dropped: list[dict[str, Any]] = []
     for i, c in enumerate(changes):
         where = f"state_changes[{i}]"
-        if not isinstance(c, dict):
-            raise DiffValidationError(f"{where} must be an object")
-        extra = set(c) - _CHANGE_KEYS
-        if extra:
-            raise DiffValidationError(f"{where}: unauthorized keys {sorted(extra)}")
-        ch, cat, op, item = (c.get(k) for k in ("character", "category", "op", "item"))
-        if not all(isinstance(x, str) for x in (ch, cat, op, item)):
-            raise DiffValidationError(f"{where}: character, category, op, item must be text")
-        if ch not in who:
-            raise DiffValidationError(f"{where}: unknown character {ch!r}")
-        src = c.get("source")
-        if not isinstance(src, str) or src not in sources:
-            raise DiffValidationError(f"{where}: unknown source {src!r}")
-        obs = c.get("observable", True)
-        if not isinstance(obs, bool):
-            raise DiffValidationError(f"{where}: observable must be true or false")
-        change = StateChange(ch, cat, op, item.strip(), obs, src)
         try:
+            change = _parse_change(c, where, who, sources)
             check_change(sim, change)
-        except StateError as e:
-            raise DiffValidationError(f"{where}: {e}") from e
+        except (DiffValidationError, StateError) as e:
+            # one bad change (revealing an item that is in another category, removing what is not
+            # there, an unknown character) is dropped and reported; the rest of the turn stands
+            dropped.append({"change": c, "reason": str(e)})
+            continue
         apply(sim, change)
         out_changes.append(change)
-    return Diff(drafts, out_changes)
+    return Diff(drafts, out_changes, dropped)
+
+
+def _parse_change(c: Any, where: str, who: set[str], sources: Collection[str]) -> StateChange:
+    if not isinstance(c, dict):
+        raise DiffValidationError(f"{where} must be an object")
+    extra = set(c) - _CHANGE_KEYS
+    if extra:
+        raise DiffValidationError(f"{where}: unauthorized keys {sorted(extra)}")
+    ch, cat, op, item = (c.get(k) for k in ("character", "category", "op", "item"))
+    if not all(isinstance(x, str) for x in (ch, cat, op, item)):
+        raise DiffValidationError(f"{where}: character, category, op, item must be text")
+    if ch not in who:
+        raise DiffValidationError(f"{where}: unknown character {ch!r}")
+    src = c.get("source")
+    if not isinstance(src, str) or src not in sources:
+        raise DiffValidationError(f"{where}: unknown source {src!r}")
+    obs = c.get("observable", True)
+    if not isinstance(obs, bool):
+        raise DiffValidationError(f"{where}: observable must be true or false")
+    return StateChange(ch, cat, op, item.strip(), obs, src)

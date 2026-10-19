@@ -1,7 +1,7 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
 const feed = $("feed");
-let tag = "", lastSeq = 0, es = null, turnEls = [], cur = null, busy = false;
+let tag = "", lastSeq = 0, es = null, turnEls = [], cur = null, busy = false, turnNpc = [];
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -22,12 +22,64 @@ function addWord(block, w) {
   block.appendChild(s);
   if (atBottom) feed.scrollTop = feed.scrollHeight;
 }
-function npcBlock(who, name, text, cut) {
+function npcBlock(who, name, text, cut, event) {
   const b = el("p", "npc"); b.dataset.who = who;
   b.appendChild(el("span", "who", name));
   if (text) b.appendChild(el("span", "w", text));
   if (cut) b.classList.add("cut");
+  if (event != null) addAsk(b, event);
   return b;
+}
+
+// "Звідки він це знає?": the player marks a line as impossible; the engine checks the channels
+function addAsk(block, event) {
+  block.dataset.event = event;
+  const old = block.querySelector(".ask"); if (old) old.remove();
+  const btn = el("button", "ask", "звідки він це знає?");
+  btn.type = "button";
+  btn.addEventListener("click", () => openAsk(block));
+  block.appendChild(btn);
+}
+function openAsk(block) {
+  if (block.querySelector(".askbox")) return;
+  const box = el("span", "askbox");
+  const note = el("textarea"); note.rows = 2; note.placeholder = "Що саме він не міг знати? (можна лишити порожнім)";
+  const go = el("button", "btn primary", "Перевірити"); go.type = "button";
+  const cancel = el("button", "btn ghost", "Скасувати"); cancel.type = "button";
+  cancel.addEventListener("click", () => box.remove());
+  go.addEventListener("click", async () => {
+    go.disabled = true; go.textContent = "Перевіряю…";
+    let r, d;
+    try {
+      r = await fetch("/api/challenge", { method: "POST", body: JSON.stringify({ event: Number(block.dataset.event), explanation: note.value }) });
+      d = await r.json();
+    } catch (e) { d = { error: "Немає зв'язку." }; r = { ok: false }; }
+    box.remove();
+    showAnswer(block, r.ok, d);
+  });
+  box.append(note, go, cancel);
+  block.appendChild(box);
+  note.focus({ preventScroll: true });
+}
+function showAnswer(block, ok, d) {
+  const prev = block.querySelector(".askres"); if (prev) prev.remove();
+  const res = el("span", "askres");
+  if (!ok) res.textContent = d.error || "Не вдалося перевірити.";
+  else if (d.verdict === "channel") {
+    res.appendChild(document.createTextNode("Може знати: " + d.public + ". "));
+    const spoil = el("button", "linkbtn", "показати (спойлер)"); spoil.type = "button";
+    const detail = el("span", "spoiler", d.detail); detail.hidden = true;
+    spoil.addEventListener("click", () => { detail.hidden = !detail.hidden; });
+    res.append(spoil, detail);
+  } else if (d.verdict === "no_channel") {
+    if (d.regenerated) {
+      const w = block.querySelector(".w"); if (w) w.textContent = d.text;
+      block.classList.remove("cut");
+      block.dataset.event = d.new_event;
+      res.textContent = "Він не міг цього знати: репліку переписано з твоїм поясненням.";
+    } else res.textContent = "Він не міг цього знати. Пояснення збережено для наступних реплік.";
+  } else res.textContent = "Не вдалося перевірити (суддя недоступний).";
+  block.appendChild(res);
 }
 
 function setBusy(on, phase) {
@@ -62,22 +114,23 @@ function render(state) {
     if (t.kind === "intro") add(el("p", "intro", t.text), false);
     else if (t.kind === "player") add(el("p", "me", t.text), false);
     else if (t.kind === "narr") add(el("p", "narr", t.text), false);
-    else add(npcBlock(t.who, t.name, t.text, t.cut), false);
+    else add(npcBlock(t.who, t.name, t.text, t.cut, t.event), false);
   }
   setPanel(state.panel);
   feed.scrollTop = feed.scrollHeight;
 }
 
 const handlers = {
-  turn_start(e) { turnEls = []; cur = null; add(el("p", "me", e.text)); },
+  turn_start(e) { turnEls = []; turnNpc = []; cur = null; add(el("p", "me", e.text)); },
   narr_start() { cur = add(el("p", "narr")); setBusy(true, "narrating"); },
   narr_word(e) { addWord(cur, e.w); },
   narr_end() { setBusy(true, "thinking"); },
-  speaker(e) { cur = add(npcBlock(e.who, e.name, "")); setBusy(true, "speaking"); },
+  speaker(e) { cur = add(npcBlock(e.who, e.name, "")); turnNpc.push(cur); setBusy(true, "speaking"); },
   word(e) { addWord(cur, e.w); },
   turn_done(e) {
     if (e.interrupted && cur && cur.classList.contains("npc")) cur.classList.add("cut");
     $("clock").textContent = e.clock + tag;
+    (e.lines || []).forEach((id, i) => { if (turnNpc[i]) addAsk(turnNpc[i], id); });
     setPanel(e.panel);
     $("input").value = ""; syncSend();
     setBusy(false); showError("");
@@ -193,6 +246,31 @@ async function loadDebug() {
     ["#" + e.id + " " + e.type, JSON.stringify(e.payload).slice(0, 140)])));
   body.appendChild(section("Нотатки рушія", d.notes.map((n) =>
     [n.kind, JSON.stringify(n).slice(0, 160)])));
+  if (d.challenge) body.appendChild(section("Остання перевірка «звідки він це знає»", [
+    [d.challenge.verdict, JSON.stringify(d.challenge).slice(0, 300)]]));
+  await loadKnowledge(body);
+}
+
+// who knows what and from where (per character), so the user can check knowledge directly
+async function loadKnowledge(body) {
+  const r = await fetch("/api/knowledge");
+  if (!r.ok) { body.appendChild(section("Хто що знає", [["", "недоступно під час ходу"]])); return; }
+  const k = await r.json();
+  body.appendChild(el("h4", "", "Хто що знає"));
+  for (const [id, c] of Object.entries(k)) {
+    const det = el("details");
+    det.appendChild(el("summary", "", `${c.name} (${c.label}) · ${c.items.length}`));
+    const t = el("table");
+    for (const i of c.items) {
+      const tr = el("tr");
+      tr.appendChild(el("td", "dim", i.kind));
+      tr.appendChild(el("td", "", i.text));
+      tr.appendChild(el("td", "dim", [i.how, i.source_name ? "від " + i.source_name : "", i.when_text || "", i.event != null ? "#" + i.event : ""].filter(Boolean).join(" · ")));
+      t.appendChild(tr);
+    }
+    det.appendChild(t);
+    body.appendChild(det);
+  }
 }
 
 // the world pauses while the app is in the background; the server holds the stream

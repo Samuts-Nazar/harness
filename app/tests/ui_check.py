@@ -79,6 +79,20 @@ def main() -> None:
         no_hscroll(page, "after turn 1")
         shot(page, "04-turn1-done")
 
+        # "how does he know that?": the offline judge finds a channel; the spoiler is a tap away
+        page.click(".npc[data-who=horst] .ask")
+        page.fill(".askbox textarea", "Звідки він знає про хлопців?")
+        shot(page, "04b-ask")
+        page.click(".askbox .btn.primary")
+        page.wait_for_selector(".npc[data-who=horst] .askres")
+        res = page.inner_text(".npc[data-who=horst] .askres")
+        assert res.startswith("Може знати:"), res
+        assert not page.is_visible(".npc[data-who=horst] .spoiler")
+        page.click(".npc[data-who=horst] .linkbtn")
+        assert page.is_visible(".npc[data-who=horst] .spoiler")
+        no_hscroll(page, "after the answer")
+        shot(page, "04c-channel-answer")
+
         # turn 2: interrupt the NPC mid-line
         page.fill("#input", "Мовчки дивлюсь на Ельзу.")
         page.click("#btnSend")
@@ -105,6 +119,10 @@ def main() -> None:
         text = page.inner_text("#debugBody")
         for needle in ("до першого слова", "Виклики моделей", "Судження", "Журнал подій", "narrator"):
             assert needle in text, needle
+        page.wait_for_selector("#debugBody details")
+        assert "Хто що знає" in page.inner_text("#debugBody")
+        page.click("#debugBody summary:has-text(\"Горст\")")
+        assert "acquainted" in page.inner_text("#debugBody")
         shot(page, "07-debug")
         page.click("#btnDebug")
 

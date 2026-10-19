@@ -14,22 +14,30 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from harness.glossary import Glossary
-from harness.models import EQUIPMENT, INJURY, NARRATION, PLAYER, UTTERANCE, CharacterProfile, Scene
+from harness.models import (
+    ACTION, APPEARANCE, EQUIPMENT, INJURY, INTERNAL, NARRATION, PLAYER, UTTERANCE, CharacterProfile,
+    Scene,
+)
 from harness.pipeline import Engine, ModelConfig
 from harness.providers import Messages, Provider
-from harness.state import StateChange
+from harness.state import StateChange, StateError
+
+from .character import Traits, derive_traits
 from harness.style import Style
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_FILE = ROOT / "data" / "Ragnar.md"  # local, never committed
 CAMPAIGNS = ROOT / "campaigns"  # git-ignored
 PLACEHOLDER = "Молодий мандрівник, що сидить у кутку корчми, спиною до стіни."
+PLAYER_LOOK = "молодий незнайомець із мечем"  # until the character file says more
+HORST_LOOK, ELZA_LOOK = "кремезний сивий чоловік", "жінка в темній хустці"
 START_TIME = 13 * 24 * 60 + 19 * 60 + 40  # day 14, 19:40
 TITLE = "Корчма «Вовче Гніздо»"
 INTRO = (
     "Корчма «Вовче Гніздо» гуде, наче розтривожений вулик: брязкіт кухлів, чийсь хрипкий сміх, "
     "запах мокрої вовни й смаженої цибулі. Ти сидиш у кутку, спиною до стіни. Сталевий меч лежить "
-    "поруч на лаві. До столу підходять двоє: староста Горст і вдова мірошника Ельза."
+    "поруч на лаві. До столу підходять двоє місцевих: кремезний сивий чоловік і жінка в темній "
+    "хустці."
 )
 SEEDS = [  # English records, Ukrainian names
     ("Witchers hunt monsters for coin.", ["horst", "elza"]),
@@ -52,13 +60,14 @@ def player_description() -> str:
     return PLACEHOLDER
 
 
-def profiles() -> list[CharacterProfile]:
+def profiles(player_look: str = PLAYER_LOOK) -> list[CharacterProfile]:
+    """The cast. `appearance` is what others call a person by until they learn the name."""
     return [
-        CharacterProfile(PLAYER, "Рагнар", player_description()),
+        CharacterProfile(PLAYER, "Рагнар", player_description(), appearance=player_look),
         CharacterProfile("horst", "Горст", "Кремезний сивий староста села Брідки. Стриманий, "
-                         "торгується, боїться того, що виє на млині."),
+                         "торгується, боїться того, що виє на млині.", appearance=HORST_LOOK),
         CharacterProfile("elza", "Ельза", "Вдова мірошника. Гостра на язик, недовіряє Горсту, "
-                         "знає про млин більше, ніж каже."),
+                         "знає про млин більше, ніж каже.", appearance=ELZA_LOOK),
     ]
 
 
@@ -91,6 +100,8 @@ class Recorder:
             return "narrator"
         if "fact extractor" in sys:
             return "extractor"
+        if "character sheet" in sys:
+            return "setup: looks"
         if "observable actions" in sys:
             return "director: actions"
         if "You help write characters" in sys:
@@ -168,15 +179,21 @@ class Campaign:
     def transcript(self) -> list[dict[str, Any]]:
         """What the player has seen so far, rebuilt from the event log (a reopened campaign)."""
         out: list[dict[str, Any]] = [{"kind": "intro", "text": self.intro}]
-        for e in self.engine.log.active([NARRATION, UTTERANCE]):
+        for e in self.engine.log.active([NARRATION, UTTERANCE, ACTION]):
             if e.type == NARRATION:
                 out.append({"kind": "narr", "text": e.payload["text"]})
                 continue
-            who = e.payload["speaker"]
+            if e.type == ACTION and e.payload.get("actor") != PLAYER:
+                continue  # observable actions of narration are not shown as such
+            who = e.payload.get("speaker", e.payload.get("actor"))
             if who == PLAYER:
-                out.append({"kind": "player", "text": e.payload["text"]})
+                if e.payload.get("part", 1) > 1:
+                    continue  # the rest of an input that was split into actions and speech
+                out.append({"kind": "player", "text": e.payload.get("raw", e.payload["text"])})
             else:
-                item = {"kind": "npc", "who": who, "name": self.engine.ctx.name(who),
+                # the label is what the player knew of this person when they spoke
+                item = {"kind": "npc", "who": who, "event": e.id,
+                        "name": self.engine.ctx.label(PLAYER, who, e.id),
                         "text": e.payload["text"]}
                 if e.payload.get("interrupted"):
                     item["cut"] = True
@@ -184,17 +201,38 @@ class Campaign:
         return out
 
 
+def seed_player_state(eng: Engine, traits: Traits | None) -> list[tuple[str, str, bool]]:
+    """The player character's live state at the start: the sword and the scar of the scene, plus
+    what the character file says (observable and hidden). Observable items are perceived by the
+    NPCs present when the character enters the scene (`enter_scene`); whether one reacts is the
+    salience judgment's call. Returns what was applied."""
+    wanted: list[tuple[str, str, bool]] = [(EQUIPMENT, "steel sword", True),
+                                           (INJURY, "old scar under the shirt", False)]
+    if traits:
+        wanted += [(c, i, c != INTERNAL) for c, i in traits.observable]
+        wanted += [(c, i, False) for c, i in traits.hidden]
+    done: list[tuple[str, str, bool]] = []
+    for cat, item, obs in wanted:
+        try:
+            eng.apply_state_change(StateChange(PLAYER, cat, "add", item, obs))
+        except StateError:
+            continue  # the same item twice
+        done.append((cat, item, obs))
+    return done
+
+
 def _pointer(root: Path) -> Path:
     return root / "current.txt"
 
 
 def open_campaign(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = False,
-                  name: str | None = None) -> Campaign:
+                  name: str | None = None, data_file: Path | str | None = None) -> Campaign:
     """Continue the current campaign, or start a new one (`new=True`, or none exists yet)."""
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
     rec = Recorder(stack.provider, stack.models, stack.spend)
     glossary = Glossary.for_world("witcher")
+    data_file = Path(data_file) if data_file else DATA_FILE
     cur = _pointer(root)
     if name is None and not new and cur.exists():
         name = cur.read_text().strip()
@@ -205,16 +243,18 @@ def open_campaign(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = Fal
         name = name if (new and name) else time.strftime("inn-%Y%m%d-%H%M%S")
         while Engine.campaign_exists(name, root):
             name += "x"
+        # how the player character looks: one cheap call on the local character file (cached)
+        traits = derive_traits(rec, stack.models.extractor, data_file, root)
         eng = Engine.create_campaign(
-            name, rec, profiles(), Scene(TITLE, ("horst", "elza"), START_TIME), root=root,
+            name, rec, profiles(traits.label if traits and traits.label else PLAYER_LOOK),
+            Scene(TITLE, ("horst", "elza"), START_TIME), root=root,
             models=stack.models, judge=stack.judge, glossary=glossary,
             style=Style.load("witcher"))
+        eng.acquaint("horst", "elza")  # neighbours: they know each other by name
         for text, knowers in SEEDS:
             eng.facts.add_canon(text, knowers=[(k, "told") for k in knowers])
-        eng.apply_state_change(StateChange(PLAYER, EQUIPMENT, "add", "steel sword", True))
-        eng.apply_state_change(StateChange(PLAYER, INJURY, "add", "old scar under the shirt",
-                                           False))
-        eng.enter_scene(PLAYER)
+        seed_player_state(eng, traits)
+        eng.enter_scene(PLAYER)  # whoever is present perceives what is observable
     cur.write_text(name)
     tr = Translator(rec, stack.models.extractor, root / name / "translations.json")
     return Campaign(eng, rec, stack.spend, stack.live, name, tr)

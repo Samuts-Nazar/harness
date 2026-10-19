@@ -27,9 +27,12 @@ def speaker_questions(npcs: Mapping[str, str]) -> dict[str, Question]:
     """The batch: `first` (choice among all NPCs and nobody) and `also:<id>` per NPC."""
     options = {**{cid: name for cid, name in npcs.items()}, NOBODY: "no one speaks aloud now"}
     qs: dict[str, Question] = {"first": choice_q(
-        "Who speaks aloud next in this scene, answering the player or reacting to the narration? "
-        "Choose the character who is addressed or whose turn it is to speak. Answer nobody only "
-        "if no one at all would say anything now.",
+        "Who speaks aloud next in this scene? If the player's words or action are meant for "
+        "someone (a question, a request, an offer, a challenge, an accusation), that person "
+        "answers, unless the narration shows they cannot. A nod, a gesture or a look in the "
+        "narration is not yet an answer: they still speak. If the player is not addressing "
+        "anyone, choose whoever would naturally react aloud. Answer nobody only if no one at all "
+        "would say anything now.",
         options, tag=FIRST_TAG)}
     if len(npcs) > 1:
         for cid, name in npcs.items():

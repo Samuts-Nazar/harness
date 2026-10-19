@@ -25,9 +25,15 @@ from .glossary import Glossary
 from .judge import (
     Judge, JudgeError, JudgmentLog, LoggingJudge, choice_q, default_fake_judge, score_q, yes_no_q,
 )
+from . import knowledge
 from .memory import CharacterMemory, MemoryDeriver, MemoryWriter
+from .names import INTRODUCED, OVERHEARD, PLAYER_SAID, TOLD as NAME_TOLD, Names
+from .player_input import (
+    ACTION as PART_ACTION, SPEECH as SPEECH_PART, Part, render_for_model, split_input,
+)
 from .models import (
     ACTION as ACTION_EVENT,
+    CORRECTION,
     INTERRUPTION,
     NARRATION,
     PLAYER,
@@ -72,7 +78,24 @@ _OBSERVED = {  # how an observer sees a newly observable element
     "inventory": "{who} is carrying {item}",
     "equipment": "{who} has {item} in hand or at the belt",
     "internal": "{who} visibly shows {item}",
+    "appearance": "{who} has {item}",
 }
+
+
+@dataclass
+class Challenge:
+    """The answer to "how does he know that?". verdict: "channel" (the character could know it:
+    `public` says how in a few words, `detail` is the full event), "no_channel" (the line was
+    regenerated if it was the last one: `regenerated`, `text`, `new_event`) or "unavailable" (no
+    judge answered; nothing changed)."""
+    verdict: str
+    npc: str = ""
+    event: int = 0
+    public: str = ""
+    detail: str = ""
+    regenerated: bool = False
+    text: str = ""
+    new_event: int | None = None
 
 
 class InterruptionError(RuntimeError):
@@ -118,9 +141,12 @@ class _NpcPrep:
     npc: str
     mem: CharacterMemory
     view: NpcView
+    known_names: frozenset[str] = frozenset()  # snapshot of the names this NPC knows
+    player_known: frozenset[str] = frozenset()  # and the player character's
 
-    def messages(self, heard: Sequence[str] = ()) -> list[dict[str, str]]:
-        return self.view.messages(heard)
+    def messages(self, heard: Sequence[str] = (),
+                 notes: Sequence[str] = ()) -> list[dict[str, str]]:
+        return self.view.messages(heard, notes)
 
     def check_prefix(self, heard: Sequence[str] = ()) -> str:
         return self.view.check_prefix(heard)  # judge state up to "Line: "
@@ -235,10 +261,11 @@ class Engine:
         self.notices = Notices(self.log, self.facts)
         self.deriver = MemoryDeriver(self.facts, self.intents, self.live, self.attitudes,
                                      self.notices, belief)
+        self.names = Names(self.log, self.profiles, glossary)
         self.ctx = ContextBuilder(self.log, self.facts, self.intents, self.profiles, self.live,
                                   self.deriver, language=output_language,
                                   record_language=record_language, glossary=glossary,
-                                  narration=narration, style=style)
+                                  narration=narration, names=self.names, style=style)
         self.memory = (MemoryWriter(self.campaign_dir / "memory", self.deriver, self.log,
                                     self.profiles, self.agents) if self.campaign_dir else None)
         self._save_scene()
@@ -443,7 +470,12 @@ class Engine:
                                      [self._fix_names(a, "action") for a in out.actions],
                                      out.speakers)
             parsed = out
-            if (has_speaker_line("\n".join(out.texts()), self._npc_names)
+            leaked = self.names.unknown_mentioned(PLAYER, "\n".join(out.texts()))
+            if leaked:  # the player character has not learned this name: describe, do not name
+                self._note("narrator_unknown_name", attempt=attempt,
+                           names=[self.names.real(c) for c in leaked])
+                ok = False
+            elif (has_speaker_line("\n".join(out.texts()), self._npc_names)
                     or has_dash_speech(out.description)):
                 ok = False
             elif on_candidate is not None:
@@ -456,8 +488,9 @@ class Engine:
         names = self._npc_names
         if parsed is None:
             parsed = NarratorOutput(self._fix_names(self._prose_of(raw), "narration"))
+        mask = lambda t: self.names.mask(PLAYER, t)  # noqa: E731 - last resort: no unknown name
         stripped = NarratorOutput(
-            strip_speech(parsed.description, names),
+            mask(strip_speech(parsed.description, names)),
             [a for a in (strip_speech(a, names) for a in parsed.actions) if a],
             parsed.speakers,
         )
@@ -469,6 +502,8 @@ class Engine:
 
     def _valid_speakers(self, out: NarratorOutput) -> NarratorOutput:
         by_name = {p.name.lower(): c for c, p in self.profiles.items()}
+        by_name.update({p.appearance.lower(): c for c, p in self.profiles.items()
+                        if p.appearance})  # a stranger is listed by what is seen
         ok: list[str] = []
         for s in out.speakers:  # models answer with the display name, or "id (Name)"
             s = re.sub(r"\s*\(.*\)\s*$", "", s).strip()
@@ -487,8 +522,10 @@ class Engine:
         scene, and a wrong guess only costs one line."""
         npcs = [c for c in self.scene.present if c != PLAYER]
         low = narration.lower()
-        hit = sorted((low.find(self.ctx.name(c).lower()), c) for c in npcs
-                     if self.ctx.name(c).lower() in low)
+        forms = {c: [self.ctx.name(c).lower(), self.names.label(c).lower()] if self.names.hidden(c)
+                 else [self.ctx.name(c).lower()] for c in npcs}
+        hit = sorted((min(low.find(f) for f in forms[c] if f in low), c) for c in npcs
+                     if any(f in low for f in forms[c]))
         return ([c for _, c in hit] or npcs[:1])[: self.max_speakers]
 
     def _decide_speakers(self, state: list[str], npcs: dict[str, str], narration: str
@@ -522,7 +559,7 @@ class Engine:
 
         if speakers is not None:
             return None, act
-        npcs = {c: self.ctx.name(c) for c in sc.present if c != PLAYER}
+        npcs = {c: self.ctx.describe(c) for c in sc.present if c != PLAYER}
         state = self.ctx.director_state(sc, player_text, narration)
 
         def spk() -> list[str]:
@@ -546,7 +583,8 @@ class Engine:
         """Read an NPC's context and the judge's state from the database (main thread only)."""
         self._ensure_manner(npc)
         mem = self.deriver.derive(npc, self.scene.time)
-        return _NpcPrep(npc, mem, self.ctx.character_view(npc, self.scene, mem))
+        return _NpcPrep(npc, mem, self.ctx.character_view(npc, self.scene, mem),
+                        self.names.known_set(npc), self.names.known_set(PLAYER))
 
     def _ensure_manner(self, npc: str) -> None:
         """Manner notes for an NPC profile that has none, once, from a cheap model (main thread
@@ -583,9 +621,10 @@ class Engine:
         suspicious candidate is used (and logged) rather than a canned line. `heard`: lines other
         NPCs said earlier in this turn, which this NPC also heard."""
         tried: list[tuple[float, str]] = []
+        notes: list[str] = []
         for _ in range(self.check_retries + 1):
-            text = self._fix_names(clean_npc_line(self._complete("npc", prep.messages(heard))),
-                                   "npc_line")
+            text = self._fix_names(
+                clean_npc_line(self._complete("npc", prep.messages(heard, notes))), "npc_line")
             why = (foreign_voice(text, self.ctx.name(prep.npc),
                                  [p.name for p in self.profiles.values()])
                    if self.style is not None else None)
@@ -593,15 +632,43 @@ class Engine:
                 tried.append((1.0, text))
                 self._note("npc_line_rejected", npc=prep.npc, text=text, suspicion=1.0, why=why)
                 continue
+            # a name this character has no channel to: certain leak, no judge needed
+            leaked = self.names.unknown_mentioned(prep.npc, text, prep.view.heard_text(heard),
+                                                  prep.known_names)
+            if leaked:
+                tried.append((1.0, text))
+                self._note("npc_name_leak", npc=prep.npc, text=text,
+                           names=[self.names.real(c) for c in leaked])
+                notes = ["You do not know the name of " + ", ".join(
+                    self.names.label(c) for c in leaked) + ": do not use it; address "
+                    "or refer to them without a name."]
+                continue
             p = self._suspicion(prep, text, heard)
             if p is None or p < self.npc_reject_p:
-                return text
+                return self._mask_beats(text, prep)
             tried.append((p, text))
             self._note("npc_line_rejected", npc=prep.npc, text=text, suspicion=round(p, 3))
         best_p, best = min(tried, key=lambda c: c[0])  # ties: the earliest
+        if self.names.unknown_mentioned(prep.npc, best, prep.view.heard_text(heard),
+                                        prep.known_names):
+            best = self.names.mask(prep.npc, best, known=prep.known_names)  # last resort: the name never reaches the player
         self._note("npc_lowest_suspicion", npc=prep.npc, text=best, suspicion=round(best_p, 3),
                    rejected=[t for _, t in tried])
-        return best
+        return self._mask_beats(best, prep)
+
+    def _mask_beats(self, text: str, prep: _NpcPrep) -> str:
+        """The NPC's own beats ("Горст покрутив мідяк") are shown to the player: a name the player
+        character has not learned is replaced there by what is seen. Spoken words stay literal."""
+        if self.style is None or not self.names.mentions(text):
+            return text
+        parsed = split_npc_output(text)
+        if not parsed.has_dash:
+            return text
+        for beat in parsed.beats:
+            masked = self.names.mask(PLAYER, beat, known=prep.player_known)
+            if masked != beat:
+                text = text.replace(beat, masked)
+        return text
 
     def _npc_chain(self, prep: _NpcPrep, earlier: Sequence[tuple[str, Future[_Captured]]]) -> str:
         """A worker: wait for the lines of the NPCs who speak before this one in the turn, then
@@ -611,7 +678,7 @@ class Engine:
             cap = fut.result()
             if cap.error is not None:
                 raise cap.error
-            heard.append(self.ctx.heard_line(npc, cap.value))
+            heard.append(self.ctx.heard_line(prep.npc, npc, cap.value))
         return self._npc_line(prep, heard)
 
     # -- extraction -----------------------------------------------------
@@ -624,8 +691,12 @@ class Engine:
         for _ in range(self.extract_retries + 1):
             raw = self._complete("extractor", messages)
             try:
-                return validate_diff(self._ids_for_names(self._fix_tree(parse_diff(raw))), present=sc.present, sources=sources,
+                diff = validate_diff(self._ids_for_names(self._fix_tree(parse_diff(raw))),
+                                     present=sc.present, sources=sources,
                                      state=self.live.snapshot(), characters=everyone)
+                for d in diff.dropped:
+                    self._note("state_change_dropped", **d)
+                return diff
             except DiffValidationError as e:
                 last = e
         raise ExtractionRejected(str(last))
@@ -637,6 +708,10 @@ class Engine:
             return DESCRIPTION, None
         if key.startswith("action") and key[6:].isdigit():
             return ACTION, None
+        if key.startswith("paction"):  # the player's own action (asterisks)
+            return ACTION, None
+        if key.startswith(PLAYER + "~"):  # a further speech part of the player's input
+            return SPEECH, PLAYER
         return SPEECH, key  # "player" or an NPC id
 
     def _commit(self, diff: Diff, source_events: dict[str, Event]) -> list[int]:
@@ -900,6 +975,86 @@ class Engine:
                         "canonical": sum(g.canonical_count(t) for _, t in outs) if g else 0}
         self.reports.append({"repetition": result.repetition, "names": result.names})
 
+    # -- the player's input, names learned from speech ---------------------------------------
+    def _player_events(self, parts: list[Part], raw: str) -> list[tuple[str, Event]]:
+        """The player's input as events, in order: each action (asterisks) an observable action
+        of the player character, each speech part an utterance. The verbatim text is kept in
+        `raw` on the first event when the input was split. (segment key, event) pairs."""
+        if not parts:
+            parts = [Part(SPEECH_PART, raw)]
+        split = any(p.kind == PART_ACTION for p in parts)
+        out: list[tuple[str, Event]] = []
+        n_act = n_sp = 0
+        for i, part in enumerate(parts):
+            extra: dict[str, Any] = ({"part": i + 1, **({"raw": raw} if i == 0 else {})}
+                                     if split else {})
+            if part.kind == PART_ACTION:
+                n_act += 1
+                ev = self._event(ACTION_EVENT, [PLAYER],
+                                 {"text": part.text, "actor": PLAYER, **extra}, notability=0.4)
+                out.append((f"paction{n_act}", ev))
+            else:
+                n_sp += 1
+                ev = self._utterance(PLAYER, part.text, **extra)
+                out.append((PLAYER if n_sp == 1 else f"{PLAYER}~{n_sp}", ev))
+        return out
+
+    def _learn_from_player(self, pairs: list[tuple[str, Event]]) -> None:
+        """A name the player writes is a name the player character knows (only the player decides
+        what the character knows); whoever hears it in speech learns it by the usual rules."""
+        for _, ev in pairs:
+            for subj in self.names.mentions(ev.payload["text"]):
+                self.names.learn(PLAYER, subj, how=PLAYER_SAID, scene=self.scene,
+                                 cause_id=ev.id, note="named in the player's own words")
+            if ev.type == UTTERANCE:
+                self._learn_from_speech(ev, PLAYER, ev.payload["text"])
+
+    def _name_binds(self, speaker: str, subject: str, text: str) -> bool:
+        """Does a listener understand that this name belongs to the (present) person? One
+        judge question; if no judge answers, the name was said aloud, so it counts."""
+        sc = self.scene
+        try:
+            j = self.judge.yes_no(
+                f"In this line, would a listener understand that the name "
+                f"\"{self.names.real(subject)}\" belongs to the person described as "
+                f"\"{self.names.label(subject)}\"? (An introduction, a direct address or pointing "
+                "the person out: yes. Only mentioned in passing, or unclear whom it names: no.)",
+                f"Speaker: {self.names.describe(speaker)}\nPresent: "
+                + ", ".join(self.names.describe(c) for c in sc.present) + f"\nLine: {text}",
+                tag="name_binds")
+            return bool(j.answer)
+        except JudgeError as e:
+            self._note("name_check_unavailable", error=str(e))
+            return True
+
+    def _learn_from_speech(self, ev: Event, speaker: str, text: str) -> None:
+        """Names said aloud are heard by those present: they learn a name that is attached to a
+        person (introduction, address) or belongs to someone absent. The learning event is caused
+        by the utterance, so a rollback of the line takes it away too."""
+        sc = self.scene
+        for subj in self.names.mentions(text):
+            listeners = [h for h in sc.present
+                         if h != speaker and h != subj and not self.names.knows(h, subj)]
+            if not listeners:
+                continue
+            if subj == speaker:
+                how = INTRODUCED
+            elif subj in sc.present:
+                if not self._name_binds(speaker, subj, text):
+                    self._note("name_not_attached", speaker=speaker, subject=subj, text=text)
+                    continue
+                how = NAME_TOLD
+            else:
+                how = OVERHEARD  # an absent person named in passing: the name is known, no face
+            for h in listeners:
+                self.names.learn(
+                    h, subj, how=how, scene=sc, source=speaker, cause_id=ev.id,
+                    note=f"{self.names.real(speaker)} said the name {self.names.real(subj)}")
+
+    def acquaint(self, a: str, b: str, *, how: str = "acquainted", mutual: bool = True) -> None:
+        """Setup: `a` knows `b` by name (and `b` knows `a`): prior acquaintance, own life, canon."""
+        self.names.acquaint(a, b, self.scene, how=how, mutual=mutual)
+
     def turn(
         self,
         player_text: str,
@@ -929,14 +1084,18 @@ class Engine:
         launch: _Launch | None = None
         with self._fixes_lock:
             self._fixes = []
+        parts = split_input(player_text)
+        model_text = render_for_model(parts, player_text)  # what the narrator and director read
         try:
-            player_ev = self._utterance(PLAYER, player_text)
-            turn_events.append(player_ev)
+            player_pairs = self._player_events(parts, player_text)
+            player_ev = player_pairs[0][1]
+            turn_events.extend(ev for _, ev in player_pairs)
+            self._learn_from_player(player_pairs)
 
             if self.parallel:
                 def on_candidate(out: NarratorOutput) -> bool:
                     nonlocal launch
-                    cand = self._launch(out, player_text, speakers, turn_events, check=True)
+                    cand = self._launch(out, model_text, speakers, turn_events, check=True)
                     assert cand.speech is not None
                     if self._take(cand.speech):
                         self._discard(cand)
@@ -944,17 +1103,17 @@ class Engine:
                     launch = cand
                     return True
 
-                out = self._narrate(player_text, on_candidate)
+                out = self._narrate(model_text, on_candidate)
                 if launch is None:  # speech stripped after the retries: nothing left to check
-                    launch = self._launch(out, player_text, speakers, turn_events, check=False)
+                    launch = self._launch(out, model_text, speakers, turn_events, check=False)
             else:
-                out = self._narrate(player_text)
-                launch = self._launch(out, player_text, speakers, turn_events, check=False)
+                out = self._narrate(model_text)
+                launch = self._launch(out, model_text, speakers, turn_events, check=False)
 
             if on_narration is not None:
                 on_narration(out.description)
-            sources = {PLAYER: player_ev, **launch.sources}
-            segments = [(PLAYER, player_text), *launch.segments]
+            sources = {**{k: ev for k, ev in player_pairs}, **launch.sources}
+            segments = [*[(k, ev.payload["text"]) for k, ev in player_pairs], *launch.segments]
             result = TurnResult(out.description, actions=list(out.actions))
             for npc in launch.speakers:
                 if npc in launch.chains:
@@ -973,6 +1132,10 @@ class Engine:
                 ev = self._utterance(npc, sr.spoken_text, interrupted=sr.interrupted, **extra)
                 turn_events.append(ev)
                 result.utterances.append(ev)
+                # only what is said aloud teaches a name, never the NPC's own beats
+                self._learn_from_speech(
+                    ev, npc, parsed.speech if parsed is not None and parsed.has_dash
+                    else sr.spoken_text)
                 if parsed is not None:  # the NPC's own beats, only the delivered part
                     for beat in parsed.beats:
                         act = self._fix_names(beat_as_action(beat, self.ctx.name(npc)), "npc_beat")
@@ -1057,12 +1220,109 @@ class Engine:
         self.log.rollback(last.id, f"retroactive interrupt of {npc}")
         kept = self._utterance(npc, sr.spoken_text, interrupted=True, replaces=last.id)
         self._record_interruption(kept, sr)
+        self._learn_from_speech(kept, npc, sr.spoken_text)
         try:
             self._commit(self._extract([(npc, sr.spoken_text)]), {npc: kept})
         except ExtractionRejected:
             pass  # keep the cut; simply record no facts from the kept part
         self.refresh_memory()
         return kept
+
+    # -- "how does he know that?" (model-error flow for knowledge leaks) -------------------------
+    def knowledge_report(self, character: str) -> list[dict[str, Any]]:
+        """What `character` knows and from where (debug view)."""
+        return knowledge.report(self, character)
+
+    def challenge_line(self, event_id: int, explanation: str = "") -> "Challenge":
+        """The player marks an NPC line as impossible ("he could not know this"). The speaker's
+        channels are checked for the claim (known facts with their sources, names, what the
+        character heard, the character's own background).
+
+        - No channel: the player's note is stored for the campaign and fed to later generations;
+          if this is the last NPC line it is regenerated with the note (the player's turn stays).
+        - A channel exists: nothing changes; the answer says what kind of channel and roughly when
+          (`public`), with the full event in `detail` (shown behind a spoiler tap)."""
+        ev = self.log.get(event_id)
+        if ev.type != UTTERANCE or ev.payload.get("speaker") == PLAYER or not self.log.is_active(
+                event_id):
+            raise ValueError("only a line an NPC said can be challenged")
+        npc, text = ev.payload["speaker"], ev.payload["text"]
+        explanation = explanation.strip()
+        # 1. a name the speaker had no channel to (certain: no judge needed)
+        known = frozenset(self.names.known_map(npc, before=event_id))
+        before_ev = [e for e in self.log.recent_dialogue(witnessed_by=npc, limit=10)
+                     if e.id < event_id]
+        heard = "\n".join(e.payload["text"] for e in before_ev)
+        leaked = self.names.unknown_mentioned(npc, text, heard, known)
+        item: knowledge.Item | None = None
+        why = ""
+        if leaked:
+            why = "name: " + ", ".join(self.names.real(c) for c in leaked)
+        else:
+            items = knowledge.items_for(self, npc, before=event_id)
+            try:
+                item = self._find_channel(npc, text, explanation, items)
+            except JudgeError as e:
+                self._note("challenge_unavailable", error=str(e))
+                return Challenge("unavailable", npc=npc, event=event_id)
+            why = "" if item else "no fact, name, heard line or background explains it"
+        if item is not None:
+            self._note("challenge_channel", npc=npc, event=event_id, channel=item.text,
+                       how=item.how)
+            return Challenge("channel", npc=npc, event=event_id,
+                             public=knowledge.public_channel(self, item),
+                             detail=knowledge.detail(self, item))
+        # 2. no channel: store the note, regenerate if this is the last NPC line
+        self._event(CORRECTION, [npc], {"npc": npc, "line": text, "explanation": explanation,
+                                        "line_event": event_id, "reason": why},
+                    witnesses=[], notability=0.1)
+        res = Challenge("no_channel", npc=npc, event=event_id, detail=why)
+        last = self.log.last_npc_utterance()
+        if last is None or last.id != event_id:
+            self._note("challenge_not_regenerated", event=event_id,
+                       reason="not the last NPC line")
+            return res
+        self._regenerate(ev, res)
+        return res
+
+    def _find_channel(self, npc: str, text: str, explanation: str,
+                      items: list["knowledge.Item"]) -> "knowledge.Item | None":
+        """Which of the character's channels explains the claim, if any (one choice judgment)."""
+        if not items:
+            return None
+        options = {it.key: f"[{it.kind}] {it.text}"[:220] for it in items}
+        options["none"] = "no item explains how the speaker could know this"
+        prof = self.profiles.get(npc)
+        state = [f"Speaker: {self.names.real(npc)}" + (f". {prof.description}" if prof else ""),
+                 f"Line: {text}",
+                 "The player says the speaker could not have known: "
+                 + (explanation or "something in this line")]
+        j = self.judge.ask(state, {"c": choice_q(
+            "Which one item is the channel through which the speaker learned what the player "
+            "says they could not know? Answer none if no item explains it.", options,
+            tag="knowledge_channel")})["c"]
+        by_key = {it.key: it for it in items}
+        return by_key.get(str(j.answer))
+
+    def _regenerate(self, old: Event, res: "Challenge") -> None:
+        """Replace the NPC line `old` by a new one generated with the correction in context. If
+        generating fails the old text is put back (the log is append-only, so as a new event)."""
+        npc = old.payload["speaker"]
+        self.log.rollback(old.id, "model error: no channel")
+        try:
+            text = self._npc_line(self._prep_npc(npc))
+        except Exception:
+            self._utterance(npc, old.payload["text"], replaces=old.id, restored=True)
+            self.refresh_memory()
+            raise
+        new = self._utterance(npc, text, replaces=old.id, regenerated=True)
+        self._learn_from_speech(new, npc, text)
+        try:
+            self._commit(self._extract([(npc, text)]), {npc: new})
+        except ExtractionRejected:
+            self._note("regenerated_line_not_extracted", event=new.id)
+        self.refresh_memory()
+        res.regenerated, res.text, res.new_event = True, text, new.id
 
     # -- off-screen -----------------------------------------------------
     def advance_offscreen(self, minutes: int) -> None:
@@ -1088,7 +1348,7 @@ class Engine:
     def _save_setup(self) -> None:
         with self.conn:
             for k, v in {
-                "profiles": [[p.id, p.name, p.description, p.manner]
+                "profiles": [[p.id, p.name, p.description, p.manner, p.appearance]
                              for p in self.profiles.values()],
                 "settings": {"output_language": self.output_language,
                              "record_language": self.record_language,

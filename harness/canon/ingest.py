@@ -21,7 +21,7 @@ from typing import Any
 from ..policy import Spend
 from ..providers import OpenRouterProvider, Provider
 from . import chunk, extract, extract2
-from .glossary import Glossary
+from ..glossary import Glossary
 from .store import add_record, create_store
 from .vocab import ATTITUDES, CHANNELS, EKINDS, PARTS, REACTIONS
 
@@ -83,7 +83,7 @@ class Ingestor:
         self.spend = spend or TokenSpend()
         self.first, self.last, self.chapters = first, last, chapters or CHAPTERS
         self.log = log
-        self.glossary = Glossary.load() if glossary else None  # canonical names applied to event text
+        self.glossary = Glossary.for_world("witcher") if glossary else None  # canonical names applied to event text
         self.v2 = v2          # scene-timeline pass supplies time and place (extract2)
         self.scenes: list[dict[str, Any]] = []
         self.replay = replay  # re-use the saved raw replies in raw_dir instead of calling the model

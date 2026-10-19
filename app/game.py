@@ -17,7 +17,7 @@ from harness.streaming import InterruptHandle
 from .campaigns import Campaign
 
 CATEGORY_UK = {"injury": "тіло", "clothing": "одяг", "inventory": "речі",
-               "equipment": "спорядження", "internal": "відчуття"}
+               "equipment": "спорядження", "internal": "відчуття", "appearance": "вигляд"}
 
 
 class Busy(RuntimeError):
@@ -53,6 +53,7 @@ class Game:
         self.seq = 0
         self.events: list[dict[str, Any]] = []
         self.thread: threading.Thread | None = None
+        self.challenging = False
         self.reset(new=False)
 
     # -- campaign ---------------------------------------------------------------------------
@@ -60,7 +61,7 @@ class Game:
         """Start a new campaign (the saved one stays on disk), or with new=False continue the
         current one. Refused while a turn runs."""
         with self.lock:
-            if self.running:
+            if self.running or self.challenging:
                 raise Busy("a turn is running")
             self.camp = self._open(new)
             self.transcript: list[dict[str, Any]] = self.camp.transcript()
@@ -106,7 +107,8 @@ class Game:
         derived memory."""
         mem = self.eng.deriver.derive(PLAYER, self.eng.scene.time)
         items = [e.item for e in mem.state]
-        prose = [it.fact.content.rstrip(".") + "." for it in mem.knows[-4:]]
+        prose = [self.eng.ctx.mask(PLAYER, it.fact.content).rstrip(".") + "."
+                 for it in mem.knows[-4:]]
         tr = self.camp.translate  # records are English; the panel is shown in Ukrainian
         if tr is not None:
             both = tr(items + prose)
@@ -139,7 +141,7 @@ class Game:
         if not text:
             raise ValueError("empty input")
         with self.lock:
-            if self.running:
+            if self.running or self.challenging:
                 raise Busy("a turn is already running")
             self.pending = text
             self.phase = "thinking"
@@ -148,6 +150,41 @@ class Game:
             self._emit("turn_start", text=text)
             self.thread = threading.Thread(target=self._run, args=(text,), daemon=True)
             self.thread.start()
+
+    # -- "how does he know that?" ------------------------------------------------------------
+    def challenge(self, event: int, explanation: str = "") -> dict[str, Any]:
+        """The player marks an NPC line as impossible. No channel: the line is regenerated with
+        the explanation (if it is the last one) and the feed is updated; a channel: the answer says
+        how the character knows (type and rough time; the full event for the spoiler tap)."""
+        from dataclasses import asdict
+
+        with self.lock:
+            if self.running or self.challenging:
+                raise Busy("a turn is running")
+            self.challenging = True
+        try:
+            res = self.eng.challenge_line(event, explanation)
+            out = asdict(res)
+            if res.regenerated:
+                for en in self.transcript:
+                    if en.get("kind") == "npc" and en.get("event") == event:
+                        en.update(text=res.text, event=res.new_event)
+                        en.pop("cut", None)
+                self._panel = self._compute_panel()
+            self.debug = {**self.debug, "challenge": out,
+                          "notes": self.debug.get("notes", []) + self.eng.devlog[-3:]}
+            return out
+        finally:
+            self.challenging = False
+
+    def knowledge(self) -> dict[str, Any]:
+        """The debug view: per character, what they know and from where."""
+        with self.lock:
+            if self.running or self.challenging:
+                raise Busy("a turn is running")
+            eng = self.eng
+            return {c: {"name": eng.profiles[c].name, "label": eng.names.label(c),
+                        "items": eng.knowledge_report(c)} for c in eng.profiles}
 
     def interrupt(self) -> str:
         """The interrupt button. Returns what was interrupted."""
@@ -192,9 +229,9 @@ class Game:
             if cur["who"] != npc:
                 cur["who"] = npc
                 self.phase = "speaking"
-                self._emit("speaker", who=npc, name=eng.profiles[npc].name)
-                entries.append({"kind": "npc", "who": npc, "name": eng.profiles[npc].name,
-                                "text": ""})
+                name = eng.ctx.label(PLAYER, npc)  # a stranger stays "a stout grey-haired man"
+                self._emit("speaker", who=npc, name=name)
+                entries.append({"kind": "npc", "who": npc, "name": name, "text": ""})
             stamp()
             entries[-1]["text"] = (entries[-1]["text"] + " " + w).strip()
             self._emit("word", who=npc, w=w)
@@ -215,6 +252,10 @@ class Game:
             unsubscribe()
         if r.interrupted and entries[-1]["kind"] == "npc":
             entries[-1]["cut"] = True
+        line_events = iter(u.id for u in r.utterances)
+        for en in entries:  # lets the player question a line afterwards ("how does he know?")
+            if en["kind"] == "npc":
+                en["event"] = next(line_events, None)
         if narr_words:
             entries.insert(1, {"kind": "narr", "text": " ".join(narr_words)})
         with self.lock:
@@ -223,7 +264,7 @@ class Game:
             self._save_debug(marks, new_events, t0, first_word, report=eng.reports[-1])
             self._panel = self._compute_panel()
             self._emit("turn_done", interrupted=r.interrupted, clock=self.clock(),
-                       panel=self._panel)
+                       panel=self._panel, lines=[u.id for u in r.utterances])
 
     def _stream_narration(self, text: str, spoken: list[str], stamp: Callable[[], None]) -> None:
         self.phase = "narrating"

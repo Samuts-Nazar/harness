@@ -39,13 +39,17 @@ def test_scripted_changes_are_validated():
         eng.apply_state_change(sc(PLAYER, INVENTORY, "map"))
 
 
-def test_extractor_removal_of_missing_item_rejects_the_diff():
-    from harness.pipeline import ExtractionRejected
-    bad = diff(changes=[change("player", "equipment", "remove", "drawn sword", "player")])
-    eng, _ = make_engine({"narrator": ["N."], "npc": ["Hm."], "extractor": [bad, bad]})
-    with pytest.raises(ExtractionRejected):
-        eng.turn("I sheathe my sword", speakers=["innkeeper"])
-    assert eng.live.of(PLAYER) == []
+def test_extractor_removal_of_missing_item_drops_that_change_only():
+    """One invalid change no longer rejects the turn: it is dropped and noted, the rest stands."""
+    bad = change("player", "equipment", "remove", "drawn sword", "player")
+    good = change("player", "injury", "add", "bruise", "player")
+    eng, _ = make_engine({"narrator": ["N."], "npc": ["Hm."],
+                          "extractor": [diff(fact("kept", "narration"), changes=(bad, good))]})
+    res = eng.turn("I sheathe my sword", speakers=["innkeeper"])
+    assert len(res.fact_ids) == 1
+    assert [(e.category, e.item) for e in eng.live.of(PLAYER)] == [("injury", "bruise")]
+    note = next(n for n in eng.devlog if n["kind"] == "state_change_dropped")
+    assert "does not have" in note["reason"] and note["change"]["item"] == "drawn sword"
 
 
 def test_scene_entry_is_perceived_and_salience_decides_surfacing():

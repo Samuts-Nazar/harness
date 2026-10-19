@@ -72,12 +72,6 @@ def test_knower_lists_are_rejected(knowers):
     {"new_facts": [{k: v for k, v in ok_fact().items() if k != "content"}]},
     {"new_facts": [ok_fact()] * 21},
     {"state_changes": "nope"},
-    {"state_changes": [ok_change(category="mood")]},
-    {"state_changes": [ok_change(op="steal")]},
-    {"state_changes": [ok_change(item="")]},
-    {"state_changes": [ok_change(character="nobody")]},
-    {"state_changes": [ok_change(source="nobody")]},
-    {"state_changes": [ok_change(observable="yes")]},
 ])
 def test_malformed_rejected(data):
     with pytest.raises(DiffValidationError):
@@ -91,7 +85,6 @@ def test_malformed_rejected(data):
     {"rollback": 3},
     {"new_facts": [ok_fact(store="canon")]},
     {"new_facts": [ok_fact(id=4)]},
-    {"state_changes": [ok_change(extra=1)]},
 ])
 def test_unauthorized_rejected(data):
     with pytest.raises(DiffValidationError):
@@ -99,25 +92,40 @@ def test_unauthorized_rejected(data):
 
 
 def test_state_changes_validated_against_existing_state():
+    """An invalid change is dropped (with its reason); it never rejects the diff."""
     state = {"innkeeper": {("equipment", "dagger"): False}}
     # cannot remove what is not there
-    with pytest.raises(DiffValidationError, match="does not have"):
-        v({"state_changes": [ok_change(category="equipment", op="remove", item="sword")]}, state)
+    d = v({"state_changes": [ok_change(category="equipment", op="remove", item="sword")]}, state)
+    assert d.changes == [] and "does not have" in d.dropped[0]["reason"]
     # cannot add twice
-    with pytest.raises(DiffValidationError, match="already has"):
-        v({"state_changes": [ok_change(category="equipment", item="dagger")]}, state)
+    d = v({"state_changes": [ok_change(category="equipment", item="dagger")]}, state)
+    assert d.changes == [] and "already has" in d.dropped[0]["reason"]
     # reveal only a hidden element, hide only an observable one
-    with pytest.raises(DiffValidationError):
-        v({"state_changes": [ok_change(category="equipment", op="hide", item="dagger")]}, state)
+    assert v({"state_changes": [ok_change(category="equipment", op="hide", item="dagger")]},
+             state).changes == []
     assert v({"state_changes": [ok_change(category="equipment", op="reveal", item="dagger")]},
              state).changes
     # changes inside one diff see each other: add then remove is fine, remove then remove is not
     add_rm = [ok_change(), ok_change(op="remove")]
     assert len(v({"state_changes": add_rm}).changes) == 2
-    with pytest.raises(DiffValidationError):
-        v({"state_changes": [ok_change(), ok_change(op="remove"), ok_change(op="remove")]})
+    d = v({"state_changes": [ok_change(), ok_change(op="remove"), ok_change(op="remove")]})
+    assert len(d.changes) == 2 and len(d.dropped) == 1
     # validation does not mutate the caller's state
     assert state == {"innkeeper": {("equipment", "dagger"): False}}
+
+
+@pytest.mark.parametrize("bad", [
+    ok_change(category="mood"), ok_change(op="steal"), ok_change(item=""),
+    ok_change(character="nobody"), ok_change(source="nobody"), ok_change(observable="yes"),
+    ok_change(extra=1), "not an object", 7,
+])
+def test_one_bad_change_is_dropped_the_rest_stands(bad):
+    """The first live session lost whole turns to one invented change (revealing an item in the
+    wrong category). Now only that change goes; facts and the other changes are kept."""
+    good = ok_change(item="bruise")
+    d = v({"new_facts": [ok_fact()], "state_changes": [bad, good]})
+    assert [c.item for c in d.changes] == ["bruise"] and len(d.facts) == 1
+    assert len(d.dropped) == 1 and d.dropped[0]["change"] == bad and d.dropped[0]["reason"]
 
 
 def test_engine_retries_then_commits_valid_diff():
