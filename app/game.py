@@ -11,7 +11,7 @@ import threading
 import time
 from typing import Any, Callable
 
-from harness.models import NARRATION, PLAYER, format_time
+from harness.models import PLAYER, format_time
 from harness.streaming import InterruptHandle
 
 from .campaigns import Campaign
@@ -43,7 +43,8 @@ def explain(e: BaseException) -> str:
 
 
 class Game:
-    def __init__(self, open_campaign: Callable[[], Campaign], pace: float = 0.25) -> None:
+    def __init__(self, open_campaign: Callable[[bool], Campaign], pace: float = 0.25) -> None:
+        """`open_campaign(new)`: the saved current campaign (new=False) or a fresh one."""
         self._open = open_campaign
         self.pace = pace
         self.lock = threading.RLock()
@@ -52,16 +53,17 @@ class Game:
         self.seq = 0
         self.events: list[dict[str, Any]] = []
         self.thread: threading.Thread | None = None
-        self.reset()
+        self.reset(new=False)
 
     # -- campaign ---------------------------------------------------------------------------
-    def reset(self) -> None:
-        """Start (or restart) the campaign. Refused while a turn runs."""
+    def reset(self, new: bool = True) -> None:
+        """Start a new campaign (the saved one stays on disk), or with new=False continue the
+        current one. Refused while a turn runs."""
         with self.lock:
             if self.running:
                 raise Busy("a turn is running")
-            self.camp = self._open()
-            self.transcript: list[dict[str, Any]] = [{"kind": "intro", "text": self.camp.intro}]
+            self.camp = self._open(new)
+            self.transcript: list[dict[str, Any]] = self.camp.transcript()
             self.phase = "idle"  # idle | thinking | narrating | speaking
             self.handle: InterruptHandle | None = None
             self.skip_narration = False
@@ -103,9 +105,14 @@ class Game:
         Nothing the character did not perceive can appear: it is read from the character's own
         derived memory."""
         mem = self.eng.deriver.derive(PLAYER, self.eng.scene.time)
-        chips = [{"text": e.item, "category": e.category, "label": CATEGORY_UK[e.category],
-                  "observable": e.observable} for e in mem.state]
+        items = [e.item for e in mem.state]
         prose = [it.fact.content.rstrip(".") + "." for it in mem.knows[-4:]]
+        tr = self.camp.translate  # records are English; the panel is shown in Ukrainian
+        if tr is not None:
+            both = tr(items + prose)
+            items, prose = both[: len(items)], both[len(items):]
+        chips = [{"text": t, "category": e.category, "label": CATEGORY_UK[e.category],
+                  "observable": e.observable} for t, e in zip(items, mem.state)]
         return {"name": self.eng.profiles[PLAYER].name, "chips": chips, "prose": prose}
 
     def state(self) -> dict[str, Any]:
@@ -168,19 +175,17 @@ class Game:
         entries: list[dict[str, Any]] = [{"kind": "player", "text": text}]
         narr_words: list[str] = []
         cur: dict[str, Any] = {"who": None}
-        orig_append = eng.log.append
 
         def stamp() -> None:
             if not first_word:
                 first_word.append(round(time.monotonic() - t0, 2))
 
-        def append(type, *a, **k):  # type: ignore[no-untyped-def]
-            ev = orig_append(type, *a, **k)
+        def on_event(ev) -> None:  # type: ignore[no-untyped-def]
             new_events.append({"id": ev.id, "type": ev.type, "game_time": ev.game_time,
                                "payload": ev.payload, "participants": list(ev.participants)})
-            if type == NARRATION:
-                self._stream_narration(ev.payload["text"], narr_words, stamp)
-            return ev
+
+        def on_narration(narration: str) -> None:
+            self._stream_narration(narration, narr_words, stamp)
 
         def on_word(npc: str, w: str) -> None:
             self.visible.wait()
@@ -196,19 +201,18 @@ class Game:
             if self.pace:
                 time.sleep(self.pace)
 
-        eng.log.append = append  # type: ignore[method-assign]
+        unsubscribe = eng.log.subscribe(on_event)
         self.handle = InterruptHandle()
         self.skip_narration = False
         try:
-            r = eng.turn(text, handle=self.handle, on_word=on_word)
+            r = eng.turn(text, handle=self.handle, on_word=on_word, on_narration=on_narration)
         except BaseException as e:  # noqa: BLE001 - shown to the player, the input is kept
-            eng.log.append = orig_append  # type: ignore[method-assign]
             self.phase = "idle"
             self._emit("error", message=explain(e), text=text, detail=type(e).__name__)
             self._save_debug(marks, new_events, t0, first_word, error=repr(e)[:300])
             return
         finally:
-            eng.log.append = orig_append  # type: ignore[method-assign]
+            unsubscribe()
         if r.interrupted and entries[-1]["kind"] == "npc":
             entries[-1]["cut"] = True
         if narr_words:
@@ -216,7 +220,7 @@ class Game:
         with self.lock:
             self.transcript += entries
             self.phase = "idle"
-            self._save_debug(marks, new_events, t0, first_word)
+            self._save_debug(marks, new_events, t0, first_word, report=eng.reports[-1])
             self._panel = self._compute_panel()
             self._emit("turn_done", interrupted=r.interrupted, clock=self.clock(),
                        panel=self._panel)
@@ -237,7 +241,8 @@ class Game:
         self.phase = "thinking"
 
     def _save_debug(self, marks: dict[str, Any], new_events: list[dict[str, Any]], t0: float,
-                    first_word: list[float], error: str | None = None) -> None:
+                    first_word: list[float], error: str | None = None,
+                    report: dict[str, Any] | None = None) -> None:
         eng, rec, spend = self.eng, self.camp.recorder, self.camp.spend
         self.debug = {
             "events": new_events,
@@ -248,6 +253,9 @@ class Game:
                        "total_s": round(time.monotonic() - t0, 2)},
             "cost": round(getattr(spend, "total", 0.0) - marks["cost"], 6),
             "error": error,
+            "repetition": (report or {}).get("repetition"),
+            "names": (report or {}).get("names"),
+            "parallel": eng.parallel,
         }
 
     def wait_idle(self, timeout: float = 30.0) -> None:
