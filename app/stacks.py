@@ -85,6 +85,8 @@ class FakeUk:
                 _, acts = NARRATIONS[self.n["actions"] % len(NARRATIONS)]
                 self.n["actions"] += 1
                 return "\n".join(acts)
+            if "You help write characters" in sys:  # manner notes (task 15)
+                return "Говорить повільно, зважуючи слова.\nЧасто озирається на двері."
             if "translate" in sys:
                 body = json.loads(messages[1]["content"])
                 return json.dumps([TRANSLATIONS.get(t, t) for t in body], ensure_ascii=False)

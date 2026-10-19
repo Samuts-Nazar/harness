@@ -78,6 +78,7 @@ class CharacterProfile:
     id: str
     name: str
     description: str = ""
+    manner: str = ""  # how this person talks (task 15); generated once, stored with the profile
     appearance: str = ""  # what an observer sees of them (short, in the output language). A
     # character with an appearance is referred to by it until the viewer has learned the name;
     # one without is known by name to everyone.

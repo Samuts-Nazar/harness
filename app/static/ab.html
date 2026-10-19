@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Сліпе порівняння</title>
+<style>
+  :root { --bg:#fbfaf7; --fg:#1d1b17; --mut:#6b665c; --card:#fff; --line:#d9d4c8; --acc:#7a4b1e; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#16140f; --fg:#ece7da; --mut:#9a9486; --card:#1f1c15; --line:#38332a; --acc:#d9a35f; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:17px/1.55 Georgia, "Times New Roman", serif; }
+  main { max-width:44rem; margin:0 auto; padding:16px; }
+  h1 { font-size:1.15rem; margin:.2rem 0 .6rem; }
+  .mut { color:var(--mut); font-size:.9rem; }
+  .ctx { margin:.8rem 0; padding:.6rem .8rem; border-left:3px solid var(--acc); background:var(--card); }
+  .opt { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:.8rem 1rem; margin:.7rem 0; white-space:pre-wrap; }
+  .opt b { display:block; color:var(--acc); margin-bottom:.3rem; font-family:system-ui,sans-serif; font-size:.85rem; }
+  .row { display:flex; gap:.6rem; margin:.8rem 0; }
+  button { flex:1; min-height:48px; font:600 1rem system-ui,sans-serif; border-radius:8px; border:1px solid var(--line);
+           background:var(--card); color:var(--fg); }
+  button.on { border-color:var(--acc); outline:2px solid var(--acc); }
+  button.nav { flex:0 0 auto; padding:0 1rem; }
+  pre { white-space:pre-wrap; background:var(--card); border:1px solid var(--line); padding:.7rem; border-radius:8px; font-size:.95rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Яка репліка звучить живіше, як у Сапковського?</h1>
+  <div class="mut" id="prog"></div>
+  <div class="ctx" id="ctx"></div>
+  <div class="opt"><b>A</b><span id="a"></span></div>
+  <div class="opt"><b>B</b><span id="b"></span></div>
+  <div class="row">
+    <button data-v="A">Краще A</button>
+    <button data-v="=">Однаково</button>
+    <button data-v="B">Краще B</button>
+  </div>
+  <div class="row">
+    <button class="nav" id="prev">Назад</button>
+    <button class="nav" id="next">Далі</button>
+  </div>
+  <div id="done" hidden>
+    <h1>Готово</h1>
+    <p class="mut">Скопіюй цей рядок і надішли.</p>
+    <pre id="out"></pre>
+  </div>
+</main>
+<script src="/static/ab_data.js"></script>
+<script>
+(function () {
+  var pairs = window.AB_PAIRS || [], i = 0, ans = [];
+  try { ans = JSON.parse(localStorage.getItem("ab_answers") || "[]"); } catch (e) {}
+  function save() { try { localStorage.setItem("ab_answers", JSON.stringify(ans)); } catch (e) {} }
+  function $(id) { return document.getElementById(id); }
+  function render() {
+    var p = pairs[i];
+    $("prog").textContent = (i + 1) + " з " + pairs.length;
+    $("ctx").textContent = p.who + " відповідає на: «" + p.player + "»";
+    $("a").textContent = p.a; $("b").textContent = p.b;
+    document.querySelectorAll("button[data-v]").forEach(function (btn) {
+      btn.classList.toggle("on", ans[i] === btn.dataset.v);
+    });
+    $("done").hidden = true;
+  }
+  function finish() {
+    var s = pairs.map(function (_, k) { return (k + 1) + ":" + (ans[k] || "?"); }).join(" ");
+    $("out").textContent = s; $("done").hidden = false;
+  }
+  document.querySelectorAll("button[data-v]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      ans[i] = btn.dataset.v; save();
+      if (i < pairs.length - 1) { i++; render(); } else { render(); finish(); }
+    });
+  });
+  $("prev").addEventListener("click", function () { if (i > 0) { i--; render(); } });
+  $("next").addEventListener("click", function () { if (i < pairs.length - 1) { i++; render(); } else finish(); });
+  if (pairs.length) render(); else $("ctx").textContent = "Немає даних.";
+})();
+</script>
+</body>
+</html>

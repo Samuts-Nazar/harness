@@ -23,6 +23,7 @@ from harness.providers import Messages, Provider
 from harness.state import StateChange, StateError
 
 from .character import Traits, derive_traits
+from harness.style import Style
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_FILE = ROOT / "data" / "Ragnar.md"  # local, never committed
@@ -62,11 +63,11 @@ def player_description() -> str:
 def profiles(player_look: str = PLAYER_LOOK) -> list[CharacterProfile]:
     """The cast. `appearance` is what others call a person by until they learn the name."""
     return [
-        CharacterProfile(PLAYER, "Рагнар", player_description(), player_look),
+        CharacterProfile(PLAYER, "Рагнар", player_description(), appearance=player_look),
         CharacterProfile("horst", "Горст", "Кремезний сивий староста села Брідки. Стриманий, "
-                         "торгується, боїться того, що виє на млині.", HORST_LOOK),
+                         "торгується, боїться того, що виє на млині.", appearance=HORST_LOOK),
         CharacterProfile("elza", "Ельза", "Вдова мірошника. Гостра на язик, недовіряє Горсту, "
-                         "знає про млин більше, ніж каже.", ELZA_LOOK),
+                         "знає про млин більше, ніж каже.", appearance=ELZA_LOOK),
     ]
 
 
@@ -103,6 +104,8 @@ class Recorder:
             return "setup: looks"
         if "observable actions" in sys:
             return "director: actions"
+        if "You help write characters" in sys:
+            return "manner notes"
         if "translate" in sys.lower():
             return "translator"
         if sys.startswith("You are "):
@@ -235,7 +238,7 @@ def open_campaign(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = Fal
         name = cur.read_text().strip()
     if name and not new and Engine.campaign_exists(name, root):
         eng = Engine.open_campaign(name, rec, root=root, models=stack.models, judge=stack.judge,
-                                   glossary=glossary)
+                                   glossary=glossary, style=Style.load("witcher"))
     else:
         name = name if (new and name) else time.strftime("inn-%Y%m%d-%H%M%S")
         while Engine.campaign_exists(name, root):
@@ -245,7 +248,8 @@ def open_campaign(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = Fal
         eng = Engine.create_campaign(
             name, rec, profiles(traits.label if traits and traits.label else PLAYER_LOOK),
             Scene(TITLE, ("horst", "elza"), START_TIME), root=root,
-            models=stack.models, judge=stack.judge, glossary=glossary)
+            models=stack.models, judge=stack.judge, glossary=glossary,
+            style=Style.load("witcher"))
         eng.acquaint("horst", "elza")  # neighbours: they know each other by name
         for text, knowers in SEEDS:
             eng.facts.add_canon(text, knowers=[(k, "told") for k in knowers])

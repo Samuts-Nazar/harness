@@ -15,9 +15,9 @@ ME = "молодий незнайомець із мечем"
 HORST = "кремезний сивий чоловік"
 ELZA = "жінка в темній хустці"
 PROFILES = [
-    CharacterProfile(PLAYER, "Рагнар", "Мандрівник.", ME),
-    CharacterProfile("horst", "Горст", "Староста.", HORST),
-    CharacterProfile("elza", "Ельза", "Вдова.", ELZA),
+    CharacterProfile(PLAYER, "Рагнар", "Мандрівник.", appearance=ME),
+    CharacterProfile("horst", "Горст", "Староста.", appearance=HORST),
+    CharacterProfile("elza", "Ельза", "Вдова.", appearance=ELZA),
 ]
 
 
@@ -165,7 +165,7 @@ def test_a_name_said_aloud_is_learned_only_if_it_attaches_to_a_person():
 
 
 def test_the_name_of_an_absent_person_is_learned_without_a_judge():
-    prof = [*PROFILES, CharacterProfile("miller", "Гостомил", "", "мірошник")]
+    prof = [*PROFILES, CharacterProfile("miller", "Гостомил", appearance="мірошник")]
     prov = FakeProvider(script={"narrator": [narr("N.")], "npc": ["Гостомил помер."],
                                 "extractor": [diff()]})
     eng = Engine(prov, prof, Scene("Inn", (PLAYER, "horst"), 0), narration="json",
