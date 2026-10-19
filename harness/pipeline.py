@@ -180,6 +180,7 @@ class Engine:
         narration: str = DEFAULT_NARRATION,
         glossary: Glossary | None = None,
         max_speakers: int = MAX_SPEAKERS,
+        hear_each_other: bool = True,
     ) -> None:
         """`parallel`: run the independent calls of a turn concurrently. None (default): only if
         the provider says it is thread-safe (`parallel_ok`); fake providers are not, so tests
@@ -189,7 +190,10 @@ class Engine:
         `narration`: "prose" (narrator returns free text; speakers and observable actions come
         from the scene director, harness/director.py) or "json" (the task 3 contract).
         `glossary`: canonical names, applied to records, to model output and to every context.
-        `max_speakers`: the director names at most this many NPCs per turn."""
+        `max_speakers`: the director names at most this many NPCs per turn.
+        `hear_each_other`: an NPC speaking after another in the same turn gets the earlier line in
+        its context (False: all NPC lines are generated at once, as in task 9; kept to measure the
+        latency cost)."""
         if narration not in ("prose", "json"):
             raise ValueError(f"narration must be 'prose' or 'json', not {narration!r}")
         self.conn = conn or connect()
@@ -207,6 +211,7 @@ class Engine:
         self.npc_reject_p = npc_reject_p
         self.output_language, self.record_language = output_language, record_language
         self.narration, self.glossary, self.max_speakers = narration, glossary, max_speakers
+        self.hear_each_other = hear_each_other
         self._fixes: list[dict[str, str]] = []  # glossary replacements of the running turn
         self._fixes_lock = threading.Lock()
         self._tl = threading.local()
@@ -824,7 +829,7 @@ class Engine:
             earlier: list[tuple[str, Future[_Captured]]] = []
             for npc in order:
                 prep = self._prep_npc(npc)
-                fut = self._submit(self._npc_chain, prep, list(earlier))
+                fut = self._submit(self._npc_chain, prep, list(earlier) if self.hear_each_other else [])
                 launch.chains[npc] = (prep, fut)
                 earlier.append((npc, fut))
         return launch

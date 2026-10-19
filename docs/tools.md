@@ -187,3 +187,7 @@ Chosen by the task 7 bake-off on our own Ukrainian test set (`reports/bakeoff/SU
 5. ~~Decide web framework and transport.~~ Done in task 11: Starlette + uvicorn, SSE plus POST, plain JS (see the roles above).
 6. **Watch httpx** (last release 2024-12-06, no 1.0). No action now; if async serving is adopted, evaluate aiohttp or the official OpenRouter SDK instead of adding custom async code.
 7. **Set WAL and foreign keys when the engine moves to a file database; consider ruff.** Minor.
+
+
+### Scene director and glossary (task 12, 2026-10-19)
+- Role: first-line speaker decider for the scene director. Chosen: `liquid/d1-ultra` (the existing first judge, one batched `/systemone` call, mean 0.22 s over 27 calls); fallback `perplexity/pplx-decider-v1.2` via the judge fallback. Alternatives not re-run (no new bake-off). Observable-action lister: the extractor model `deepseek/deepseek-v4.1-flash-1017` (mean 1.1 s, plain lines). No new library or tool.

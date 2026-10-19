@@ -236,6 +236,15 @@ def test_parallel_mode_second_npc_hears_the_first_and_delivery_order_holds():
     assert [u.payload["speaker"] for u in res.utterances] == ["innkeeper", "bard"]
 
 
+def test_hearing_can_be_switched_off_to_measure_its_cost():
+    prov = Slow()
+    eng = Engine(prov, PROFILES, Scene("Inn", (PLAYER, "innkeeper", "bard"), time=0),
+                 models=ModelConfig(), record_language=None, hear_each_other=False,
+                 judge=director_judge("innkeeper", also=("Dandelion",)))
+    eng.turn("Hello.")
+    assert "Innkeeper: Welcome." not in prov.npc_ctx["Dandelion"]
+
+
 def test_the_check_of_the_second_npc_knows_what_the_first_said():
     seen = []
 
