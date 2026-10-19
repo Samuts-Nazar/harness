@@ -350,6 +350,20 @@ class Engine:
             return {k: self._fix_tree(v) for k, v in node.items()}
         return node
 
+    def _ids_for_names(self, data: Any) -> Any:
+        """The extractor sometimes answers with a character's display name where an id is
+        required (a "source" or "character" field); map the name back to the id."""
+        by_name = {p.name.lower(): c for c, p in self.profiles.items()}
+        if isinstance(data, dict):
+            for key in ("new_facts", "state_changes"):
+                for item in data.get(key) or []:
+                    if isinstance(item, dict):
+                        for f in ("source", "character"):
+                            v = item.get(f)
+                            if isinstance(v, str) and v not in self.profiles:
+                                item[f] = by_name.get(v.strip().lower(), v)
+        return data
+
     # -- narrator -------------------------------------------------------
     def _speech_judged(self, text: str) -> bool:
         """The judge's verdict on narrator speech (network only; safe in a worker)."""
@@ -571,7 +585,7 @@ class Engine:
         for _ in range(self.extract_retries + 1):
             raw = self._complete("extractor", messages)
             try:
-                return validate_diff(self._fix_tree(parse_diff(raw)), present=sc.present, sources=sources,
+                return validate_diff(self._ids_for_names(self._fix_tree(parse_diff(raw))), present=sc.present, sources=sources,
                                      state=self.live.snapshot(), characters=everyone)
             except DiffValidationError as e:
                 last = e

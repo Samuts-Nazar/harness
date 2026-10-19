@@ -83,6 +83,14 @@ def test_context_is_rendered_through_the_glossary_and_lists_names():
     assert "stay in Ukrainian" in ext[1]["content"]
 
 
+def test_extractor_that_answers_with_a_display_name_instead_of_an_id_is_understood():
+    eng, _ = _eng({"narrator": ["N."], "npc": ["Так."], "extractor": [
+        "none", json.dumps({"new_facts": [{"content": "Horst agreed", "source": "Горст",
+                                            "notability": 0.5}], "state_changes": []})]})
+    res = eng.turn("hi")
+    assert len(res.fact_ids) == 1
+
+
 def test_default_record_language_is_english():
     eng, prov = _eng({"narrator": ["N."], "extractor": ["none", diff()], "npc": ["x"]})
     eng.turn("hi")

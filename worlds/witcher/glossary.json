@@ -2,7 +2,7 @@
  "world": "witcher",
  "note": "Canonical Ukrainian forms as in the Ukrainian translation of the books (checked by form counts in the local text, task 12). latin: Latin-script forms, replaced by the canonical form. wrong: wrong Cyrillic spellings (stems; a declension ending after them is kept). stem: declension stem when it differs from the canonical form. Names the books do not contain (Горст, Ельза, Брідки, Вернон Роше, Гостомил) are the forms used in our demo and test sets.",
  "entries": [
-  {"canonical": "Рагнар", "kind": "person", "latin": ["Ragnar"], "wrong": ["Рангар", "Рагнер", "Рагнарр"]},
+  {"canonical": "Рагнар", "kind": "person", "latin": ["Ragnar"], "wrong": ["Рангар", "Рагнер", "Рагнарр", "Раґнар"]},
   {"canonical": "Горст", "kind": "person", "latin": ["Horst"], "wrong": ["Хорст"]},
   {"canonical": "Ельза", "kind": "person", "stem": "Ельз", "latin": ["Elza", "Elsa"], "wrong": ["Ельс"]},
   {"canonical": "Ґеральт", "kind": "person", "latin": ["Geralt"], "wrong": ["Геральт"]},
