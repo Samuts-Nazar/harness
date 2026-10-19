@@ -109,22 +109,38 @@ class ContextBuilder:
         r = self.ref(viewer, cid, before)
         return r[:1].upper() + r[1:]
 
-    def mask(self, viewer: str | None, text: str) -> str:
+    def mask(self, viewer: str | None, text: str,
+             known: frozenset[str] | None = None) -> str:
         """A record's text with the names `viewer` does not know replaced by their appearance."""
-        return self.names.mask(viewer, text) if self.names else text
+        return self.names.mask(viewer, text, known=known) if self.names else text
 
     def describe(self, cid: str) -> str:
         """For code-side judges and listers: the real name, with the appearance if hidden."""
         return self.names.describe(cid) if self.names else self.name(cid)
 
-    def finish(self, messages: Messages, viewer: str | None = None) -> Messages:
+    def finish(self, messages: Messages, viewer: str | None = None,
+               known: frozenset[str] | None = None) -> Messages:
         """Last step of every render: one form of each name, and the names the prompt mentions
-        appended to the system message. Only names `viewer` knows are offered (None: all)."""
+        appended to the system message. Only names `viewer` knows are offered (None: all). `known`:
+        a snapshot of the ids whose names the viewer knows (a worker thread must not read the
+        database; default: read it now)."""
         g = self.glossary
-        if g is None:
+        if g is None and viewer is None:
             return messages
-        msgs = [{**m, "content": g.apply(m["content"])} for m in messages]
-        ids = self.names.known_ids(viewer) if self.names else list(self.profiles)
+        msgs = messages
+        if g is not None:  # note: the glossary also rewrites ids such as "horst" to "Горст"
+            msgs = [{**m, "content": g.apply(m["content"])} for m in msgs]
+        if viewer is not None:  # safety net: a name the viewer does not know never gets through
+            msgs = [{**m, "content": self.mask(viewer, m["content"], known=known)} for m in msgs]
+        if g is None:
+            return msgs
+        if self.names is None:
+            ids = list(self.profiles)
+        elif viewer is None:
+            ids = list(self.profiles)
+        else:
+            k = self.names.known_set(viewer) if known is None else known
+            ids = [c for c in self.profiles if c == viewer or c in k or not self.names.hidden(c)]
         line = g.prompt_line("\n".join(m["content"] for m in msgs),
                              [self.name(c) for c in ids if c in self.profiles])
         if line:
@@ -209,6 +225,7 @@ class ContextBuilder:
         mem = mem or self.deriver.derive(character, scene.time)
         seen = self.log.recent_dialogue(witnessed_by=character, limit=self.history_limit)
 
+        known_names = self.names.known_set(character) if self.names else frozenset()
         parts = [self._scene_header(scene, character)]
         if mem.knows:
             parts.append("What you know:\n" + "\n".join(self.knowledge_lines(mem)))
@@ -244,7 +261,8 @@ class ContextBuilder:
         return NpcView(
             system=f"You are {prof.name}. {prof.description}".strip(), sections=parts,
             seen=[self._seen(e, character) for e in seen], instruction=instruction, known=known,
-            name=prof.name, finish=lambda m, c=character: self.finish(m, c), character=character)
+            name=prof.name, character=character,
+            finish=lambda m, c=character, k=known_names: self.finish(m, c, k))
 
     def heard_line(self, viewer: str, speaker: str, text: str) -> str:
         return f"{self.ref(viewer, speaker)}: {text}"

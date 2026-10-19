@@ -475,6 +475,8 @@ class Engine:
 
     def _valid_speakers(self, out: NarratorOutput) -> NarratorOutput:
         by_name = {p.name.lower(): c for c, p in self.profiles.items()}
+        by_name.update({p.appearance.lower(): c for c, p in self.profiles.items()
+                        if p.appearance})  # a stranger is listed by what is seen
         ok: list[str] = []
         for s in out.speakers:  # models answer with the display name, or "id (Name)"
             s = re.sub(r"\s*\(.*\)\s*$", "", s).strip()
