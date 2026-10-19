@@ -22,7 +22,12 @@ class ContextBuilder:
         live: LiveState,
         deriver: MemoryDeriver,
         history_limit: int = 10,
+        language: str | None = None,
+        record_language: str | None = None,
     ) -> None:
+        """`language`: what the player reads (narration, NPC speech). `record_language`: what
+        the extractor writes facts in. None: no instruction (the model's own choice)."""
+        self.language, self.record_language = language, record_language
         self.log, self.facts, self.intents = log, facts, intents
         self.profiles, self.live, self.deriver = profiles, live, deriver
         self.history_limit = history_limit
@@ -85,6 +90,7 @@ class ContextBuilder:
         parts.append(
             f"Say what {prof.name} says next, aloud and in character. Write only {prof.name}'s "
             "own words as one continuous speech: no stage directions, no other characters' lines."
+            + (f" Speak in {self.language}." if self.language else "")
         )
         system = f"You are {prof.name}. {prof.description}".strip()
         return [
@@ -133,6 +139,8 @@ class ContextBuilder:
             f' "speakers": [<ids (the word before the parentheses) of characters who speak next, '
             f"only from: {npcs}>]}}\n"
             "Never write speech for anyone but the player: NPC lines are produced separately."
+            + (f"\nWrite the description and the observable actions in {self.language}; "
+               "keep the JSON keys and the speaker ids as they are." if self.language else "")
         )
         system = "You are the narrator of a role-playing game. Write vivid prose."
         return [
@@ -164,7 +172,9 @@ class ContextBuilder:
             f"Characters: {who}. Do not say who knows or saw a fact; that is decided elsewhere. "
             '"remove" only works on an item the character currently has; "reveal"/"hide" change '
             "whether an existing item is observable. Do not emit any other keys.\n"
-            "Current state:\n" + ("\n".join(cur) if cur else "- (none)")
+            + (f"Write every fact's content and every item in {self.record_language}. "
+               if self.record_language else "")
+            + "Current state:\n" + ("\n".join(cur) if cur else "- (none)")
         )
         return [
             {"role": "system", "content": "You are a precise fact extractor."},

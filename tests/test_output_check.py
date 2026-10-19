@@ -36,18 +36,55 @@ def test_line_with_unlearnable_claim_is_regenerated():
     assert all("Ciri" not in e.payload["text"] for e in eng.log.active(["utterance"]))
 
 
-def test_fallback_after_two_failed_retries_is_logged():
+def test_all_retries_rejected_shows_the_least_suspicious_candidate_and_logs_it():
     script = {"narrator": ["N."], "extractor": [diff()],
               "npc": ["Ciri is here.", "Ciri is there.", "Ciri is everywhere."]}
-    eng, prov = make_engine(script, judge=leaks("Ciri"))
+    suspicion = iter([0.95, 0.75, 0.9])
+
+    def rule(q, st):
+        return True
+
+    class Graded(FakeJudge):
+        def ask(self, state, questions):
+            out = super().ask(state, questions)
+            from harness.judge import Judgment
+            if next(iter(questions.values())).tag != "unknown_claim":
+                return out
+            p = next(suspicion)
+            return {n: Judgment(True, {"yes": p, "no": 1 - p}, p, backend="fake") for n in out}
+
+    eng, prov = make_engine(script, judge=Graded({"unknown_claim": rule}))
     res = eng.turn("where is she?", speakers=["innkeeper"])
-    assert res.utterances[0].payload["text"] == FALLBACK_LINE
+    assert res.utterances[0].payload["text"] == "Ciri is there."  # p = 0.75, the lowest
+    assert FALLBACK_LINE not in res.utterances[0].payload["text"]
     assert len(_npc_calls(prov)) == 3
-    [fb] = [n for n in eng.devlog if n["kind"] == "npc_fallback"]
-    assert fb["npc"] == "innkeeper" and len(fb["rejected"]) == 3
-    # the check is in the judgment log (question, answer, probability, escalated)
+    [fb] = [n for n in eng.devlog if n["kind"] == "npc_lowest_suspicion"]
+    assert fb["npc"] == "innkeeper" and len(fb["rejected"]) == 3 and fb["suspicion"] == 0.75
     checks = [j for j in eng.judgments.entries if j["tag"] == "unknown_claim"]
     assert len(checks) == 3 and all(j["answer"] is True for j in checks)
+
+
+def test_a_line_below_the_threshold_is_not_rejected():
+    class P(FakeJudge):
+        def __init__(self, p):
+            super().__init__()
+            self.p = p
+
+        def ask(self, state, questions):
+            from harness.judge import Judgment
+            if next(iter(questions.values())).tag != "unknown_claim":
+                return super().ask(state, questions)
+            return {n: Judgment(True, {"yes": self.p, "no": 1 - self.p}, self.p, backend="fake")
+                    for n in questions}
+
+    eng, prov = make_engine({"narrator": ["N."], "npc": ["Maybe."], "extractor": [diff()]},
+                            judge=P(0.69))  # a "yes" answer, but p < 0.7: accepted
+    eng.turn("x", speakers=["innkeeper"])
+    assert len(_npc_calls(prov)) == 1 and not eng.devlog
+    eng2, prov2 = make_engine({"narrator": ["N."], "npc": ["Maybe.", "Again."], "extractor": [diff()]},
+                              judge=P(0.7), npc_reject_p=0.9)  # configurable
+    eng2.turn("x", speakers=["innkeeper"])
+    assert len(_npc_calls(prov2)) == 1
 
 
 def test_check_judges_against_the_npcs_visible_knowledge_only():

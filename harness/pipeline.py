@@ -3,8 +3,11 @@ validation -> perception computed in code -> commit. Also live and retroactive i
 scene entry, live-state perception, and regeneration of the per-character memory files."""
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
+import threading
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Sequence
@@ -40,12 +43,20 @@ from .narrator import (
     strip_speech,
 )
 from .perception import ACTION, DESCRIPTION, SPEECH, perceivers
-from .providers import Provider
+from .policy import (
+    DEFAULT_EXTRACTOR, DEFAULT_JUDGE_LLM, DEFAULT_NARRATOR, DEFAULT_NPC, FALLBACKS,
+)
+from .providers import Provider, ProviderError
+from .settings import DEFAULT_OUTPUT_LANGUAGE, DEFAULT_RECORD_LANGUAGE, NPC_REJECT_P
 from .state import LiveState, StateChange, check_change, payload as change_payload
 from .streaming import InterruptHandle, StreamResult, run_stream
 
 ATTITUDE_MIN_NOTABILITY = 0.6  # only notable facts get attitude judgments (cost control)
-FALLBACK_LINE = "I don't know what to tell you."
+FALLBACK_LINE = "I don't know what to tell you."  # no longer shown: the least suspicious candidate is
+UNKNOWN_CLAIM_Q = (
+    "Does the line assert a fact about the world or other people that this "
+    "character had no channel to learn from what they know? Ignore greetings, "
+    "questions, opinions and general common sense.")
 
 _OBSERVED = {  # how an observer sees a newly observable element
     "injury": "{who} is visibly injured: {item}",
@@ -70,6 +81,54 @@ class ModelConfig:
     npc: str = "npc"
     extractor: str = "extractor"
     judge: str = "judge"  # LLM used for judge escalation (read by whoever builds the judge)
+    # Used when a call to the primary model fails after retries (None: no fallback).
+    narrator_fallback: str | None = None
+    npc_fallback: str | None = None
+    extractor_fallback: str | None = None
+    judge_fallback: str | None = None
+
+    @classmethod
+    def live(cls) -> "ModelConfig":
+        """The models chosen by the task 7 bake-off, each with a fallback from another vendor."""
+        return cls(DEFAULT_NARRATOR, DEFAULT_NPC, DEFAULT_EXTRACTOR, DEFAULT_JUDGE_LLM,
+                   FALLBACKS["narrator"], FALLBACKS["npc"], FALLBACKS["extractor"],
+                   FALLBACKS["judge_llm"])
+
+
+@dataclass
+class _Captured:
+    """What a worker thread produced; merged into the engine's logs by the main thread."""
+    value: Any = None
+    error: Exception | None = None
+    notes: list[dict[str, Any]] = field(default_factory=list)
+    judgments: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
+class _NpcPrep:
+    """Everything an NPC chain needs, read from the database on the main thread."""
+    npc: str
+    mem: CharacterMemory
+    messages: list[dict[str, str]]
+    check_prefix: str  # judge state up to "Line: "
+
+
+@dataclass
+class _Launch:
+    out: NarratorOutput
+    events: list[Event]  # narration + action events, in order
+    sources: dict[str, Event]
+    segments: list[tuple[str, str]]
+    speakers: list[str]
+    speech: Future[_Captured] | None = None
+    chains: dict[str, tuple[_NpcPrep, Future[_Captured]]] = field(default_factory=dict)
+
+
+@dataclass
+class _Job:
+    """A judge question set whose network call can run in a worker; applied on the main thread."""
+    ask: Callable[[], Any]
+    meta: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -99,8 +158,18 @@ class Engine:
         narrate_retries: int = 2,
         check_retries: int = 2,
         pace: float = 0.0,
+        parallel: bool | None = None,
+        npc_reject_p: float = NPC_REJECT_P,
+        output_language: str | None = DEFAULT_OUTPUT_LANGUAGE,
+        record_language: str | None = DEFAULT_RECORD_LANGUAGE,
     ) -> None:
+        """`parallel`: run the independent calls of a turn concurrently. None (default): only if
+        the provider says it is thread-safe (`parallel_ok`); fake providers are not, so tests
+        stay deterministic. `npc_reject_p`: an NPC line is rejected at suspicion >= this.
+        `output_language`: language of narration and NPC speech (player-facing).
+        `record_language`: language the extractor writes records in (None: the model's choice)."""
         self.conn = conn or connect()
+        self._owns_conn = conn is None
         self.provider, self.models, self.scene = provider, models, scene
         self.campaign_dir = Path(campaign_dir) if campaign_dir else None
         self.judgments = JudgmentLog(self.campaign_dir / "judgments.jsonl" if self.campaign_dir
@@ -110,6 +179,11 @@ class Engine:
         self.minutes_per_turn, self.extract_retries, self.pace = (
             minutes_per_turn, extract_retries, pace)
         self.narrate_retries, self.check_retries = narrate_retries, check_retries
+        self.parallel = bool(getattr(provider, "parallel_ok", False)) if parallel is None else parallel
+        self.npc_reject_p = npc_reject_p
+        self.output_language, self.record_language = output_language, record_language
+        self._tl = threading.local()
+        self._pool: ThreadPoolExecutor | None = None
         self.devlog: list[dict[str, Any]] = []  # engine-side events for the debug view
         self.profiles = {p.id: p for p in profiles}
         self.log = EventLog(self.conn)
@@ -122,13 +196,71 @@ class Engine:
         self.deriver = MemoryDeriver(self.facts, self.intents, self.live, self.attitudes,
                                      self.notices, belief)
         self.ctx = ContextBuilder(self.log, self.facts, self.intents, self.profiles, self.live,
-                                  self.deriver)
+                                  self.deriver, language=output_language,
+                                  record_language=record_language)
         self.memory = (MemoryWriter(self.campaign_dir / "memory", self.deriver, self.log,
                                     self.profiles, self.agents) if self.campaign_dir else None)
+        self._save_scene()
 
     # -- helpers --------------------------------------------------------
     def _note(self, kind: str, **info: Any) -> None:
-        self.devlog.append({"kind": kind, **info})
+        buf = getattr(self._tl, "notes", None)  # a worker collects its notes; the main thread merges
+        (self.devlog if buf is None else buf).append({"kind": kind, **info})
+
+    # -- model calls, workers -------------------------------------------
+    def _complete(self, role: str, messages: list[dict[str, str]]) -> str:
+        """One model call for `role`; if it fails after retries, the role's fallback model."""
+        model = getattr(self.models, role)
+        fallback = getattr(self.models, role + "_fallback", None)
+        try:
+            return self.provider.complete(model, messages)
+        except ProviderError as e:
+            if not fallback:
+                raise
+            self._note("model_fallback", role=role, model=model, fallback=fallback, error=str(e))
+            return self.provider.complete(fallback, messages)
+
+    def _run_captured(self, fn: Callable[..., Any], *args: Any) -> _Captured:
+        """Run in a worker: notes and judgments go to private buffers, not to the shared logs."""
+        cap = _Captured()
+        with self.judgments.capture() as jb:
+            self._tl.notes = cap.notes
+            try:
+                cap.value = fn(*args)
+            except Exception as e:  # noqa: BLE001 - re-raised on the main thread by _take
+                cap.error = e
+            finally:
+                self._tl.notes = None
+        cap.judgments = jb
+        return cap
+
+    def _submit(self, fn: Callable[..., Any], *args: Any) -> Future[_Captured]:
+        if self._pool is None:
+            self._pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="harness")
+        return self._pool.submit(self._run_captured, fn, *args)
+
+    def _take(self, fut: Future[_Captured]) -> Any:
+        """Wait for a worker; merge its notes and judgments (call in a fixed order)."""
+        cap = fut.result()
+        self.devlog.extend(cap.notes)
+        self.judgments.extend(cap.judgments)
+        if cap.error is not None:
+            raise cap.error
+        return cap.value
+
+    def _map(self, fns: Sequence[Callable[[], Any]]) -> list[Any]:
+        """Run network-only functions (concurrently when allowed); results in input order."""
+        if not self.parallel or len(fns) < 2:
+            return [fn() for fn in fns]
+        futs = [self._submit(fn) for fn in fns]
+        return [self._take(f) for f in futs]
+
+    def close(self) -> None:
+        if self._pool is not None:
+            self._pool.shutdown(wait=True, cancel_futures=True)
+            self._pool = None
+        if self._owns_conn:
+            self.conn.close()
 
     def _event(self, type: str, participants: Sequence[str], payload: dict, *,  # type: ignore[type-arg]
                witnesses: Sequence[str] | None = None, **kw) -> Event:
@@ -154,6 +286,7 @@ class Engine:
         """Rewrite the per-character memory files from the log."""
         if self.memory is not None:
             self.memory.regenerate(self.scene.time)
+        self._save_scene()
 
     def rollback(self, event_id: int, reason: str = "rollback") -> list[int]:
         done = self.log.rollback(event_id, reason)
@@ -166,10 +299,8 @@ class Engine:
             c for c in self.profiles if c != PLAYER]
 
     # -- narrator -------------------------------------------------------
-    def _narrator_speech(self, out: NarratorOutput) -> bool:
-        text = "\n".join(out.texts())
-        if has_speaker_line(text, self._npc_names):
-            return True
+    def _speech_judged(self, text: str) -> bool:
+        """The judge's verdict on narrator speech (network only; safe in a worker)."""
         # every output is judged: speech also hides in paraphrase ("he tells of the old mill, how...")
         try:
             return bool(self.judge.yes_no(
@@ -182,21 +313,36 @@ class Engine:
             self._note("narrator_speech_check_failed", error=str(e))
             return has_quotes(text)  # no verdict: quotes are treated as speech
 
-    def _narrate(self, player_text: str) -> NarratorOutput:
+    def _narrator_speech(self, out: NarratorOutput) -> bool:
+        text = "\n".join(out.texts())
+        if has_speaker_line(text, self._npc_names):
+            return True
+        return self._speech_judged(text)
+
+    def _narrate(self, player_text: str,
+                 on_candidate: Callable[[NarratorOutput], bool] | None = None) -> NarratorOutput:
         """Structured narrator output. NPC speech is rejected and regenerated (at most
-        `narrate_retries` times); after that the speech is stripped and logged."""
+        `narrate_retries` times); after that the speech is stripped and logged.
+        `on_candidate(out)` replaces the judge check: it gets a candidate that passed the code
+        heuristics and returns True to accept it (the parallel turn starts the NPC chains there,
+        concurrently with the check)."""
         sc = self.scene
         raw, parsed = "", None
         for attempt in range(self.narrate_retries + 1):
-            raw = self.provider.complete(
-                self.models.narrator, self.ctx.narrator(sc, player_text)).strip()
+            raw = self._complete("narrator", self.ctx.narrator(sc, player_text)).strip()
             try:
                 out = parse_narration(raw)
             except NarrationError as e:
                 self._note("narrator_malformed", attempt=attempt, error=str(e))
                 continue
             parsed = out
-            if not self._narrator_speech(out):
+            if has_speaker_line("\n".join(out.texts()), self._npc_names):
+                ok = False
+            elif on_candidate is not None:
+                ok = on_candidate(self._valid_speakers(out))
+            else:
+                ok = not self._speech_judged("\n".join(out.texts()))
+            if ok:
                 return self._valid_speakers(out)
             self._note("narrator_speech_rejected", attempt=attempt, text=out.description)
         names = self._npc_names
@@ -227,38 +373,45 @@ class Engine:
         return out
 
     # -- NPC lines ------------------------------------------------------
-    def _unknown_claim(self, npc: str, mem: CharacterMemory, line: str) -> bool:
-        """Does the line contain a claim the NPC had no channel to learn?"""
+    def _prep_npc(self, npc: str) -> _NpcPrep:
+        """Read an NPC's context and the judge's state from the database (main thread only)."""
+        mem = self.deriver.derive(npc, self.scene.time)
         witnessed = [self.ctx._seen(e) for e in
                      self.log.recent_dialogue(witnessed_by=npc, limit=self.ctx.history_limit)]
         known = (self.ctx.knowledge_lines(mem) + witnessed
                  + [f"- (own condition) {e.category}: {e.item}" for e in mem.state]
                  + [f"- (just noticed) {f.content}" for _, f in mem.noticed])
-        try:
-            return bool(self.judge.yes_no(
-                "Does the line assert a fact about the world or other people that this "
-                "character had no channel to learn from what they know? Ignore greetings, "
-                "questions, opinions and general common sense.",
-                f"Character: {self.ctx.name(npc)}\nWhat the character knows:\n"
-                + ("\n".join(known) or "- (nothing)") + f"\nLine: {line}",
-                tag="unknown_claim").answer)
-        except JudgeError as e:
-            self._note("npc_check_unavailable", npc=npc, error=str(e))
-            return False
+        prefix = (f"Character: {self.ctx.name(npc)}\nWhat the character knows:\n"
+                  + ("\n".join(known) or "- (nothing)") + "\nLine: ")
+        return _NpcPrep(npc, mem, self.ctx.character(npc, self.scene, mem), prefix)
 
-    def _npc_line(self, npc: str, mem: CharacterMemory) -> str:
-        """Generate and output-check one NPC line (regenerate up to `check_retries` times; then
-        fall back to a minimal in-character non-answer)."""
-        rejected: list[str] = []
+    def _suspicion(self, prep: _NpcPrep, line: str) -> float | None:
+        """Probability that the line contains a claim the NPC had no channel to learn (network
+        only); None when no judge could answer."""
+        try:
+            j = self.judge.yes_no(UNKNOWN_CLAIM_Q, prep.check_prefix + line, tag="unknown_claim")
+        except JudgeError as e:
+            self._note("npc_check_unavailable", npc=prep.npc, error=str(e))
+            return None
+        p = j.probabilities.get("yes")
+        return float(p) if p is not None else (j.probability if j.answer else 1 - j.probability)
+
+    def _npc_line(self, prep: _NpcPrep) -> str:
+        """Generate and output-check one NPC line. A line is rejected at suspicion >=
+        `npc_reject_p`; up to `check_retries` regenerations. If every try is rejected, the least
+        suspicious candidate is used (and logged) rather than a canned line."""
+        tried: list[tuple[float, str]] = []
         for _ in range(self.check_retries + 1):
-            text = clean_npc_line(self.provider.complete(
-                self.models.npc, self.ctx.character(npc, self.scene, mem)))
-            if not self._unknown_claim(npc, mem, text):
+            text = clean_npc_line(self._complete("npc", prep.messages))
+            p = self._suspicion(prep, text)
+            if p is None or p < self.npc_reject_p:
                 return text
-            rejected.append(text)
-            self._note("npc_line_rejected", npc=npc, text=text)
-        self._note("npc_fallback", npc=npc, rejected=rejected)
-        return FALLBACK_LINE
+            tried.append((p, text))
+            self._note("npc_line_rejected", npc=prep.npc, text=text, suspicion=round(p, 3))
+        best_p, best = min(tried, key=lambda c: c[0])  # ties: the earliest
+        self._note("npc_lowest_suspicion", npc=prep.npc, text=best, suspicion=round(best_p, 3),
+                   rejected=[t for _, t in tried])
+        return best
 
     # -- extraction -----------------------------------------------------
     def _extract(self, segments: list[tuple[str, str]]) -> Diff:
@@ -268,7 +421,7 @@ class Engine:
         everyone = set(self.profiles) | set(sc.present) | set(sc.outside)
         last: Exception | None = None
         for _ in range(self.extract_retries + 1):
-            raw = self.provider.complete(self.models.extractor, messages)
+            raw = self._complete("extractor", messages)
             try:
                 return validate_diff(parse_diff(raw), present=sc.present, sources=sources,
                                      state=self.live.snapshot(), characters=everyone)
@@ -301,13 +454,20 @@ class Engine:
                     knowers=[(p.character, p.how, p.source) for p in ps],
                 )
             )
+        pending: list[_Job] = []  # salience questions: asked together, applied in order
         for ch in diff.changes:
-            self._apply_change(ch, source_events[ch.source])
-        self._assess_attitudes(ids)
+            self._apply_change(ch, source_events[ch.source], defer=pending)
+        att = self._attitude_jobs(ids)
+        answers = self._map([j.ask for j in pending + att])  # one concurrent wave of judge calls
+        for job, got in zip(pending, answers):
+            self._salience_apply(job, got)
+        for job, got in zip(att, answers[len(pending):]):
+            self._attitude_apply(job, got)
         return ids
 
     # -- live state and its perception ---------------------------------
-    def _apply_change(self, ch: StateChange, cause: Event) -> Event:
+    def _apply_change(self, ch: StateChange, cause: Event, *,
+                      defer: list[_Job] | None = None) -> Event:
         was = self.live.snapshot().get(ch.character, {}).get((ch.category, ch.item))
         ev = self.log.append(
             STATE_CHANGE,
@@ -323,14 +483,17 @@ class Engine:
         observers = ([c for c in self.scene.present if c != ch.character]
                      if ch.character in self.scene.present else [])
         if ch.op == "add" and ch.observable or ch.op == "reveal":
-            self._observe(_OBSERVED[ch.category].format(who=who, item=ch.item), observers, ev)
+            self._observe(_OBSERVED[ch.category].format(who=who, item=ch.item), observers, ev,
+                          defer=defer)
         elif ch.op == "remove" and was:
-            self._observe(f"{who} no longer has {ch.item}", observers, ev)
+            self._observe(f"{who} no longer has {ch.item}", observers, ev, defer=defer)
         return ev
 
-    def _observe(self, text: str, observers: Sequence[str], cause: Event) -> int | None:
+    def _observe(self, text: str, observers: Sequence[str], cause: Event, *,
+                 defer: list[_Job] | None = None) -> int | None:
         """Every observer perceives `text` (directly); a salience judgment per observer decides
-        whether it is surfaced as noteworthy in that NPC's next context."""
+        whether it is surfaced as noteworthy in that NPC's next context. With `defer`, the
+        judgment is not asked yet: the job is appended for the caller to run with others."""
         if not observers:
             return None
         fid = self.facts.add_campaign(
@@ -349,15 +512,29 @@ class Engine:
                 qs[o] = yes_no_q(
                     f"Would {self.ctx.name(o)}{' (' + p.description + ')' if p and p.description else ''}"
                     " notice this and find it worth reacting to?", tag="salience")
-            try:
-                verdicts = {o: bool(j.answer) for o, j in self.judge.ask(
-                    [f"Observation: {text}", f"Place: {self.scene.location}"], qs).items()}
-            except JudgeError as e:
-                self._note("salience_unavailable", error=str(e))
-                verdicts = {o: False for o in npcs}
-            for o in npcs:
-                self.notices.add(o, fid, verdicts.get(o, False), self.scene, cause.id)
+            state = [f"Observation: {text}", f"Place: {self.scene.location}"]
+            job = _Job(lambda: self._ask_safe(state, qs), {"fid": fid, "npcs": npcs, "cause": cause})
+            if defer is not None:
+                defer.append(job)
+            else:
+                self._salience_apply(job, job.ask())
         return fid
+
+    def _ask_safe(self, state: list[str], qs: dict[str, Any]) -> Any:
+        try:
+            return self.judge.ask(state, qs)
+        except JudgeError as e:
+            return e
+
+    def _salience_apply(self, job: _Job, got: Any) -> None:
+        m = job.meta
+        if isinstance(got, JudgeError):
+            self._note("salience_unavailable", error=str(got))
+            verdicts = {o: False for o in m["npcs"]}
+        else:
+            verdicts = {o: bool(j.answer) for o, j in got.items()}
+        for o in m["npcs"]:
+            self.notices.add(o, m["fid"], verdicts.get(o, False), self.scene, m["cause"].id)
 
     def apply_state_change(self, ch: StateChange) -> Event:
         """Code-side state change (setup, scripted events). Validated like an extractor one;
@@ -401,7 +578,8 @@ class Engine:
         self.refresh_memory()
 
     # -- attitudes ------------------------------------------------------
-    def _assess_attitudes(self, fact_ids: Sequence[int]) -> None:
+    def _attitude_jobs(self, fact_ids: Sequence[int]) -> list[_Job]:
+        jobs = []
         for fid in fact_ids:
             f = self.facts.get(fid)
             if f is None or f.notability < ATTITUDE_MIN_NOTABILITY:
@@ -420,19 +598,62 @@ class Engine:
                     f"How strongly does {n} feel about this?", legend=(
                         "not at all", "slightly", "noticeably", "strongly"),
                     tag="relationship_magnitude")
-            try:
-                got = self.judge.ask([f"Event: {f.content}"], qs)
-            except JudgeError as e:
-                self._note("attitude_unavailable", fact=fid, error=str(e))
-                continue
-            for c in npcs:
-                stance = str(got[f"{c}:dir"].answer)
-                mag = float(got[f"{c}:mag"].answer)
-                if stance != "neutral" and mag > 0:
-                    self.attitudes.set(c, fid, stance, round(mag, 2), self.scene,
-                                       f.source_event_id)  # type: ignore[arg-type]
+            state = [f"Event: {f.content}"]
+            jobs.append(_Job(lambda st=state, q=qs: self._ask_safe(st, q),
+                             {"fact": f, "npcs": npcs}))
+        return jobs
+
+    def _attitude_apply(self, job: _Job, got: Any) -> None:
+        f = job.meta["fact"]
+        if isinstance(got, JudgeError):
+            self._note("attitude_unavailable", fact=f.id, error=str(got))
+            return
+        for c in job.meta["npcs"]:
+            stance = str(got[f"{c}:dir"].answer)
+            mag = float(got[f"{c}:mag"].answer)
+            if stance != "neutral" and mag > 0:
+                self.attitudes.set(c, f.id, stance, round(mag, 2), self.scene,
+                                   f.source_event_id)  # type: ignore[arg-type]
+
+    def _assess_attitudes(self, fact_ids: Sequence[int]) -> None:
+        jobs = self._attitude_jobs(fact_ids)
+        for job, got in zip(jobs, self._map([j.ask for j in jobs])):
+            self._attitude_apply(job, got)
 
     # -- the turn -------------------------------------------------------
+    def _launch(self, out: NarratorOutput, speakers: Sequence[str] | None,
+                turn_events: list[Event], *, check: bool) -> _Launch:
+        """Write the narration and action events, and (parallel mode) start the speech check and
+        one chain per speaking NPC. Event writes stay on this thread, in a fixed order."""
+        narr_ev = self._event(NARRATION, [], {"text": out.description}, witnesses=[],
+                              notability=0.4)
+        evs = [narr_ev]
+        sources = {"narration": narr_ev}
+        segments = [("narration", out.description)]
+        for i, act in enumerate(out.actions, 1):
+            ev = self._event(ACTION_EVENT, [], {"text": act}, notability=0.4)
+            evs.append(ev)
+            sources[f"action{i}"] = ev
+            segments.append((f"action{i}", act))
+        turn_events.extend(evs)
+        order = list(speakers) if speakers is not None else list(out.speakers)
+        launch = _Launch(out, evs, sources, segments, order)
+        if self.parallel:
+            if check:
+                launch.speech = self._submit(self._speech_judged, "\n".join(out.texts()))
+            for npc in order:
+                prep = self._prep_npc(npc)
+                launch.chains[npc] = (prep, self._submit(self._npc_line, prep))
+        return launch
+
+    def _discard(self, launch: _Launch) -> None:
+        """The narration was rejected after the chains had started: forget it all."""
+        for ev in launch.events:
+            self.log.rollback(ev.id, "narration rejected")
+        for _, fut in launch.chains.values():
+            fut.cancel()
+        self._note("speculative_chains_discarded", npcs=list(launch.chains))
+
     def turn(
         self,
         player_text: str,
@@ -443,33 +664,52 @@ class Engine:
     ) -> TurnResult:
         """Run one turn. The narrator proposes who speaks next; `speakers` overrides that.
         `on_word(speaker, word)` receives the delivered words; a handle fired from inside it
-        interrupts live."""
+        interrupts live.
+
+        Parallel mode (see `parallel`): once the narrator has answered, its speech check and each
+        speaking NPC's chain (line, then the line's check) run concurrently. NPC lines are still
+        delivered in narrator order, each as soon as it is ready. A speech verdict that rejects the
+        narration throws the started chains away and the narrator is called again. Event writes
+        never leave this thread, so the log does not depend on timing."""
         sc = self.scene
         for s in speakers or ():
             if s not in sc.present or s == PLAYER:
                 raise ValueError(f"{s!r} cannot speak: not an NPC in the scene")
         turn_events: list[Event] = []
+        launch: _Launch | None = None
         try:
             player_ev = self._utterance(PLAYER, player_text)
             turn_events.append(player_ev)
 
-            out = self._narrate(player_text)
-            narr_ev = self._event(NARRATION, [], {"text": out.description}, witnesses=[],
-                                  notability=0.4)
-            turn_events.append(narr_ev)
-            sources = {PLAYER: player_ev, "narration": narr_ev}
-            segments = [(PLAYER, player_text), ("narration", out.description)]
-            for i, act in enumerate(out.actions, 1):
-                ev = self._event(ACTION_EVENT, [], {"text": act}, notability=0.4)
-                turn_events.append(ev)
-                sources[f"action{i}"] = ev
-                segments.append((f"action{i}", act))
+            if self.parallel:
+                def on_candidate(out: NarratorOutput) -> bool:
+                    nonlocal launch
+                    cand = self._launch(out, speakers, turn_events, check=True)
+                    assert cand.speech is not None
+                    if self._take(cand.speech):
+                        self._discard(cand)
+                        return False
+                    launch = cand
+                    return True
 
+                out = self._narrate(player_text, on_candidate)
+                if launch is None:  # speech stripped after the retries: nothing left to check
+                    launch = self._launch(out, speakers, turn_events, check=False)
+            else:
+                out = self._narrate(player_text)
+                launch = self._launch(out, speakers, turn_events, check=False)
+
+            sources = {PLAYER: player_ev, **launch.sources}
+            segments = [(PLAYER, player_text), *launch.segments]
             result = TurnResult(out.description, actions=list(out.actions))
-            for npc in (list(speakers) if speakers is not None else out.speakers):
-                mem = self.deriver.derive(npc, sc.time)
-                text = self._npc_line(npc, mem)
-                for notice, _ in mem.noticed:  # surfaced now, so not again next turn
+            for npc in launch.speakers:
+                if npc in launch.chains:
+                    prep, fut = launch.chains[npc]
+                    text = self._take(fut)
+                else:  # sequential: this NPC sees what earlier speakers of the turn said
+                    prep = self._prep_npc(npc)
+                    text = self._npc_line(prep)
+                for notice, _ in prep.mem.noticed:  # surfaced now, so not again next turn
                     turn_events.append(self.notices.mark_shown(notice, sc))
                 cb = (lambda w, n=npc: on_word(n, w)) if on_word else None
                 sr = run_stream(iter([text]), handle, cb, self.pace)
@@ -485,10 +725,20 @@ class Engine:
 
             result.fact_ids = self._commit(self._extract(segments), sources)
         except Exception:
+            if launch is not None:
+                for _, fut in launch.chains.values():
+                    fut.cancel()
             for e in turn_events:
                 self.log.rollback(e.id, "turn failed")
             self.refresh_memory()
             raise
+        if launch is not None and self.parallel:
+            unused = [n for n in launch.chains if n not in {u.payload["speaker"]
+                                                              for u in result.utterances}]
+            for n in unused:
+                launch.chains[n][1].cancel()
+            if unused:
+                self._note("chains_unused_after_interruption", npcs=unused)
         for u in result.utterances:
             self.agents.promote(u.payload["speaker"], sc)
         sc.time += self.minutes_per_turn
@@ -556,3 +806,77 @@ class Engine:
         for a in self.agents.agents():
             if a not in self.scene.present:
                 self.updater.update(a, start, self.scene.time)
+        self._save_scene()
+
+    # -- saved campaigns ------------------------------------------------
+    def _save_scene(self) -> None:
+        """Keep the scene (not derivable from the log) in the database, so a campaign can be
+        reopened where it stopped. Cheap; called whenever the scene changes."""
+        sc = self.scene
+        meta = {"scene": {"location": sc.location, "present": list(sc.present),
+                          "outside": list(sc.outside), "time": sc.time}}
+        with self.conn:
+            for k, v in meta.items():
+                self.conn.execute("INSERT OR REPLACE INTO campaign_meta (key, value) VALUES (?,?)",
+                                  (k, json.dumps(v)))
+
+    def _save_setup(self) -> None:
+        with self.conn:
+            for k, v in {
+                "profiles": [[p.id, p.name, p.description] for p in self.profiles.values()],
+                "settings": {"output_language": self.output_language,
+                             "record_language": self.record_language,
+                             "minutes_per_turn": self.minutes_per_turn},
+            }.items():
+                self.conn.execute("INSERT OR REPLACE INTO campaign_meta (key, value) VALUES (?,?)",
+                                  (k, json.dumps(v)))
+
+    @staticmethod
+    def campaign_path(name: str, root: Path | str = "campaigns") -> Path:
+        if not name or name != Path(name).name or name in (".", ".."):
+            raise ValueError(f"bad campaign name {name!r}")
+        return Path(root) / name
+
+    @classmethod
+    def create_campaign(cls, name: str, provider: Provider, profiles: Sequence[CharacterProfile],
+                        scene: Scene, *, root: Path | str = "campaigns", **kw: Any) -> "Engine":
+        """A new file-backed campaign under `<root>/<name>/` (git-ignored): `campaign.db`
+        (SQLite, WAL), `memory/`, `judgments.jsonl`. Fails if the campaign exists."""
+        d = cls.campaign_path(name, root)
+        if (d / "campaign.db").exists():
+            raise FileExistsError(f"campaign {name!r} already exists in {root}")
+        d.mkdir(parents=True, exist_ok=True)
+        eng = cls(provider, profiles, scene, conn=connect(str(d / "campaign.db"),
+                  check_same_thread=False), campaign_dir=d, **kw)
+        eng._owns_conn = True
+        eng._save_setup()
+        return eng
+
+    @classmethod
+    def open_campaign(cls, name: str, provider: Provider, *, root: Path | str = "campaigns",
+                      **kw: Any) -> "Engine":
+        """Reopen a saved campaign: events, facts, state and agents come from the log; the scene,
+        profiles and language settings from the stored setup. `kw` (models, judge, ...) are
+        passed to `Engine`; a setting passed here overrides the stored one."""
+        d = cls.campaign_path(name, root)
+        if not (d / "campaign.db").exists():
+            raise FileNotFoundError(f"no campaign {name!r} in {root}")
+        conn = connect(str(d / "campaign.db"), check_same_thread=False)
+        meta = {r["key"]: json.loads(r["value"])
+                for r in conn.execute("SELECT key, value FROM campaign_meta")}
+        if "scene" not in meta or "profiles" not in meta:
+            conn.close()
+            raise ValueError(f"campaign {name!r} has no saved setup")
+        sc = meta["scene"]
+        scene = Scene(sc["location"], tuple(sc["present"]), sc["time"], tuple(sc["outside"]))
+        profiles = [CharacterProfile(*p) for p in meta["profiles"]]
+        for k, v in meta.get("settings", {}).items():
+            kw.setdefault(k, v)
+        eng = cls(provider, kw.pop("profiles", profiles), scene, conn=conn, campaign_dir=d, **kw)
+        eng._owns_conn = True
+        eng.refresh_memory()
+        return eng
+
+    @staticmethod
+    def campaign_exists(name: str, root: Path | str = "campaigns") -> bool:
+        return (Engine.campaign_path(name, root) / "campaign.db").exists()

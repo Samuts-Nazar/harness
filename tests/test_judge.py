@@ -47,8 +47,8 @@ def test_jev_request_format_and_batching():
     })
     assert len(seen) == 1, "questions about the same state go out as one call"
     url, body, auth = seen[0]
-    assert url == "https://openrouter.ai/api/alpha/decisions" and auth == "Bearer sk-test"
-    assert body["model"] == "typesafe/jev-1.14" and body["state"] == ["Scene: x"]
+    assert url == "https://openrouter.ai/api/v1/systemone" and auth == "Bearer sk-test"
+    assert body["model"] == "liquid/d1-ultra" and body["state"] == ["Scene: x"]
     qs = body["questions"]
     assert qs["a"] == {"type": "noul", "instructions": "Is it?"}
     # choice.criteria is an object {option: description}, not an array
@@ -70,7 +70,8 @@ def test_jev_errors_become_judge_errors():
     for handler in (lambda r: httpx.Response(500, json={}),
                     lambda r: httpx.Response(200, json={"answers": {}}),
                     lambda r: httpx.Response(200, json={"answers": {"q": {"nope": 1}}})):
-        j = JevJudge("k", client=httpx.Client(transport=httpx.MockTransport(handler)))
+        j = JevJudge("k", client=httpx.Client(transport=httpx.MockTransport(handler)),
+                     sleep=lambda s: None)
         with pytest.raises(JudgeError):
             j.yes_no("q?")
 

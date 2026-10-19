@@ -42,6 +42,11 @@ CREATE TABLE IF NOT EXISTS fact_knowers (
 CREATE INDEX IF NOT EXISTS idx_knowers_char ON fact_knowers(character);
 CREATE INDEX IF NOT EXISTS idx_events_cause ON events(cause_id);
 
+CREATE TABLE IF NOT EXISTS campaign_meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
 CREATE TRIGGER IF NOT EXISTS events_no_update BEFORE UPDATE ON events
 BEGIN SELECT RAISE(ABORT, 'events are append-only'); END;
 CREATE TRIGGER IF NOT EXISTS events_no_delete BEFORE DELETE ON events
@@ -53,9 +58,16 @@ BEGIN SELECT RAISE(ABORT, 'facts are immutable'); END;
 """
 
 
-def connect(path: str = ":memory:") -> sqlite3.Connection:
-    conn = sqlite3.connect(path)
+def connect(path: str = ":memory:", *, check_same_thread: bool = True) -> sqlite3.Connection:
+    """In memory by default (tests). A file gets WAL and a relaxed fsync (safe with WAL: a
+    power cut can lose the last transaction, never corrupt the file). Foreign keys are always on.
+    `check_same_thread=False` lets a server use the connection from several threads; the caller
+    must then serialise access (one turn at a time)."""
+    conn = sqlite3.connect(path, check_same_thread=check_same_thread)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    if path != ":memory:":
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA synchronous = NORMAL")
     conn.executescript(SCHEMA)
     return conn
