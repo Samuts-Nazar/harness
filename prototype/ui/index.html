@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Harness: екран гравця</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+  <header class="top">
+    <div class="title">
+      <b id="sceneTitle">Корчма</b>
+      <small id="clock">день 14 · 19:40</small>
+    </div>
+    <button class="btn ghost" id="btnDebug" aria-pressed="false" title="Режим налагодження">Debug</button>
+    <button class="btn ghost" id="btnChar" aria-label="Панель персонажа">Рагнар</button>
+  </header>
+
+  <nav class="strip" aria-label="Контент">
+    <button class="btn strip-btn" id="btnPause"><span class="ic">⏸</span> Пауза</button>
+    <button class="btn strip-btn" id="btnVeil" aria-pressed="false"><span class="ic">◐</span> Завіса</button>
+    <button class="btn strip-btn" id="btnSkip"><span class="ic">⏭</span> Пропуск</button>
+  </nav>
+
+  <section id="debugPanel" hidden aria-label="Журнал фонових суджень (debug)">
+    <div class="dbg-head">
+      <b>Фонові судження</b>
+      <span class="dbg-pace">Темп:
+        <button class="chip-sm" data-pace="1.6">повільно</button>
+        <button class="chip-sm on" data-pace="1">звичайно</button>
+        <button class="chip-sm" data-pace="0.25">швидко</button>
+      </span>
+    </div>
+    <div id="logList" role="log"></div>
+  </section>
+
+  <main id="story">
+    <div id="feed"></div>
+    <div class="edge-hint" aria-hidden="true">‹</div>
+  </main>
+
+  <div id="veilTag" hidden>◐ Наступна сцена відбудеться за кадром</div>
+
+  <footer id="dock">
+    <!-- NPC говорить -->
+    <div id="dockSpeak" hidden>
+      <div class="speak-head"><span id="speakWho">Горст говорить…</span><span class="dots"><i></i><i></i><i></i></span></div>
+      <button class="btn big danger" id="btnInterrupt">✋ Перебити</button>
+      <div class="reacts" id="reacts" role="group" aria-label="Швидкі реакції"></div>
+    </div>
+
+    <!-- триває опис -->
+    <div id="dockNarr" hidden>
+      <span class="dots"><i></i><i></i><i></i></span> <span>Розповідь триває…</span>
+    </div>
+
+    <!-- режим ретроактивного переривання -->
+    <div id="dockCut" hidden>
+      <p>Торкніться слова в останній репліці: усе після нього не було сказано.</p>
+      <button class="btn" id="btnCutCancel">Скасувати</button>
+    </div>
+
+    <!-- хід гравця -->
+    <div id="dockIdle" hidden>
+      <div id="draftNote" class="draft-note" hidden></div>
+      <div class="composer">
+        <div class="field">
+          <div class="field-top"><label for="fAct">Дія</label><button class="lock" id="lockAct" aria-pressed="false" hidden>✓ Добре</button></div>
+          <textarea id="fAct" rows="1" placeholder="Що робить Рагнар…" enterkeyhint="next"></textarea>
+        </div>
+        <div class="field">
+          <div class="field-top"><label for="fSay">Слова</label><button class="lock" id="lockSay" aria-pressed="false" hidden>✓ Добре</button></div>
+          <textarea id="fSay" rows="1" placeholder="Що каже Рагнар…"></textarea>
+        </div>
+      </div>
+
+      <div id="draftTools" class="draft-tools" hidden>
+        <button class="btn sm" id="btnDislike">✕ Не те</button>
+        <button class="btn sm" id="btnHand">✎ Руками</button>
+        <button class="btn sm" id="btnOwn">+ Свій</button>
+        <button class="btn sm" id="btnModify">⟲ Змінити</button>
+      </div>
+      <div id="fbBox" class="fb-box" hidden>
+        <label id="fbLabel" for="fbText">Що не так?</label>
+        <div class="fb-row">
+          <input id="fbText" type="text" autocomplete="off" placeholder="Напишіть кілька слів">
+          <button class="btn primary sm" id="fbSend">Надіслати</button>
+        </div>
+      </div>
+
+      <div class="send-row">
+        <button class="btn assist" id="btnAssist">✦ Підказка ходу</button>
+        <button class="btn primary" id="btnSend" disabled>Надіслати ➤</button>
+      </div>
+    </div>
+  </footer>
+
+  <!-- панель персонажа -->
+  <aside id="charPanel" class="sheet side" aria-hidden="true" aria-label="Персонаж">
+    <header>
+      <div><b>Рагнар</b><small>Як ти відчуваєш себе зараз</small></div>
+      <button class="btn ghost close" id="charClose" aria-label="Закрити">✕</button>
+    </header>
+    <div class="legend"><i class="dot on"></i> видно іншим <i class="dot"></i> знаєш лише ти</div>
+    <div id="charBody"></div>
+  </aside>
+
+  <!-- помічник ходу -->
+  <div id="assistSheet" class="sheet bottom" aria-hidden="true" role="dialog" aria-label="Підказка ходу">
+    <header>
+      <div><b>Підказка ходу</b><small>Помічник бачить лише те, що знає Рагнар</small></div>
+      <button class="btn ghost close" id="assistClose" aria-label="Закрити">✕</button>
+    </header>
+    <div id="assistBody"></div>
+  </div>
+
+  <!-- помилка моделі -->
+  <div id="errSheet" class="sheet bottom" aria-hidden="true" role="dialog" aria-label="Помилка моделі">
+    <header>
+      <div><b>Помилка моделі</b><small>Перегенерується лише останній вивід світу. Ваш хід лишається.</small></div>
+      <button class="btn ghost close" id="errClose" aria-label="Закрити">✕</button>
+    </header>
+    <label for="errText" class="lbl">Що було не так? (обов’язково)</label>
+    <textarea id="errText" rows="3" placeholder="Наприклад: Горст не міг знати про греблю…"></textarea>
+    <button class="btn primary wide" id="errSend" disabled>Перегенерувати</button>
+  </div>
+
+  <div id="scrim" hidden></div>
+  <div id="pauseOv" hidden>
+    <div><div class="pause-ic">⏸</div><p>Пауза. Світ чекає.</p><button class="btn primary" id="btnResume">Продовжити</button></div>
+  </div>
+
+  <div id="menu" class="menu" hidden role="menu"></div>
+  <div id="confirm" class="menu" hidden></div>
+</div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
