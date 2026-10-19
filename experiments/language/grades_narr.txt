@@ -1,0 +1,109 @@
+# item label uk flags: pc=decides player character's actions/feelings or scene/canon error, sp=NPC speech in prose, en=English/Latin intrusion or mangled name, ru=Russianism/calque
+n01 A 4
+n01 B 4
+n01 C 4
+n01 D 4
+n01 E 4
+n01 F 3
+n01 G 4
+n01 H 4
+n01 I 4
+n01 J 4
+n01 K 4
+n01 L 4
+n02 A 3 en
+n02 B 3 en
+n02 C 5
+n02 D 3 en
+n02 E 5
+n02 F 1 en
+n02 G 3 en pc
+n02 H 4 pc
+n02 I 3 en
+n02 J 5 pc
+n02 K 5
+n02 L 5
+n03 A 4 pc
+n03 B 4
+n03 C 4
+n03 D 3 en
+n03 E 5
+n03 F 3 en
+n03 G 4
+n03 H 5
+n03 I 2 en
+n03 J 4
+n03 K 5
+n03 L 4
+n04 A 5
+n04 B 4
+n04 C 5
+n04 D 4
+n04 E 4
+n04 F 5
+n04 G 4 pc
+n04 H 5
+n04 I 4
+n04 J 3
+n04 K 5
+n04 L 4
+n05 A 5
+n05 B 5
+n05 C 4
+n05 D 4
+n05 E 3 en
+n05 F 5
+n05 G 5
+n05 H 4
+n05 I 4
+n05 J 3 en
+n05 K 5
+n05 L 5
+n06 A 5
+n06 B 5
+n06 C 4
+n06 D 5
+n06 E 5
+n06 F 3 en
+n06 G 5
+n06 H 4
+n06 I 4
+n06 J 3 en
+n06 K 5
+n06 L 5
+n07 A 5
+n07 B 4
+n07 C 5
+n07 D 4
+n07 E 5
+n07 F 4
+n07 G 4 pc
+n07 H 4
+n07 I 4
+n07 J 4
+n07 K 4
+n07 L 4
+n08 A 5
+n08 B 4 pc
+n08 C 5
+n08 D 3 pc
+n08 E 5
+n08 F 4
+n08 G 4
+n08 H 5
+n08 I 5
+n08 J 5
+n08 K 4 pc
+n08 L 5
+n09 A 4 ru
+n09 B 5
+n09 C 4 ru
+n09 D 5
+n09 E 5
+n09 F 4 ru
+n09 G 2 en
+n09 H 5
+n09 I 4 pc
+n09 J 5
+n09 K 5
+n09 L 4

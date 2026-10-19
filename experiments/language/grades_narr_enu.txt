@@ -1,0 +1,55 @@
+# third variant (English context, Ukrainian proper nouns); same columns as grades_narr.txt; inv = invalid JSON
+n01 A 4
+n01 B 4 ru
+n01 C 5
+n01 D 4
+n01 E 5
+n01 F 4
+n02 A 3 pc
+n02 B 3 pc
+n02 C 4
+n02 D 5
+n02 E 5
+n02 F 5
+n03 A 4 ru
+n03 B 4 ru
+n03 C 4 ru
+n03 D 4 ru
+n03 E 4 ru
+n03 F 4 ru pc
+n04 A 5
+n04 B 5
+n04 C 4
+n04 D 4 inv
+n04 E 4
+n04 F 4
+n05 A 2 en
+n05 B 4
+n05 C 5
+n05 D 4
+n05 E 4
+n05 F 4
+n06 A 5
+n06 B 4
+n06 C 3
+n06 D 5
+n06 E 3 ru
+n06 F 5
+n07 A 4
+n07 B 4
+n07 C 5
+n07 D 4
+n07 E 5
+n07 F 4
+n08 A 5
+n08 B 5
+n08 C 5
+n08 D 5
+n08 E 4
+n08 F 4
+n09 A 4 ru pc
+n09 B 5
+n09 C 4 pc
+n09 D 5
+n09 E 5 pc
+n09 F 5
