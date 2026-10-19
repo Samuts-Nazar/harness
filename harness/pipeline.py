@@ -340,6 +340,16 @@ class Engine:
                                    for f in found)
         return new
 
+    def _fix_tree(self, node: Any) -> Any:
+        """The glossary over every string value of a parsed JSON diff (not the keys)."""
+        if isinstance(node, str):
+            return self._fix_names(node, "record")
+        if isinstance(node, list):
+            return [self._fix_tree(x) for x in node]
+        if isinstance(node, dict):
+            return {k: self._fix_tree(v) for k, v in node.items()}
+        return node
+
     # -- narrator -------------------------------------------------------
     def _speech_judged(self, text: str) -> bool:
         """The judge's verdict on narrator speech (network only; safe in a worker)."""
@@ -559,9 +569,9 @@ class Engine:
         everyone = set(self.profiles) | set(sc.present) | set(sc.outside)
         last: Exception | None = None
         for _ in range(self.extract_retries + 1):
-            raw = self._fix_names(self._complete("extractor", messages), "record")
+            raw = self._complete("extractor", messages)
             try:
-                return validate_diff(parse_diff(raw), present=sc.present, sources=sources,
+                return validate_diff(self._fix_tree(parse_diff(raw)), present=sc.present, sources=sources,
                                      state=self.live.snapshot(), characters=everyone)
             except DiffValidationError as e:
                 last = e
