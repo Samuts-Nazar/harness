@@ -5,7 +5,7 @@ import json
 import sqlite3
 from typing import Any, Iterable
 
-from .models import Event, NARRATION, PLAYER, UTTERANCE
+from .models import ACTION, Event, NARRATION, PLAYER, UTTERANCE
 
 
 def _row_to_event(r: sqlite3.Row) -> Event:
@@ -123,7 +123,7 @@ class EventLog:
     def recent_dialogue(
         self, *, witnessed_by: str | None = None, limit: int = 10, include_narration: bool = False
     ) -> list[Event]:
-        types = [UTTERANCE] + ([NARRATION] if include_narration else [])
+        types = [UTTERANCE, ACTION] + ([NARRATION] if include_narration else [])
         evs = self.active(types)
         if witnessed_by is not None:
             evs = [e for e in evs if witnessed_by in e.witnesses]

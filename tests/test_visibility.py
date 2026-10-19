@@ -51,20 +51,21 @@ def test_no_leak_across_characters_in_prompts():
     secret = "The innkeeper hides a dagger under the counter"
     script = {
         "narrator": ["Night falls.", "The bard hums."],
-        "npc": ["Welcome.", "Hello again."],
+        "npc": ["I hide a dagger under the counter.", "Hello again."],
         "extractor": [
-            diff(fact(secret, "narration", [("innkeeper", "witnessed")])),
+            diff(fact(secret, "innkeeper")),
             diff(),
         ],
     }
-    eng, prov = make_engine(script)
+    # the bard is not in the room when the innkeeper says it
+    eng, prov = make_engine(script, present=(PLAYER, "innkeeper"))
     eng.turn("I enter", speakers=["innkeeper"])
+    eng.enter_scene("bard")
     eng.turn("I greet the bard", speakers=["bard"])
     bard_prompts = [
         m["content"] for model, msgs in prov.calls if model == "npc" for m in msgs
-    ]
-    # the innkeeper's prompt in turn 2 would include the secret; the bard's must not
-    assert all("dagger" not in p for p in bard_prompts)
+    ][2:]  # the bard's call comes after the innkeeper's
+    assert bard_prompts and all("dagger" not in p for p in bard_prompts)
     assert "dagger" in " ".join(m["content"] for m in eng.ctx.character("innkeeper", eng.scene))
     assert "dagger" not in " ".join(m["content"] for m in eng.ctx.character("bard", eng.scene))
     # unknown facts are never annotated as unknown
@@ -76,13 +77,15 @@ def test_narrator_sees_everything():
     script = {
         "narrator": ["Night falls.", "Next."],
         "npc": ["Welcome."],
-        "extractor": [diff(fact("Hidden dagger", "narration", [("innkeeper", "witnessed")])), diff()],
+        "extractor": [diff(fact("Hidden dagger", "narration")), diff()],
     }
     eng, prov = make_engine(script)
     eng.turn("I enter", speakers=["innkeeper"])
     eng.turn("I wait")
     narr = [m["content"] for model, msgs in prov.calls if model == "narrator" for m in msgs][-1]
     assert "Hidden dagger" in narr
+    # scene description is narrator-only knowledge: no character perceived it
+    assert eng.facts.visible_to("innkeeper", eng.scene.time) == []
 
 
 def test_npc_does_not_see_narration_or_other_secrets_in_history():

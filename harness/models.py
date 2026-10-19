@@ -13,6 +13,19 @@ INTERRUPTION = "interruption"
 INTENT_SET = "intent_set"
 INTENT_RESOLVED = "intent_resolved"
 AGENT_PROMOTED = "agent_promoted"
+ACTION = "action"  # an observable action from narration
+SCENE_ENTRY = "scene_entry"
+STATE_CHANGE = "state_change"
+SCRIPTED = "scripted"  # code-side marker event (setup, scripted changes)
+NOTICED = "noticed"  # salience verdict of one observer on one observation
+NOTICE_SHOWN = "notice_shown"  # a noteworthy observation was surfaced in the NPC's context
+ATTITUDE = "attitude"
+
+# Live-state categories and operations
+INJURY, CLOTHING, INVENTORY, EQUIPMENT, INTERNAL = (
+    "injury", "clothing", "inventory", "equipment", "internal")
+STATE_CATEGORIES = (INJURY, CLOTHING, INVENTORY, EQUIPMENT, INTERNAL)
+OPS = ("add", "remove", "reveal", "hide")
 
 # How a character came to know a fact
 WITNESSED = "witnessed"
@@ -42,6 +55,8 @@ class Knower:
     character: str
     how: str
     learned_at: int
+    source: str | None = None  # None: perceived directly; else the character who said/told it
+    event_id: int | None = None  # the event this knowledge came from
 
 
 @dataclass(frozen=True)
@@ -66,8 +81,9 @@ class CharacterProfile:
 @dataclass
 class Scene:
     location: str
-    present: tuple[str, ...]  # character ids, including PLAYER
+    present: tuple[str, ...]  # in the room: see and hear everything (includes PLAYER)
     time: int = 0
+    outside: tuple[str, ...] = ()  # nearby but not in the room: hear loud things only
 
 
 def format_time(t: int) -> str:

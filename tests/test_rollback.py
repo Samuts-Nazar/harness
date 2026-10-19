@@ -1,27 +1,28 @@
 from harness.models import INTENT_SET, PLAYER, UTTERANCE
-from conftest import diff, fact, make_engine
+from conftest import diff, fact, make_engine, narr
 
 
 def test_rollback_hides_event_and_derived_facts_and_cascades():
     script = {
-        "narrator": ["N."],
+        "narrator": [narr("N.", actions=["Geralt enters"])],
         "npc": ["I saw a stranger near the well yesterday."],
         "extractor": [
             diff(
-                fact("A stranger was near the well", "innkeeper", [("innkeeper", "witnessed"), ("bard", "heard")]),
-                fact("Geralt entered", "player", [("innkeeper", "witnessed")]),
+                fact("A stranger was near the well", "innkeeper"),
+                fact("Geralt entered", "action1"),
             )
         ],
     }
     eng, _ = make_engine(script)
     res = eng.turn("I enter", speakers=["innkeeper"])
     utt = res.utterances[0]
-    assert len(eng.facts.visible_to("bard", eng.scene.time)) == 1
+    assert len(eng.facts.visible_to("bard", eng.scene.time)) == 2  # told + saw the action
     rolled = eng.log.rollback(utt.id)
     assert utt.id in rolled
-    assert eng.facts.visible_to("bard", eng.scene.time) == []
+    assert [f.content for f in eng.facts.visible_to("bard", eng.scene.time)] == ["Geralt entered"]
     # facts from other segments survive
     assert [f.content for f in eng.facts.visible_to("innkeeper", eng.scene.time)] == ["Geralt entered"]
+    assert eng.rollback(utt.id) == []  # engine wrapper is idempotent too
     assert utt.id not in [e.id for e in eng.log.active([UTTERANCE])]
     # events still physically in the log (append-only)
     assert eng.log.get(utt.id).id == utt.id
