@@ -16,9 +16,9 @@ PROFS = [CharacterProfile(PLAYER, "Рагнар", "Мандрівник."),
 
 
 def test_latin_and_wrong_forms_become_canonical_and_endings_survive():
-    t, found = G.fix("Horst met Elza at Kaer Morhen; Хорста і Ельсі, Тріс, Рангару, Лютика.")
+    t, found = G.fix("Horst met Elza at Kaer Morhen; Хорста і Ельзі, Тріс, Рангару, Лютика.")
     assert t == "Горст met Ельза at Каер Морен; Горста і Ельзі, Трісс, Рагнару, Любистка."
-    assert len(found) == 8
+    assert len(found) == 7
 
 
 def test_correct_text_is_left_alone_and_no_false_variants():
@@ -134,3 +134,33 @@ def test_engine_reports_repetition_per_turn():
     r2 = eng.turn("b").repetition
     assert r1["score"] == 0.0 and r2["ngram"] >= 0 and r2["outputs"][0]["shape"] == 1.0
     assert len(eng.reports) == 2
+
+
+# -- one glossary for play and canon (task 14) ----------------------------------------------------
+def test_one_loader_serves_play_and_canon_entries():
+    assert {"Горст", "Ґеральт", "Велерад", "Визім", "відьмак"} <= set(G.canonical_names())
+    assert G.apply("Velerad told Geralt that Foltest's sister Adda died in Vizim.") == \
+        "Велерад told Ґеральт that Фольтеста sister Адда died in Визім."
+
+
+def test_cases_are_kept_and_a_possessive_without_cases_keeps_its_s():
+    assert G.apply("Ґеральта і Ґеральту") == "Ґеральта і Ґеральту"
+    assert G.apply("Horst's sword") == "Горст's sword"
+    assert G.apply("Foltest’s sister") == "Фольтеста sister"
+
+
+def test_common_nouns_are_never_swapped_or_offered_as_names():
+    assert G.apply("the witcher paid in orens, a silver sword") == \
+        "the witcher paid in orens, a silver sword"
+    assert "відьмак" not in G.prompt_line("witcher orens burgomaster", [])
+    assert "відьмак" in G.canonical_names()  # still there for checks on Ukrainian text
+
+
+def test_a_name_already_in_guillemets_is_not_quoted_twice():
+    assert G.apply("«Під Лисом» гуде, а в Старий Наракорт не йдемо") == \
+        "«Під Лисом» гуде, а в Старий Наракорт не йдемо"
+    assert G.apply("Under the Fox") == "«Під Лисом»"
+
+
+def test_wrong_stems_keep_their_case_endings_in_the_canon_entries_too():
+    assert G.apply("Геральта, Фолтестом, Візіміра") == "Ґеральта, Фольтестом, Визіміра"

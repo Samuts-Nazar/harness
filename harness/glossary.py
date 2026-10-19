@@ -11,8 +11,14 @@ their canonical Ukrainian form in both. The glossary is applied in code:
 An entry has a canonical form, optional Latin-script forms (replaced whole), and wrong Cyrillic
 spellings given as stems (a Ukrainian case ending after the stem is kept: "Хорста" becomes
 "Горста"). `stem` is the declension stem of the canonical form when it differs from it
-("Ельза" has stem "Ельз", "Любисток" has stem "Любист"). Names are never *added* to text, only
-replaced, so a correct text is left untouched.
+("Ельза" has stem "Ельз", "Любисток" has stem "Любист"). `cases` lists oblique forms seen in the
+text: they are never "corrected", and the first one (the genitive) replaces a Latin possessive
+("Foltest's" becomes "Фольтеста"; without `cases` it stays "Фольтест's"). `proper` is false for
+common nouns ("відьмак", "орен"): they are kept for checks on Ukrainian text but never swapped
+inside English text and never offered as names. Names are never *added* to text, only replaced,
+so a correct text is left untouched.
+
+One format and one loader serve both play and the canon ingestion (task 14 merged the two).
 """
 from __future__ import annotations
 
@@ -34,10 +40,13 @@ _WORD = r"\w"
 @dataclass(frozen=True)
 class Entry:
     canonical: str
-    kind: str = "person"  # person | place | title
+    kind: str = "person"  # person | place | title | collective | creature | item | term
     stem: str = ""  # declension stem of `canonical` (default: the canonical form itself)
     latin: tuple[str, ...] = ()
     wrong: tuple[str, ...] = ()
+    cases: tuple[str, ...] = ()  # correct oblique forms seen in the text; cases[0]: genitive
+    proper: bool = True  # False: a common noun (checks only, never swapped, never a "name")
+    id: str = ""
 
     @property
     def base(self) -> str:
@@ -63,7 +72,8 @@ class Glossary:
     @classmethod
     def from_dict(cls, data: dict) -> "Glossary":  # type: ignore[type-arg]
         entries = [Entry(e["canonical"], e.get("kind", "person"), e.get("stem", ""),
-                         tuple(e.get("latin", ())), tuple(e.get("wrong", ())))
+                         tuple(e.get("latin", ())), tuple(e.get("wrong", ())),
+                         tuple(e.get("cases", ())), bool(e.get("proper", True)), e.get("id", ""))
                    for e in data.get("entries", [])]
         return cls(entries, data.get("world", ""))
 
@@ -81,16 +91,19 @@ class Glossary:
 
     # -- compiled patterns ------------------------------------------------------------------
     def _compile(self) -> None:
+        live = [e for e in self.entries if e.proper]  # common nouns are never swapped
         latin: dict[str, Entry] = {}
-        for e in self.entries:
+        for e in live:
             for f in e.latin:
                 latin[f.lower()] = e
         self._latin = latin
         forms = sorted(latin, key=len, reverse=True)
-        self._latin_re = (re.compile(rf"(?<!{_WORD})(?:" + "|".join(re.escape(f) for f in forms)
-                                     + rf")(?!{_WORD})", re.IGNORECASE) if forms else None)
+        self._latin_re = (re.compile(rf"(?<!{_WORD})(" + "|".join(re.escape(f) for f in forms)
+                                     + rf")(['\u2019]s)?(?!{_WORD})", re.IGNORECASE)
+                          if forms else None)
+        self._correct = {x.lower() for e in self.entries for x in (e.canonical, *e.cases)}
         wrong: dict[str, Entry] = {}
-        for e in self.entries:
+        for e in live:
             for w in e.wrong:
                 wrong[w.lower()] = e
         self._wrong = wrong
@@ -105,15 +118,20 @@ class Glossary:
         found: list[Found] = []
 
         def latin(m: re.Match[str]) -> str:
-            e = self._latin[m.group(0).lower()]
-            found.append(Found(e.canonical, m.group(0), e.canonical))
-            return e.canonical
+            e = self._latin[m.group(1).lower()]
+            poss = m.group(2)
+            if poss and e.cases:  # "Foltest's" -> the genitive
+                new = e.cases[0]
+            else:
+                new = e.canonical + (poss or "")
+            found.append(Found(e.canonical, m.group(0), new))
+            return new
 
         def wrong(m: re.Match[str]) -> str:
             e = self._wrong[m.group(1).lower()]
             end = m.group(2)
             new = e.canonical if end == "" else e.base + end
-            if new.lower() == m.group(0).lower():
+            if new.lower() == m.group(0).lower() or m.group(0).lower() in self._correct:
                 return m.group(0)  # already a correct form (e.g. a genitive that looks like a stem)
             found.append(Found(e.canonical, m.group(0), new))
             return new
@@ -143,7 +161,7 @@ class Glossary:
         """Capitalised words that look like a distorted canonical single-word name but are not
         any correct form of it: (word, canonical). A heuristic for the name-consistency check."""
         singles = {e.base.lower(): e.canonical for e in self.entries
-                   if " " not in e.canonical and e.canonical[:1].isalpha()}
+                   if e.proper and " " not in e.canonical and e.canonical[:1].isalpha()}
         out: list[tuple[str, str]] = []
         for w in re.findall(rf"(?<!{_WORD})[А-ЯҐЄІЇ]{_WORD}+", text):
             lw = w.lower()
@@ -168,6 +186,8 @@ class Glossary:
         hay = text.lower() + "\n" + "\n".join(x.lower() for x in extra)
         out = []
         for e in self.entries:
+            if not e.proper:
+                continue
             keys = [e.base, e.canonical, *e.latin, *e.wrong]
             if any(k.lower() in hay for k in keys if k):
                 out.append(e)
