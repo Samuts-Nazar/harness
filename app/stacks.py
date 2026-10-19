@@ -6,12 +6,17 @@ import os
 
 from harness.judge import EscalatingJudge, JevJudge, LLMJudge, default_fake_judge
 from harness.pipeline import ModelConfig
-from harness.policy import (
-    DEFAULT_EXTRACTOR, DEFAULT_JEV, DEFAULT_JUDGE_LLM, DEFAULT_NARRATOR, DEFAULT_NPC, Spend,
-)
+from harness.policy import DEFAULT_JEV, Spend
 from harness.providers import Messages, OpenRouterProvider
 
 from .campaigns import Stack
+
+# Models chosen by the task 7 bake-off (docs/tools.md, Models). Defined here, not imported from
+# harness.policy, because that module is being updated by task 9; after its merge these can
+# move back to the policy defaults. The first judge (liquid/d1-ultra) needs task 9's generic
+# decision client, so Jev stays the first judge until then.
+NARRATOR_MODEL = NPC_MODEL = JUDGE_LLM_MODEL = "openai/gpt-6-luna"
+EXTRACTOR_MODEL = "deepseek/deepseek-v4.1-flash-1017"
 
 NARRATIONS = [
     (["horst"], "Дощ барабанить по ґонту, і корчма ніби стискається навколо вогнища. Горст "
@@ -89,8 +94,8 @@ def fake_stack() -> Stack:
     return Stack(FakeUk(), default_fake_judge(), ModelConfig("narrator", "npc", "extractor", "judge"))
 
 
-def live_stack(budget: float = 0.25, narrator: str = DEFAULT_NARRATOR, npc: str = DEFAULT_NPC,
-               extractor: str = DEFAULT_EXTRACTOR, judge_llm: str = DEFAULT_JUDGE_LLM,
+def live_stack(budget: float = 0.25, narrator: str = NARRATOR_MODEL, npc: str = NPC_MODEL,
+               extractor: str = EXTRACTOR_MODEL, judge_llm: str = JUDGE_LLM_MODEL,
                jev: str = DEFAULT_JEV) -> Stack:
     from dotenv import load_dotenv
 
