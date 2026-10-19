@@ -169,12 +169,24 @@ Method notes:
 
 ## Models
 
-filled from task 7
+Chosen by the task 7 bake-off on our own Ukrainian test set (`reports/bakeoff/SUMMARY.md`, catalog snapshot `experiments/bakeoff/catalog_2026-10-19.json`). Prices are USD per million tokens, input/output. Checked: 2026-10-19. Re-run the bake-off when notable new models appear.
+
+| Role | Chosen | Fallback (other vendor) | Alternatives checked | Reason |
+|---|---|---|---|---|
+| Narrator | `openai/gpt-6-luna` ($0.10/$0.50) | `deepseek/deepseek-v4.1-flash-1017` ($0.15/$0.60) | glm-5.3-flash, qwen3.8-omni-flash, gemini-3.5-flash-lite, command-a-plus | Ukrainian 4.4/5, no flags in 9 scenes |
+| NPC line | `openai/gpt-6-luna` | `deepseek/deepseek-v4.1-flash-1017` | same | Ukrainian 4.8/5, leaks 1 of 12 (others 4–7 of 12) |
+| Extractor | `deepseek/deepseek-v4.1-flash-1017` | `qwen/qwen3.8-omni-flash` | same | recall 95%, precision 100%, fewest invalid state ops |
+| Judge, first | `liquid/d1-ultra` (decision endpoint, ~$0.004 per 1000) | `perplexity/pplx-decider-v1.2` | jev-1.14, pplx-decider-flash-v1.2, Laya (local), elorian/glimpse (chat model, over the price ceiling) | 93.8%, best-calibrated decider, 10% escalate vs Jev's 41% |
+| Judge, escalation (p < 0.8) | `openai/gpt-6-luna` as LLM judge | `deepseek/deepseek-v4.1-flash-1017` | — | 95.8%, $0.02 per 1000 |
+
+- Decision endpoint: `POST https://openrouter.ai/api/v1/systemone` (old `/api/alpha/decisions` also answers); the same client serves Jev, pplx-decider and d1-ultra. Needs retry with backoff on HTTP 429.
+- Laya: zero-shot at chance (49–52%); not adopted. Fine-tune only if the game must run fully offline.
+- `:free` models not tested yet; never the only option for a role.
 
 ## Recommended changes (ordered by value)
 
 1. **Remove `"usage": {"include": True}` from `harness/providers.py` and `experiments/common/llm.py`, close gap 19, and handle mid-stream `finish_reason: "error"` chunks in `stream()`.** The parameter is deprecated and a no-op; usage is always returned, including in the final stream chunk. Risk: none.
-2. **Bake off Laya against Jev on the repo's own judgment cases (fold into task 7); add a `/v1/systemone` adapter only if it wins.** It is free, local and small (322 to 421M), but its wire format differs from the OpenRouter endpoint and its calibration is reported weaker; our 0.8 escalation rule depends on calibration.
+2. ~~Bake off Laya against Jev.~~ Done in task 7: Laya zero-shot is at chance; not adopted.
 3. **Try `json_schema` structured output and prompt caching on narrator/extractor calls, per model, measured.** Both are live on OpenRouter; support varies by provider. Could cut retries and input cost. Risk: strict mode differs across providers; gate by model.
 4. **Bump the nixpkgs lock when a fresh rev is available, in `flake.lock` and `prototype/ui/shell.nix` together.** Upstream is one patch ahead on Python (3.14.8), uv (0.13.1), SQLite (3.54.1). Low urgency. Do not move to Python 3.15 yet; re-check in about a month.
 5. **Decide web framework and transport before building the server** (open roles above) after a short spike. FastAPI/Starlette + SSE with a POST for interrupt is the least-code path, but it is a candidate, not a decision.
