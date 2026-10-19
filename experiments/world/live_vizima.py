@@ -146,6 +146,11 @@ def main() -> None:
         print(f"{name}: {len(rows)} викл., {summary[name]['seconds']:.1f} с, "
               f"${summary[name]['cost']:.4f}, {mins} хв світу")
     out["timed"] = summary
+    out["timed_rows"] = TIMED
+    print("\nкроки світу (c, $, хв світу):")
+    for name, rows in TIMED.items():
+        for sec, cost, mins in rows:
+            print(f"  {name}: {sec:.1f} с, ${cost:.5f}, {mins} хв")
     out["spend"] = stack.spend.total
     out["calls_by_role"] = {}
     for c in rec.calls:
