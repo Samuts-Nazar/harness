@@ -1,0 +1,13 @@
+{
+ "_doc": "Blind NPC grades (part 2), same scale as part 1.",
+ "npc/c08/A": {"uk": 4, "ic": 4, "leak": 0, "fmt": 0}, "npc/c08/B": {"uk": 5, "ic": 5, "leak": 0, "fmt": 0}, "npc/c08/C": {"uk": 5, "ic": 5, "leak": 0, "fmt": 0},
+ "npc/c08/D": {"uk": 4, "ic": 5, "leak": 0, "fmt": 0}, "npc/c08/E": {"uk": 1, "ic": 2, "leak": 0, "fmt": 0}, "npc/c08/F": {"uk": 4, "ic": 3, "leak": 1, "fmt": 0},
+ "npc/c09/A": {"uk": 5, "ic": 5, "leak": 0, "fmt": 0}, "npc/c09/B": {"uk": 3, "ic": 4, "leak": 0, "fmt": 0}, "npc/c09/C": {"uk": 0, "ic": 3, "leak": 0, "fmt": 1},
+ "npc/c09/D": {"uk": 5, "ic": 5, "leak": 0, "fmt": 0}, "npc/c09/E": {"uk": 5, "ic": 5, "leak": 0, "fmt": 0}, "npc/c09/F": {"uk": 4, "ic": 4, "leak": 0, "fmt": 0},
+ "npc/c10/A": {"uk": 3, "ic": 3, "leak": 0, "fmt": 0}, "npc/c10/B": {"uk": 4, "ic": 4, "leak": 1, "fmt": 0}, "npc/c10/C": {"uk": 4, "ic": 3, "leak": 0, "fmt": 0},
+ "npc/c10/D": {"uk": 0, "ic": 2, "leak": 1, "fmt": 1}, "npc/c10/E": {"uk": 5, "ic": 5, "leak": 0, "fmt": 0}, "npc/c10/F": {"uk": 4, "ic": 4, "leak": 1, "fmt": 0},
+ "npc/c11/A": {"uk": 4, "ic": 4, "leak": 0, "fmt": 0}, "npc/c11/B": {"uk": 2, "ic": 3, "leak": 0, "fmt": 0}, "npc/c11/C": {"uk": 5, "ic": 5, "leak": 0, "fmt": 0},
+ "npc/c11/D": {"uk": 5, "ic": 5, "leak": 0, "fmt": 0}, "npc/c11/E": {"uk": 4, "ic": 3, "leak": 0, "fmt": 0}, "npc/c11/F": {"uk": 3, "ic": 3, "leak": 1, "fmt": 0},
+ "npc/c12/A": {"uk": 5, "ic": 5, "leak": 0, "fmt": 0}, "npc/c12/B": {"uk": 4, "ic": 3, "leak": 1, "fmt": 0}, "npc/c12/C": {"uk": 5, "ic": 4, "leak": 1, "fmt": 0},
+ "npc/c12/D": {"uk": 3, "ic": 2, "leak": 0, "fmt": 0}, "npc/c12/E": {"uk": 5, "ic": 4, "leak": 1, "fmt": 0}, "npc/c12/F": {"uk": 4, "ic": 4, "leak": 1, "fmt": 1}
+}

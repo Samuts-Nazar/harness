@@ -1,0 +1,1091 @@
+[
+ {
+  "id": "perc01",
+  "type": "perception",
+  "lang_mode": "both",
+  "gold": false,
+  "en": {
+   "state": [
+    "The hall of Kaer Morhen is loud: a fire crackles, benches scrape, men argue.",
+    "Ragnar whispers something to Vesemir at the table by the hearth.",
+    "Lambert is at the far end of the hall, fifteen paces away, drinking."
+   ],
+   "q": "Did Lambert hear what Ragnar whispered?"
+  },
+  "uk": {
+   "state": [
+    "У залі Каер Морхен гамірно: тріщить вогонь, скриплять лави, чоловіки сперечаються.",
+    "Рагнар шепоче щось Весеміру за столом біля каміна.",
+    "Ламберт стоїть у дальньому кінці зали, за п'ятнадцять кроків, і п'є."
+   ],
+   "q": "Чи почув Ламберт, що прошепотів Рагнар?"
+  }
+ },
+ {
+  "id": "perc02",
+  "type": "perception",
+  "lang_mode": "both",
+  "gold": true,
+  "en": {
+   "state": [
+    "It is a bright afternoon in the courtyard of Kaer Morhen.",
+    "Ragnar draws his sword. Eskel stands three paces away, facing him."
+   ],
+   "q": "Did Eskel see the drawn sword?"
+  },
+  "uk": {
+   "state": [
+    "Світлий полудень на подвір'ї Каер Морхену.",
+    "Рагнар оголює меч. Ескель стоїть за три кроки, обличчям до нього."
+   ],
+   "q": "Чи побачив Ескель оголений меч?"
+  }
+ },
+ {
+  "id": "perc03",
+  "type": "perception",
+  "lang_mode": "both",
+  "gold": false,
+  "en": {
+   "state": [
+    "Triss is in the cellar under a closed trapdoor; the floor is thick stone.",
+    "Upstairs, Ragnar shouts at the top of his voice."
+   ],
+   "q": "Did Triss hear Ragnar's shout?"
+  },
+  "uk": {
+   "state": [
+    "Тріс у підвалі під зачиненим люком; підлога з товстого каменю.",
+    "Нагорі Рагнар кричить на весь голос."
+   ],
+   "q": "Чи почула Тріс крик Рагнара?"
+  }
+ },
+ {
+  "id": "perc04",
+  "type": "perception",
+  "lang_mode": "both",
+  "gold": false,
+  "en": {
+   "state": [
+    "It is a moonless night; no torch burns in the yard.",
+    "Ragnar, in dark clothes, crosses the yard. A Temerian soldier (an ordinary man) stands on the wall."
+   ],
+   "q": "Did the soldier see Ragnar cross the yard?"
+  },
+  "uk": {
+   "state": [
+    "Ніч без місяця; на подвір'ї не горить жоден смолоскип.",
+    "Рагнар у темному одязі перетинає подвір'я. На мурі стоїть темерський солдат (звичайна людина)."
+   ],
+   "q": "Чи побачив солдат, як Рагнар перетнув подвір'я?"
+  }
+ },
+ {
+  "id": "perc05",
+  "type": "perception",
+  "lang_mode": "both",
+  "gold": true,
+  "en": {
+   "state": [
+    "It is a moonless night; no torch burns in the yard.",
+    "Ragnar, in dark clothes, crosses the yard. Coën, a witcher (his mutations let him see in the dark), sits on the wall."
+   ],
+   "q": "Did Coën see Ragnar cross the yard?"
+  },
+  "uk": {
+   "state": [
+    "Ніч без місяця; на подвір'ї не горить жоден смолоскип.",
+    "Рагнар у темному одязі перетинає подвір'я. На мурі сидить Койон, відьмак (мутації дозволяють йому бачити в темряві)."
+   ],
+   "q": "Чи побачив Койон, як Рагнар перетнув подвір'я?"
+  }
+ },
+ {
+  "id": "perc06",
+  "type": "perception",
+  "lang_mode": "both",
+  "gold": false,
+  "en": {
+   "state": [
+    "Lambert is dead drunk and asleep in the corner of the hall.",
+    "Ragnar and Geralt talk at the next table in ordinary voices."
+   ],
+   "q": "Did Lambert hear their conversation?"
+  },
+  "uk": {
+   "state": [
+    "Ламберт мертвецьки п'яний і спить у кутку зали.",
+    "Рагнар і Ґеральт розмовляють за сусіднім столом звичайними голосами."
+   ],
+   "q": "Чи почув Ламберт їхню розмову?"
+  }
+ },
+ {
+  "id": "perc07",
+  "type": "perception",
+  "lang_mode": "both",
+  "gold": true,
+  "en": {
+   "state": [
+    "A quiet corner of an inn. Jaskier softly tunes a lute across the room.",
+    "Ragnar talks to the innkeeper at the counter in a normal voice; the innkeeper is polishing mugs two paces away."
+   ],
+   "q": "Did the innkeeper hear what Ragnar said?"
+  },
+  "uk": {
+   "state": [
+    "Тихий куток корчми. Любисток тихо налаштовує лютню в іншому кінці кімнати.",
+    "Рагнар розмовляє з корчмарем біля шинквасу звичайним голосом; корчмар протирає кухлі за два кроки."
+   ],
+   "q": "Чи почув корчмар, що сказав Рагнар?"
+  }
+ },
+ {
+  "id": "perc08",
+  "type": "perception",
+  "lang_mode": "both",
+  "gold": false,
+  "en": {
+   "state": [
+    "Ragnar wears a wolf medallion under his shirt and a closed cloak over it.",
+    "Triss sits across the room and looks at him."
+   ],
+   "q": "Did Triss see Ragnar's wolf medallion?"
+  },
+  "uk": {
+   "state": [
+    "Рагнар носить медальйон вовка під сорочкою, а зверху застебнутий плащ.",
+    "Тріс сидить навпроти й дивиться на нього."
+   ],
+   "q": "Чи побачила Тріс медальйон вовка Рагнара?"
+  }
+ },
+ {
+  "id": "perc09",
+  "type": "perception",
+  "lang_mode": "both",
+  "gold": true,
+  "en": {
+   "state": [
+    "Vesemir stands with his back to the room, staring at the fire.",
+    "Ragnar casts Aard in the middle of the hall; benches are thrown against the wall with a crash."
+   ],
+   "q": "Did Vesemir notice that something happened?"
+  },
+  "uk": {
+   "state": [
+    "Весемір стоїть спиною до зали й дивиться у вогонь.",
+    "Рагнар у центрі зали застосовує Аард; лави з гуркотом відлітають до стіни."
+   ],
+   "q": "Чи помітив Весемір, що щось сталося?"
+  }
+ },
+ {
+  "id": "perc10",
+  "type": "perception",
+  "lang_mode": "both",
+  "gold": false,
+  "en": {
+   "state": [
+    "A sealed letter lies on the table. Ragnar is the only one who has read it.",
+    "Jaskier sits at the same table and has not touched it."
+   ],
+   "q": "Did Jaskier learn what the letter says?"
+  },
+  "uk": {
+   "state": [
+    "На столі лежить запечатаний лист. Прочитав його лише Рагнар.",
+    "Любисток сидить за тим самим столом і не торкався листа."
+   ],
+   "q": "Чи дізнався Любисток, що написано в листі?"
+  }
+ },
+ {
+  "id": "perc11",
+  "type": "perception",
+  "lang_mode": "both",
+  "gold": true,
+  "en": {
+   "state": [
+    "The inn is quiet; Ragnar tells a story aloud.",
+    "The innkeeper's wife is in the kitchen; the door stands wide open, five paces from the table."
+   ],
+   "q": "Did the innkeeper's wife hear the story?"
+  },
+  "uk": {
+   "state": [
+    "У корчмі тихо; Рагнар голосно розповідає історію.",
+    "Дружина корчмаря на кухні; двері розчинені навстіж, за п'ять кроків від столу."
+   ],
+   "q": "Чи почула дружина корчмаря цю історію?"
+  }
+ },
+ {
+  "id": "perc12",
+  "type": "perception",
+  "lang_mode": "both",
+  "gold": true,
+  "en": {
+   "state": [
+    "The hall is quiet. Ragnar whispers to Geralt.",
+    "Eskel, a witcher with heightened hearing, sits eight paces away."
+   ],
+   "q": "Did Eskel hear the whisper?"
+  },
+  "uk": {
+   "state": [
+    "У залі тихо. Рагнар шепоче Ґеральту.",
+    "Ескель, відьмак із загостреним слухом, сидить за вісім кроків."
+   ],
+   "q": "Чи почув Ескель шепіт?"
+  }
+ },
+ {
+  "id": "sali01",
+  "type": "salience",
+  "lang_mode": "both",
+  "gold": true,
+  "en": {
+   "state": [
+    "Observer: a Temerian innkeeper, a simple man.",
+    "Ragnar walks into the inn. His eyes are yellow with cat pupils, a silver sword on his back."
+   ],
+   "q": "Would the innkeeper reasonably react to Ragnar's appearance?"
+  },
+  "uk": {
+   "state": [
+    "Спостерігач: темерський корчмар, простий чоловік.",
+    "Рагнар заходить до корчми. Очі жовті, з котячими зіницями, за спиною срібний меч."
+   ],
+   "q": "Чи природно, що корчмар відреагує на вигляд Рагнара?"
+  }
+ },
+ {
+  "id": "sali02",
+  "type": "salience",
+  "lang_mode": "both",
+  "gold": false,
+  "en": {
+   "state": [
+    "Observer: Vesemir, a veteran witcher at Kaer Morhen.",
+    "Ragnar, also a witcher, wears his wolf medallion as he does every day."
+   ],
+   "q": "Would Vesemir reasonably react to the medallion?"
+  },
+  "uk": {
+   "state": [
+    "Спостерігач: Весемір, ветеран-відьмак із Каер Морхену.",
+    "Рагнар, теж відьмак, носить медальйон вовка, як і щодня."
+   ],
+   "q": "Чи природно, що Весемір відреагує на медальйон?"
+  }
+ },
+ {
+  "id": "sali03",
+  "type": "salience",
+  "lang_mode": "both",
+  "gold": false,
+  "en": {
+   "state": [
+    "Observer: a village girl selling eggs at a stall.",
+    "Ragnar's boots are a little dusty from the road."
+   ],
+   "q": "Would the girl reasonably react to the dust on his boots?"
+  },
+  "uk": {
+   "state": [
+    "Спостерігач: сільська дівчина, що продає яйця на ятці.",
+    "Чоботи Рагнара трохи припорошені дорожнім пилом."
+   ],
+   "q": "Чи природно, що дівчина відреагує на пил на його чоботах?"
+  }
+ },
+ {
+  "id": "sali04",
+  "type": "salience",
+  "lang_mode": "both",
+  "gold": true,
+  "en": {
+   "state": [
+    "Observer: a city guard on duty.",
+    "In the middle of a crowded market, Ragnar draws a sword."
+   ],
+   "q": "Would the guard reasonably react?"
+  },
+  "uk": {
+   "state": [
+    "Спостерігач: міський вартовий на службі.",
+    "Посеред людного базару Рагнар оголює меч."
+   ],
+   "q": "Чи природно, що вартовий відреагує?"
+  }
+ },
+ {
+  "id": "sali05",
+  "type": "salience",
+  "lang_mode": "both",
+  "gold": true,
+  "en": {
+   "state": [
+    "Observer: Triss, a sorceress and healer.",
+    "Ragnar's sleeve is torn and a deep bleeding gash runs along his forearm."
+   ],
+   "q": "Would Triss reasonably react to the wound?"
+  },
+  "uk": {
+   "state": [
+    "Спостерігач: Тріс, чародійка й цілителька.",
+    "Рукав Рагнара розірваний, по передпліччі йде глибока рана, що кровить."
+   ],
+   "q": "Чи природно, що Тріс відреагує на рану?"
+  }
+ },
+ {
+  "id": "sali06",
+  "type": "salience",
+  "lang_mode": "both",
+  "gold": false,
+  "en": {
+   "state": [
+    "Observer: an innkeeper serving a full room.",
+    "Ragnar adjusts the buckle of his belt."
+   ],
+   "q": "Would the innkeeper reasonably react to the buckle?"
+  },
+  "uk": {
+   "state": [
+    "Спостерігач: корчмар, що обслуговує повну залу.",
+    "Рагнар поправляє пряжку пояса."
+   ],
+   "q": "Чи природно, що корчмар відреагує на пряжку?"
+  }
+ },
+ {
+  "id": "sali07",
+  "type": "salience",
+  "lang_mode": "both",
+  "gold": true,
+  "en": {
+   "state": [
+    "Observer: Triss, a sorceress.",
+    "Ragnar's witcher medallion starts to tremble and hum against his chest."
+   ],
+   "q": "Would Triss reasonably react to the medallion?"
+  },
+  "uk": {
+   "state": [
+    "Спостерігач: Тріс, чародійка.",
+    "Медальйон відьмака на грудях Рагнара починає тремтіти й гудіти."
+   ],
+   "q": "Чи природно, що Тріс відреагує на медальйон?"
+  }
+ },
+ {
+  "id": "sali08",
+  "type": "salience",
+  "lang_mode": "both",
+  "gold": false,
+  "en": {
+   "state": [
+    "Observer: a merchant counting coins for a deal.",
+    "A sparrow lands on the window sill."
+   ],
+   "q": "Would the merchant reasonably react to the sparrow?"
+  },
+  "uk": {
+   "state": [
+    "Спостерігач: купець, що рахує монети для угоди.",
+    "Горобець сідає на підвіконня."
+   ],
+   "q": "Чи природно, що купець відреагує на горобця?"
+  }
+ },
+ {
+  "id": "sali09",
+  "type": "salience",
+  "lang_mode": "both",
+  "gold": false,
+  "en": {
+   "state": [
+    "Observer: Lambert, a witcher.",
+    "Ragnar comes in out of the rain; his cloak is wet."
+   ],
+   "q": "Would Lambert reasonably comment on the wet cloak?"
+  },
+  "uk": {
+   "state": [
+    "Спостерігач: Ламберт, відьмак.",
+    "Рагнар заходить із дощу; його плащ мокрий."
+   ],
+   "q": "Чи природно, що Ламберт прокоментує мокрий плащ?"
+  }
+ },
+ {
+  "id": "sali10",
+  "type": "salience",
+  "lang_mode": "both",
+  "gold": true,
+  "en": {
+   "state": [
+    "Observer: Jaskier, a gossipy bard.",
+    "Ragnar carries a sack that drips dark blood onto the floor of the inn."
+   ],
+   "q": "Would Jaskier reasonably react to the sack?"
+  },
+  "uk": {
+   "state": [
+    "Спостерігач: Любисток, бард-пліткар.",
+    "Рагнар несе мішок, з якого на підлогу корчми капає темна кров."
+   ],
+   "q": "Чи природно, що Любисток відреагує на мішок?"
+  }
+ },
+ {
+  "id": "sali11",
+  "type": "salience",
+  "lang_mode": "both",
+  "gold": true,
+  "en": {
+   "state": [
+    "Observer: a curious village child.",
+    "A strange man walks by with a silver sword over his shoulder and yellow eyes."
+   ],
+   "q": "Would the child reasonably react to the man?"
+  },
+  "uk": {
+   "state": [
+    "Спостерігач: цікава сільська дитина.",
+    "Повз проходить дивний чоловік зі срібним мечем за плечем і жовтими очима."
+   ],
+   "q": "Чи природно, що дитина відреагує на цього чоловіка?"
+  }
+ },
+ {
+  "id": "sali12",
+  "type": "salience",
+  "lang_mode": "both",
+  "gold": false,
+  "en": {
+   "state": [
+    "Observer: Roche, a soldier on watch, tired and focused on the road.",
+    "Ragnar, standing nearby, yawns."
+   ],
+   "q": "Would Roche reasonably react to the yawn?"
+  },
+  "uk": {
+   "state": [
+    "Спостерігач: Роше, солдат на варті, втомлений і зосереджений на дорозі.",
+    "Рагнар, що стоїть поруч, позіхає."
+   ],
+   "q": "Чи природно, що Роше відреагує на позіхання?"
+  }
+ },
+ {
+  "id": "drif01",
+  "type": "drift",
+  "lang_mode": "both",
+  "gold": false,
+  "en": {
+   "state": [
+    "Canon: Geralt of Rivia is a witcher of the Wolf School.",
+    "Campaign events: (none)",
+    "Narrated: Geralt, a witcher of the Griffin School, nodded to Ragnar."
+   ],
+   "q": "Is the narrated statement acceptable, either consistent with canon or explained by a campaign event? (No = hallucination)"
+  },
+  "uk": {
+   "state": [
+    "Канон: Ґеральт із Рівії — відьмак Школи Вовка.",
+    "Події кампанії: (немає)",
+    "Розказано: Ґеральт, відьмак Школи Грифона, кивнув Рагнарові."
+   ],
+   "q": "Чи прийнятне це твердження: воно або узгоджується з каноном, або пояснене подією кампанії? (Ні = галюцинація)"
+  }
+ },
+ {
+  "id": "drif02",
+  "type": "drift",
+  "lang_mode": "both",
+  "gold": false,
+  "en": {
+   "state": [
+    "Canon: Kaer Morhen is a fortress in the mountains of Kaedwen.",
+    "Campaign events: (none)",
+    "Narrated: Waves broke against the walls of Kaer Morhen on the Skellige coast."
+   ],
+   "q": "Is the narrated statement acceptable, either consistent with canon or explained by a campaign event? (No = hallucination)"
+  },
+  "uk": {
+   "state": [
+    "Канон: Каер Морхен — фортеця в горах Кедвену.",
+    "Події кампанії: (немає)",
+    "Розказано: Хвилі бились об стіни Каер Морхену на узбережжі Скелліге."
+   ],
+   "q": "Чи прийнятне це твердження: воно або узгоджується з каноном, або пояснене подією кампанії? (Ні = галюцинація)"
+  }
+ },
+ {
+  "id": "drif03",
+  "type": "drift",
+  "lang_mode": "both",
+  "gold": true,
+  "en": {
+   "state": [
+    "Canon: Vesemir is the oldest witcher of Kaer Morhen and is alive.",
+    "Campaign events: (none)",
+    "Narrated: Old Vesemir limped over to greet Ragnar."
+   ],
+   "q": "Is the narrated statement acceptable, either consistent with canon or explained by a campaign event? (No = hallucination)"
+  },
+  "uk": {
+   "state": [
+    "Канон: Весемір — найстарший відьмак Каер Морхену, і він живий.",
+    "Події кампанії: (немає)",
+    "Розказано: Старий Весемір підшкутильгав привітати Рагнара."
+   ],
+   "q": "Чи прийнятне це твердження: воно або узгоджується з каноном, або пояснене подією кампанії? (Ні = галюцинація)"
+  }
+ },
+ {
+  "id": "drif04",
+  "type": "drift",
+  "lang_mode": "both",
+  "gold": false,
+  "en": {
+   "state": [
+    "Canon: Triss Merigold is a sorceress of Maribor with chestnut hair.",
+    "Campaign events: (none)",
+    "Narrated: Triss shook out her long fair golden hair."
+   ],
+   "q": "Is the narrated statement acceptable, either consistent with canon or explained by a campaign event? (No = hallucination)"
+  },
+  "uk": {
+   "state": [
+    "Канон: Тріс Мерігольд — чародійка з Марибору з каштановим волоссям.",
+    "Події кампанії: (немає)",
+    "Розказано: Тріс струснула довге світле золотаве волосся."
+   ],
+   "q": "Чи прийнятне це твердження: воно або узгоджується з каноном, або пояснене подією кампанії? (Ні = галюцинація)"
+  }
+ },
+ {
+  "id": "drif05",
+  "type": "drift",
+  "lang_mode": "both",
+  "gold": true,
+  "en": {
+   "state": [
+    "Canon: Witchers have yellow cat-like eyes after the mutations.",
+    "Campaign events: (none)",
+    "Narrated: Ragnar's cat-like eyes flashed in the candlelight."
+   ],
+   "q": "Is the narrated statement acceptable, either consistent with canon or explained by a campaign event? (No = hallucination)"
+  },
+  "uk": {
+   "state": [
+    "Канон: Після мутацій у відьмаків жовті котячі очі.",
+    "Події кампанії: (немає)",
+    "Розказано: Котячі очі Рагнара блиснули у світлі свічки."
+   ],
+   "q": "Чи прийнятне це твердження: воно або узгоджується з каноном, або пояснене подією кампанії? (Ні = галюцинація)"
+  }
+ },
+ {
+  "id": "drif06",
+  "type": "drift",
+  "lang_mode": "both",
+  "gold": true,
+  "en": {
+   "state": [
+    "Canon: Cintra fell to Nilfgaard and its army was destroyed.",
+    "Campaign events: Ragnar's warning let Queen Calanthe evacuate part of the city and save most of the army.",
+    "Narrated: The banners of Cintra still flew over the surviving army camp."
+   ],
+   "q": "Is the narrated statement acceptable, either consistent with canon or explained by a campaign event? (No = hallucination)"
+  },
+  "uk": {
+   "state": [
+    "Канон: Цинтра впала під ударом Нільфгаарда, її армію знищено.",
+    "Події кампанії: Попередження Рагнара дозволило королеві Калянте евакуювати частину міста й зберегти більшу частину армії.",
+    "Розказано: Прапори Цинтри все ще майоріли над табором вцілілої армії."
+   ],
+   "q": "Чи прийнятне це твердження: воно або узгоджується з каноном, або пояснене подією кампанії? (Ні = галюцинація)"
+  }
+ },
+ {
+  "id": "drif07",
+  "type": "drift",
+  "lang_mode": "both",
+  "gold": false,
+  "en": {
+   "state": [
+    "Canon: Geralt carries two swords on his back, one steel and one silver.",
+    "Campaign events: (none)",
+    "Narrated: Geralt, armed only with a battle axe, entered the room."
+   ],
+   "q": "Is the narrated statement acceptable, either consistent with canon or explained by a campaign event? (No = hallucination)"
+  },
+  "uk": {
+   "state": [
+    "Канон: Ґеральт носить за спиною два мечі — сталевий і срібний.",
+    "Події кампанії: (немає)",
+    "Розказано: Ґеральт, озброєний лише бойовою сокирою, увійшов до кімнати."
+   ],
+   "q": "Чи прийнятне це твердження: воно або узгоджується з каноном, або пояснене подією кампанії? (Ні = галюцинація)"
+  }
+ },
+ {
+  "id": "drif08",
+  "type": "drift",
+  "lang_mode": "both",
+  "gold": true,
+  "en": {
+   "state": [
+    "Canon: Eskel has long scars on his face.",
+    "Campaign events: Triss healed Eskel's face with a rare spell last winter.",
+    "Narrated: Eskel's smooth, scarless face turned toward the door."
+   ],
+   "q": "Is the narrated statement acceptable, either consistent with canon or explained by a campaign event? (No = hallucination)"
+  },
+  "uk": {
+   "state": [
+    "Канон: На обличчі Ескеля довгі шрами.",
+    "Події кампанії: Минулої зими Тріс вилікувала обличчя Ескеля рідкісним закляттям.",
+    "Розказано: Гладке обличчя Ескеля без шрамів повернулося до дверей."
+   ],
+   "q": "Чи прийнятне це твердження: воно або узгоджується з каноном, або пояснене подією кампанії? (Ні = галюцинація)"
+  }
+ },
+ {
+  "id": "drif09",
+  "type": "drift",
+  "lang_mode": "both",
+  "gold": false,
+  "en": {
+   "state": [
+    "Canon: Roche is a Temerian commander of the Blue Stripes.",
+    "Campaign events: (none)",
+    "Narrated: Roche, in the black armour of a Nilfgaardian officer, saluted his emperor."
+   ],
+   "q": "Is the narrated statement acceptable, either consistent with canon or explained by a campaign event? (No = hallucination)"
+  },
+  "uk": {
+   "state": [
+    "Канон: Роше — темерський командир «Блакитних смуг».",
+    "Події кампанії: (немає)",
+    "Розказано: Роше в чорних обладунках нільфгаардського офіцера віддав честь своєму імператору."
+   ],
+   "q": "Чи прийнятне це твердження: воно або узгоджується з каноном, або пояснене подією кампанії? (Ні = галюцинація)"
+  }
+ },
+ {
+  "id": "drif10",
+  "type": "drift",
+  "lang_mode": "both",
+  "gold": true,
+  "en": {
+   "state": [
+    "Canon: Yennefer of Vengerberg has violet eyes and smells of lilac and gooseberries.",
+    "Campaign events: (none)",
+    "Narrated: A scent of lilac and gooseberries drifted in; Yennefer's violet eyes found Ragnar."
+   ],
+   "q": "Is the narrated statement acceptable, either consistent with canon or explained by a campaign event? (No = hallucination)"
+  },
+  "uk": {
+   "state": [
+    "Канон: Йеннефер із Венгерберга має фіалкові очі й пахне бузком і аґрусом.",
+    "Події кампанії: (немає)",
+    "Розказано: Війнуло бузком і аґрусом; фіалкові очі Йеннефер знайшли Рагнара."
+   ],
+   "q": "Чи прийнятне це твердження: воно або узгоджується з каноном, або пояснене подією кампанії? (Ні = галюцинація)"
+  }
+ },
+ {
+  "id": "drif11",
+  "type": "drift",
+  "lang_mode": "both",
+  "gold": false,
+  "en": {
+   "state": [
+    "Canon: Most boys die or are crippled in the Trial of the Grasses.",
+    "Campaign events: (none)",
+    "Narrated: Every boy easily survived the Trial of the Grasses that year, as always."
+   ],
+   "q": "Is the narrated statement acceptable, either consistent with canon or explained by a campaign event? (No = hallucination)"
+  },
+  "uk": {
+   "state": [
+    "Канон: Більшість хлопців гине або стає калікою під час Випробування Трав.",
+    "Події кампанії: (немає)",
+    "Розказано: Того року, як і завжди, кожен хлопець легко пережив Випробування Трав."
+   ],
+   "q": "Чи прийнятне це твердження: воно або узгоджується з каноном, або пояснене подією кампанії? (Ні = галюцинація)"
+  }
+ },
+ {
+  "id": "drif12",
+  "type": "drift",
+  "lang_mode": "both",
+  "gold": true,
+  "en": {
+   "state": [
+    "Canon: Dandelion (Jaskier) is a famous bard and not a witcher.",
+    "Campaign events: Ragnar secretly paid for Dandelion to undergo the Trial of the Grasses, and he survived.",
+    "Narrated: Dandelion's eyes shone with a cat-like glint as he tuned his lute."
+   ],
+   "q": "Is the narrated statement acceptable, either consistent with canon or explained by a campaign event? (No = hallucination)"
+  },
+  "uk": {
+   "state": [
+    "Канон: Любисток — відомий бард, а не відьмак.",
+    "Події кампанії: Рагнар таємно оплатив Любистку Випробування Трав, і той вижив.",
+    "Розказано: Очі Любистка блищали котячим відблиском, поки він налаштовував лютню."
+   ],
+   "q": "Чи прийнятне це твердження: воно або узгоджується з каноном, або пояснене подією кампанії? (Ні = галюцинація)"
+  }
+ },
+ {
+  "id": "unkn01",
+  "type": "unknowable",
+  "lang_mode": "mixed",
+  "gold": false,
+  "en": {
+   "state": [
+    "Character: Innkeeper Hostomyl",
+    "What the character knows:",
+    "- Ragnar is a witcher.",
+    "- Ragnar asked for a room.",
+    "Line: Кімната нагорі, пане відьмаку. Вісім оренів за ніч."
+   ],
+   "q": "Does the line assert a fact about the world or other people that this character had no channel to learn from what they know? Ignore greetings, questions, opinions and general common sense."
+  }
+ },
+ {
+  "id": "unkn02",
+  "type": "unknowable",
+  "lang_mode": "mixed",
+  "gold": true,
+  "en": {
+   "state": [
+    "Character: Innkeeper Hostomyl",
+    "What the character knows:",
+    "- Ragnar is a witcher.",
+    "- Ragnar asked for a room.",
+    "Line: А ви, мабуть, той самий, що вбив ґрифона в Белхавені?"
+   ],
+   "q": "Does the line assert a fact about the world or other people that this character had no channel to learn from what they know? Ignore greetings, questions, opinions and general common sense."
+  }
+ },
+ {
+  "id": "unkn03",
+  "type": "unknowable",
+  "lang_mode": "mixed",
+  "gold": false,
+  "en": {
+   "state": [
+    "Character: Vesemir",
+    "What the character knows:",
+    "- Ragnar has trained at Kaer Morhen since childhood.",
+    "- Geralt left for Novigrad and said he would be back within a week.",
+    "Line: Ґеральт поїхав до Новіграда, обіцяв повернутися за тиждень."
+   ],
+   "q": "Does the line assert a fact about the world or other people that this character had no channel to learn from what they know? Ignore greetings, questions, opinions and general common sense."
+  }
+ },
+ {
+  "id": "unkn04",
+  "type": "unknowable",
+  "lang_mode": "mixed",
+  "gold": true,
+  "en": {
+   "state": [
+    "Character: Vesemir",
+    "What the character knows:",
+    "- Ragnar has trained at Kaer Morhen since childhood.",
+    "- Geralt left for Novigrad.",
+    "Line: Ґеральт у Новіграді, і там його схопили люди Філіппи."
+   ],
+   "q": "Does the line assert a fact about the world or other people that this character had no channel to learn from what they know? Ignore greetings, questions, opinions and general common sense."
+  }
+ },
+ {
+  "id": "unkn05",
+  "type": "unknowable",
+  "lang_mode": "mixed",
+  "gold": true,
+  "en": {
+   "state": [
+    "Character: Triss",
+    "What the character knows:",
+    "- Ragnar says a leshen scratched him in the forest yesterday.",
+    "- (just noticed) Ragnar is pale and sweating.",
+    "Line: Лісовик отруїв тебе чимось у пазурах, ось чому тебе трусить."
+   ],
+   "q": "Does the line assert a fact about the world or other people that this character had no channel to learn from what they know? Ignore greetings, questions, opinions and general common sense."
+  }
+ },
+ {
+  "id": "unkn06",
+  "type": "unknowable",
+  "lang_mode": "mixed",
+  "gold": true,
+  "en": {
+   "state": [
+    "Character: Triss",
+    "What the character knows:",
+    "- (just noticed) Ragnar has a burnt, bandaged arm.",
+    "Line: Дракон опік тебе, я бачу це по ранах."
+   ],
+   "q": "Does the line assert a fact about the world or other people that this character had no channel to learn from what they know? Ignore greetings, questions, opinions and general common sense."
+  }
+ },
+ {
+  "id": "unkn07",
+  "type": "unknowable",
+  "lang_mode": "mixed",
+  "gold": false,
+  "en": {
+   "state": [
+    "Character: Jaskier",
+    "What the character knows:",
+    "- The innkeeper told me the mill has been howling for three nights.",
+    "Line: Кажуть, у млині третю ніч чути виття — корчмар сам розповідав."
+   ],
+   "q": "Does the line assert a fact about the world or other people that this character had no channel to learn from what they know? Ignore greetings, questions, opinions and general common sense."
+  }
+ },
+ {
+  "id": "unkn08",
+  "type": "unknowable",
+  "lang_mode": "mixed",
+  "gold": true,
+  "en": {
+   "state": [
+    "Character: Jaskier",
+    "What the character knows:",
+    "- Ragnar asked about songs of the road.",
+    "Line: Йеннефер уже в Ґрадені й чекає на тебе, не барись."
+   ],
+   "q": "Does the line assert a fact about the world or other people that this character had no channel to learn from what they know? Ignore greetings, questions, opinions and general common sense."
+  }
+ },
+ {
+  "id": "unkn09",
+  "type": "unknowable",
+  "lang_mode": "mixed",
+  "gold": false,
+  "en": {
+   "state": [
+    "Character: Roche",
+    "What the character knows:",
+    "- Ragnar crossed the border at dawn.",
+    "- Roche is a Temerian officer.",
+    "Line: Ти перейшов кордон на світанку, тож буду відвертий: твого імені не називатиму нікому."
+   ],
+   "q": "Does the line assert a fact about the world or other people that this character had no channel to learn from what they know? Ignore greetings, questions, opinions and general common sense."
+  }
+ },
+ {
+  "id": "unkn10",
+  "type": "unknowable",
+  "lang_mode": "mixed",
+  "gold": false,
+  "en": {
+   "state": [
+    "Character: Innkeeper Hostomyl",
+    "What the character knows:",
+    "- Ragnar is a witcher.",
+    "Line: Монстри — ваша справа, пане відьмаку, а моя — наливати пиво."
+   ],
+   "q": "Does the line assert a fact about the world or other people that this character had no channel to learn from what they know? Ignore greetings, questions, opinions and general common sense."
+  }
+ },
+ {
+  "id": "unkn11",
+  "type": "unknowable",
+  "lang_mode": "mixed",
+  "gold": true,
+  "en": {
+   "state": [
+    "Character: Marta, a village woman",
+    "What the character knows:",
+    "- Wolves have been howling near the village.",
+    "Line: Король Фольтест помер, а Темерією править Анаїс, це всім відомо."
+   ],
+   "q": "Does the line assert a fact about the world or other people that this character had no channel to learn from what they know? Ignore greetings, questions, opinions and general common sense."
+  }
+ },
+ {
+  "id": "unkn12",
+  "type": "unknowable",
+  "lang_mode": "mixed",
+  "gold": false,
+  "en": {
+   "state": [
+    "Character: Marta, a village woman",
+    "What the character knows:",
+    "- Ragnar paid for stew.",
+    "- Wolves have been howling near the village.",
+    "Line: Дякую за гроші, пане, юшка гаряча."
+   ],
+   "q": "Does the line assert a fact about the world or other people that this character had no channel to learn from what they know? Ignore greetings, questions, opinions and general common sense."
+  }
+ },
+ {
+  "id": "nspk01",
+  "type": "narrator_speech",
+  "lang_mode": "mixed",
+  "gold": true,
+  "en": {
+   "state": [
+    "Player character: Ragnar",
+    "Text: Корчмар кладе на стіл два кухлі й каже: «Дорога була довга?»"
+   ],
+   "q": "Does the text state what a character other than the player character says aloud, either quoted or paraphrased with its content? (Mere mention that someone speaks, with no content, does not count.)"
+  }
+ },
+ {
+  "id": "nspk02",
+  "type": "narrator_speech",
+  "lang_mode": "mixed",
+  "gold": false,
+  "en": {
+   "state": [
+    "Player character: Ragnar",
+    "Text: Корчмар мовчки ставить два кухлі й хмуро дивиться на Рагнара."
+   ],
+   "q": "Does the text state what a character other than the player character says aloud, either quoted or paraphrased with its content? (Mere mention that someone speaks, with no content, does not count.)"
+  }
+ },
+ {
+  "id": "nspk03",
+  "type": "narrator_speech",
+  "lang_mode": "mixed",
+  "gold": true,
+  "en": {
+   "state": [
+    "Player character: Ragnar",
+    "Text: Весемір розповідає, що в долині знову бачили кікімору і що селяни вже збирають гроші на замовлення."
+   ],
+   "q": "Does the text state what a character other than the player character says aloud, either quoted or paraphrased with its content? (Mere mention that someone speaks, with no content, does not count.)"
+  }
+ },
+ {
+  "id": "nspk04",
+  "type": "narrator_speech",
+  "lang_mode": "mixed",
+  "gold": false,
+  "en": {
+   "state": [
+    "Player character: Ragnar",
+    "Text: Весемір довго щось говорить, але в гулі зали Рагнар не розбирає жодного слова."
+   ],
+   "q": "Does the text state what a character other than the player character says aloud, either quoted or paraphrased with its content? (Mere mention that someone speaks, with no content, does not count.)"
+  }
+ },
+ {
+  "id": "nspk05",
+  "type": "narrator_speech",
+  "lang_mode": "mixed",
+  "gold": true,
+  "en": {
+   "state": [
+    "Player character: Ragnar",
+    "Text: Рагнар питає, де Ламберт. Ламберт, не обертаючись, буркає, що йому байдуже."
+   ],
+   "q": "Does the text state what a character other than the player character says aloud, either quoted or paraphrased with its content? (Mere mention that someone speaks, with no content, does not count.)"
+  }
+ },
+ {
+  "id": "nspk06",
+  "type": "narrator_speech",
+  "lang_mode": "mixed",
+  "gold": false,
+  "en": {
+   "state": [
+    "Player character: Ragnar",
+    "Text: Рагнар вклоняється й каже: «Дякую, пане»."
+   ],
+   "q": "Does the text state what a character other than the player character says aloud, either quoted or paraphrased with its content? (Mere mention that someone speaks, with no content, does not count.)"
+  }
+ },
+ {
+  "id": "nspk07",
+  "type": "narrator_speech",
+  "lang_mode": "mixed",
+  "gold": false,
+  "en": {
+   "state": [
+    "Player character: Ragnar",
+    "Text: Тріс усміхається й киває у відповідь."
+   ],
+   "q": "Does the text state what a character other than the player character says aloud, either quoted or paraphrased with its content? (Mere mention that someone speaks, with no content, does not count.)"
+  }
+ },
+ {
+  "id": "nspk08",
+  "type": "narrator_speech",
+  "lang_mode": "mixed",
+  "gold": true,
+  "en": {
+   "state": [
+    "Player character: Ragnar",
+    "Text: — Тримайся ближче до мене, — шепоче Тріс."
+   ],
+   "q": "Does the text state what a character other than the player character says aloud, either quoted or paraphrased with its content? (Mere mention that someone speaks, with no content, does not count.)"
+  }
+ },
+ {
+  "id": "nspk09",
+  "type": "narrator_speech",
+  "lang_mode": "mixed",
+  "gold": false,
+  "en": {
+   "state": [
+    "Player character: Ragnar",
+    "Text: Любисток починає пісню про вбивцю королів, і вся зала затихає."
+   ],
+   "q": "Does the text state what a character other than the player character says aloud, either quoted or paraphrased with its content? (Mere mention that someone speaks, with no content, does not count.)"
+  }
+ },
+ {
+  "id": "nspk10",
+  "type": "narrator_speech",
+  "lang_mode": "mixed",
+  "gold": true,
+  "en": {
+   "state": [
+    "Player character: Ragnar",
+    "Text: Вартовий наказує Рагнарові покласти меч і не рухатись."
+   ],
+   "q": "Does the text state what a character other than the player character says aloud, either quoted or paraphrased with its content? (Mere mention that someone speaks, with no content, does not count.)"
+  }
+ },
+ {
+  "id": "nspk11",
+  "type": "narrator_speech",
+  "lang_mode": "mixed",
+  "gold": false,
+  "en": {
+   "state": [
+    "Player character: Ragnar",
+    "Text: Рагнар відповідає, що ніколи не бачив цієї жінки."
+   ],
+   "q": "Does the text state what a character other than the player character says aloud, either quoted or paraphrased with its content? (Mere mention that someone speaks, with no content, does not count.)"
+  }
+ },
+ {
+  "id": "nspk12",
+  "type": "narrator_speech",
+  "lang_mode": "mixed",
+  "gold": true,
+  "en": {
+   "state": [
+    "Player character: Ragnar",
+    "Text: Корчмар називає ціну — вісім оренів за ніч — і простягає долоню."
+   ],
+   "q": "Does the text state what a character other than the player character says aloud, either quoted or paraphrased with its content? (Mere mention that someone speaks, with no content, does not count.)"
+  }
+ }
+]

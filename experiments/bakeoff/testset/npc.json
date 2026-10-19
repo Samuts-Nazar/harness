@@ -1,0 +1,310 @@
+[
+ {
+  "id": "c01",
+  "npc": "vesemir",
+  "location": "Зала Каер Морхену",
+  "time": "День 3, 19:00",
+  "present": [
+   "player",
+   "vesemir"
+  ],
+  "knows": [
+   [
+    "Ґеральт поїхав до Новіграда на початку місяця.",
+    "player"
+   ],
+   [
+    "Рагнар повернувся з полювання.",
+    null
+   ]
+  ],
+  "recent": [
+   [
+    "player",
+    "Весеміре, куди поїхав Ґеральт?"
+   ]
+  ],
+  "gold": "Says Geralt went to Novigrad (told by Ragnar) or that Ragnar already knows. Must not add what Geralt does there or when he returns.",
+  "forbidden": "what Geralt does in Novigrad; any return date"
+ },
+ {
+  "id": "c02",
+  "npc": "vesemir",
+  "location": "Зала Каер Морхену",
+  "time": "День 3, 19:00",
+  "present": [
+   "player",
+   "vesemir"
+  ],
+  "knows": [
+   [
+    "Рагнар повернувся з полювання.",
+    null
+   ]
+  ],
+  "recent": [
+   [
+    "player",
+    "Весеміре, куди поїхав Ґеральт?"
+   ]
+  ],
+  "gold": "Must say he does not know / has no word. Any named destination is a leak.",
+  "forbidden": "any place where Geralt went"
+ },
+ {
+  "id": "c03",
+  "npc": "hostomyl",
+  "location": "Придорожня корчма",
+  "time": "День 5, 21:00",
+  "present": [
+   "player",
+   "hostomyl"
+  ],
+  "knows": [
+   [
+    "Відьмак убив утоплеця на переправі.",
+    "jaskier"
+   ]
+  ],
+  "recent": [
+   [
+    "player",
+    "Що в вас кажуть про те, що сталося на переправі?"
+   ]
+  ],
+  "gold": "Reports it as hearsay from the bard Любисток; must not claim to have seen it.",
+  "forbidden": "claiming to have witnessed it; details such as number of drowners"
+ },
+ {
+  "id": "c04",
+  "npc": "triss",
+  "location": "Кімната Тріс",
+  "time": "День 8, 15:00",
+  "present": [
+   "player",
+   "triss"
+  ],
+  "knows": [
+   [
+    "Рагнар сам прийшов до неї.",
+    null
+   ]
+  ],
+  "noticed": [
+   "Рагнар тримає праву руку так, наче вона поранена; рукав у крові."
+  ],
+  "recent": [
+   [
+    "player",
+    "Тріс, у мене до тебе справа."
+   ]
+  ],
+  "gold": "Notices the arm and asks/offers help. Must not name the monster or cause of the wound.",
+  "forbidden": "what caused the wound"
+ },
+ {
+  "id": "c05",
+  "npc": "jaskier",
+  "location": "Придорожня корчма",
+  "time": "День 5, 21:30",
+  "present": [
+   "player",
+   "jaskier"
+  ],
+  "knows": [
+   [
+    "Рагнар — відьмак, що прийшов під дощем.",
+    null
+   ]
+  ],
+  "recent": [
+   [
+    "player",
+    "Любистку, ти чув щось про Йеннефер?"
+   ]
+  ],
+  "gold": "Does not know anything concrete; may joke or ask. Any concrete news of Yennefer is a leak.",
+  "forbidden": "any concrete news, location or plans of Yennefer"
+ },
+ {
+  "id": "c06",
+  "npc": "lambert",
+  "location": "Зала Каер Морхену",
+  "time": "День 11, 18:10",
+  "present": [
+   "player",
+   "lambert"
+  ],
+  "knows": [
+   [
+    "Рагнар назвав його при всіх боягузом (на власні вуха).",
+    null
+   ]
+  ],
+  "attitudes": [
+   "злий на Рагнара (0.7)"
+  ],
+  "recent": [
+   [
+    "player",
+    "Ламберте, вибач, я не хотів тебе образити."
+   ]
+  ],
+  "gold": "Gruff, resentful but in character; may accept or reject the apology. Must not reference any plan of Ragnar to leave.",
+  "forbidden": "Ragnar's plans, anything not in knowledge"
+ },
+ {
+  "id": "c07",
+  "npc": "roche",
+  "location": "Лісова дорога",
+  "time": "День 6, 14:00",
+  "present": [
+   "player",
+   "roche"
+  ],
+  "knows": [
+   [
+    "Купці розповідали, що Нільфгаард збирає війська за Яругою (чутки).",
+    "marta"
+   ]
+  ],
+  "recent": [
+   [
+    "player",
+    "Що ти знаєш про наміри Нільфгаарда?"
+   ]
+  ],
+  "gold": "Hedges: only rumours heard from merchants/Marta; no exact numbers or dates.",
+  "forbidden": "exact troop numbers, dates, certain claims"
+ },
+ {
+  "id": "c08",
+  "npc": "marta",
+  "location": "Хутір біля лісу",
+  "time": "День 6, 17:00",
+  "present": [
+   "player",
+   "marta"
+  ],
+  "knows": [
+   [
+    "Вовки виють біля хутора третю ніч.",
+    null
+   ]
+  ],
+  "noticed": [
+   "У незнайомця жовті очі з котячими зіницями й срібний меч."
+  ],
+  "recent": [
+   [
+    "player",
+    "Добрий вечір. Ти знаєш, хто я?"
+   ]
+  ],
+  "gold": "Recognizes a witcher from eyes/sword, does not know his name. Must not call him Рагнар.",
+  "forbidden": "the name Рагнар, his biography"
+ },
+ {
+  "id": "c09",
+  "npc": "coen",
+  "location": "Нічний табір",
+  "time": "День 10, 22:00",
+  "present": [
+   "player",
+   "coen"
+  ],
+  "knows": [
+   [
+    "Рагнар сьогодні мовчазний.",
+    null
+   ]
+  ],
+  "noticed": [
+   "Обличчя Рагнара бліде, на лобі піт."
+  ],
+  "recent": [
+   [
+    "player",
+    "Койоне, ти помітив, що зі мною щось не так?"
+   ]
+  ],
+  "gold": "Mentions pale face/sweat; must not diagnose a specific poison or monster.",
+  "forbidden": "named poison, named monster, diagnosis"
+ },
+ {
+  "id": "c10",
+  "npc": "eskel",
+  "location": "Подвір'я Каер Морхену",
+  "time": "День 4, 09:00",
+  "present": [
+   "player",
+   "eskel"
+  ],
+  "knows": [
+   [
+    "Весемір сказав, що Рагнар уночі виходив у долину.",
+    "vesemir"
+   ]
+  ],
+  "recent": [
+   [
+    "player",
+    "Ескелю, звідки ти знаєш, де я був уночі?"
+   ]
+  ],
+  "gold": "Names Весемір as the source. Must not add details of what Ragnar did in the valley.",
+  "forbidden": "details of the night trip"
+ },
+ {
+  "id": "c11",
+  "npc": "hostomyl",
+  "location": "Придорожня корчма",
+  "time": "День 5, 20:40",
+  "present": [
+   "player",
+   "hostomyl"
+  ],
+  "knows": [
+   [
+    "Кімната на ніч коштує вісім оренів, вечеря — два.",
+    null
+   ],
+   [
+    "Рагнар — відьмак.",
+    null
+   ]
+  ],
+  "recent": [
+   [
+    "player",
+    "Скільки за кімнату й вечерю?"
+   ]
+  ],
+  "gold": "States prices (8 + 2 = 10 orens). One voice, no stage directions.",
+  "forbidden": "other prices"
+ },
+ {
+  "id": "c12",
+  "npc": "triss",
+  "location": "Кімната Тріс",
+  "time": "День 9, 11:00",
+  "present": [
+   "player",
+   "triss"
+  ],
+  "knows": [
+   [
+    "Філіппа Ейльгарт — могутня чародійка, яку Тріс вважає своєю наставницею.",
+    null
+   ]
+  ],
+  "recent": [
+   [
+    "player",
+    "Що ти думаєш про Філіппу Ейльгарт?"
+   ]
+  ],
+  "gold": "Speaks of Philippa as strong mentor-figure only. Must not reveal later political events or schemes (pretraining leak).",
+  "forbidden": "plots, betrayals, future events involving Philippa"
+ }
+]
