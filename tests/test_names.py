@@ -217,6 +217,23 @@ def test_extractor_gets_the_names_of_people_it_must_write_about():
     assert f"Горст ({HORST})" in ex and f"Рагнар ({ME})" in ex
 
 
+def test_an_npcs_own_beat_neither_shows_nor_teaches_his_name():
+    """Live check: "— У справі, — Горст покрутив мідяк." named the stranger to the player."""
+    from harness.style import Style
+
+    line = "— Слухаю, — Горст покрутив мідяк. — Скільки просиш?"
+    eng, _ = make({"narrator": [narr("N.")], "npc": [line], "extractor": ["- terse", diff(), diff()]},
+                  style=Style.load("witcher"))
+    res = eng.turn("Ну?", speakers=["horst"])
+    shown = res.utterances[0].payload["text"]
+    assert "Горст" not in shown and HORST in shown and "Скільки просиш?" in shown
+    assert not eng.names.knows(PLAYER, "horst")
+    eng2, _ = make({"narrator": [narr("N.")], "npc": ["— Я Горст, староста."],
+                    "extractor": ["- terse", diff(), diff()]}, style=Style.load("witcher"))
+    eng2.turn("Ну?", speakers=["horst"])
+    assert eng2.names.knows(PLAYER, "horst"), "said aloud: learned"
+
+
 def test_appearance_survives_reopening_a_saved_campaign(tmp_path):
     prov = FakeProvider()
     eng = Engine.create_campaign("c", prov, PROFILES, Scene("Inn", (PLAYER, "horst"), 0),

@@ -142,6 +142,7 @@ class _NpcPrep:
     mem: CharacterMemory
     view: NpcView
     known_names: frozenset[str] = frozenset()  # snapshot of the names this NPC knows
+    player_known: frozenset[str] = frozenset()  # and the player character's
 
     def messages(self, heard: Sequence[str] = (),
                  notes: Sequence[str] = ()) -> list[dict[str, str]]:
@@ -583,7 +584,7 @@ class Engine:
         self._ensure_manner(npc)
         mem = self.deriver.derive(npc, self.scene.time)
         return _NpcPrep(npc, mem, self.ctx.character_view(npc, self.scene, mem),
-                        self.names.known_set(npc))
+                        self.names.known_set(npc), self.names.known_set(PLAYER))
 
     def _ensure_manner(self, npc: str) -> None:
         """Manner notes for an NPC profile that has none, once, from a cheap model (main thread
@@ -644,7 +645,7 @@ class Engine:
                 continue
             p = self._suspicion(prep, text, heard)
             if p is None or p < self.npc_reject_p:
-                return text
+                return self._mask_beats(text, prep)
             tried.append((p, text))
             self._note("npc_line_rejected", npc=prep.npc, text=text, suspicion=round(p, 3))
         best_p, best = min(tried, key=lambda c: c[0])  # ties: the earliest
@@ -653,7 +654,21 @@ class Engine:
             best = self.names.mask(prep.npc, best, known=prep.known_names)  # last resort: the name never reaches the player
         self._note("npc_lowest_suspicion", npc=prep.npc, text=best, suspicion=round(best_p, 3),
                    rejected=[t for _, t in tried])
-        return best
+        return self._mask_beats(best, prep)
+
+    def _mask_beats(self, text: str, prep: _NpcPrep) -> str:
+        """The NPC's own beats ("Горст покрутив мідяк") are shown to the player: a name the player
+        character has not learned is replaced there by what is seen. Spoken words stay literal."""
+        if self.style is None or not self.names.mentions(text):
+            return text
+        parsed = split_npc_output(text)
+        if not parsed.has_dash:
+            return text
+        for beat in parsed.beats:
+            masked = self.names.mask(PLAYER, beat, known=prep.player_known)
+            if masked != beat:
+                text = text.replace(beat, masked)
+        return text
 
     def _npc_chain(self, prep: _NpcPrep, earlier: Sequence[tuple[str, Future[_Captured]]]) -> str:
         """A worker: wait for the lines of the NPCs who speak before this one in the turn, then
@@ -1117,7 +1132,10 @@ class Engine:
                 ev = self._utterance(npc, sr.spoken_text, interrupted=sr.interrupted, **extra)
                 turn_events.append(ev)
                 result.utterances.append(ev)
-                self._learn_from_speech(ev, npc, sr.spoken_text)
+                # only what is said aloud teaches a name, never the NPC's own beats
+                self._learn_from_speech(
+                    ev, npc, parsed.speech if parsed is not None and parsed.has_dash
+                    else sr.spoken_text)
                 if parsed is not None:  # the NPC's own beats, only the delivered part
                     for beat in parsed.beats:
                         act = self._fix_names(beat_as_action(beat, self.ctx.name(npc)), "npc_beat")
