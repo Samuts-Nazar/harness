@@ -123,13 +123,19 @@ def main() -> None:
             f"{', від ' + str(next(k for k in f.knowers if k.character == cid).source) if next(k for k in f.knowers if k.character == cid).source else ''})"
             for f in items) or "нічого"))
 
-    # idle day: what an ordinary in-world day costs once the news is processed
+    print("\nНитки (відкриті):")
+    for t in rep["threads"]:
+        print(f"  - #{t['thread']} гучність {t['notability']} {t['participants']}: {t['text'][:100]}")
+    # a skip of three days: what the cheap sim costs per in-world day once the news is processed
     c0, t0, m0 = stack.spend.total, time.monotonic(), eng.scene.time
-    world.wait(24 * 60)
+    sk = world.skip_days(3)
     idle = {"minutes": eng.scene.time - m0, "cost": stack.spend.total - c0,
-            "seconds": time.monotonic() - t0}
-    print(f"\nтихий день: {idle['minutes']} хв, ${idle['cost']:.4f}, {idle['seconds']:.1f} с")
-    out["idle_day"] = idle
+            "seconds": time.monotonic() - t0, "stopped": sk["stopped"]}
+    print(f"\nпропуск днів: {idle['minutes']} хв ({idle['minutes'] / 1440:.1f} д), "
+          f"${idle['cost']:.4f}, {idle['seconds']:.1f} с, зупинка: {idle['stopped']}")
+    for e in sk["summaries"]:
+        print("  підсумок:", e.payload["text"])
+    out["skip"] = idle
     summary = {}
     for name, rows in TIMED.items():
         mins = sum(r[2] for r in rows)

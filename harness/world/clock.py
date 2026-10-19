@@ -10,7 +10,35 @@ from typing import Mapping
 
 from ..judge import Question, choice_q
 
-DAY = 24 * 60
+HOUR, DAY = 60, 24 * 60
+# Time hierarchy (scene, day, season, year). The calendar is a placeholder: four seasons of 90 days
+# (a 360-day year); a world with its own calendar replaces `SEASON_DAYS`. The scene scale is
+# minutes, the day scale is what `World.skip_days` runs, seasons and years are a documented hook.
+SEASON_DAYS, YEAR_DAYS = 90, 360
+SEASONS = ("winter", "spring", "summer", "autumn")
+
+
+def parts(t: int) -> dict[str, int | str]:
+    """The clock reading as a hierarchy: year, season, day (0-based since the epoch), day of the
+    season, hour, minute."""
+    day, rem = divmod(t, DAY)
+    year, day_of_year = divmod(day, YEAR_DAYS)
+    season, day_of_season = divmod(day_of_year, SEASON_DAYS)
+    return {"year": year + 1, "season": SEASONS[season], "day": day + 1,
+            "day_of_season": day_of_season + 1, "hour": rem // HOUR, "minute": rem % HOUR}
+
+
+def scale_of(minutes: int) -> str:
+    """Which regime a span of time belongs to (ideas A6 2.6): scene, segment (hours to a day),
+    skip (days), season, year."""
+    if minutes < 60:
+        return "scene"
+    if minutes <= DAY:
+        return "segment"
+    if minutes < SEASON_DAYS * DAY:
+        return "skip"
+    return "season" if minutes < YEAR_DAYS * DAY else "year"
+
 DURATION_BUCKETS: dict[str, tuple[str, int]] = {  # name -> (description, minutes)
     "moment": ("a few seconds to a minute (a glance, a word, a gesture)", 1),
     "minutes": ("a few minutes (a short exchange, a small task)", 5),
@@ -19,6 +47,8 @@ DURATION_BUCKETS: dict[str, tuple[str, int]] = {  # name -> (description, minute
     "hours": ("several hours", 180),
     "half_day": ("about half a day", 360),
     "day": ("about a day", DAY),
+    "days": ("several days", 3 * DAY),
+    "week": ("about a week", 7 * DAY),
 }
 WAIT_TARGETS: dict[str, tuple[str, int]] = {  # name -> (description, hour of day)
     "until_morning": ("waits until the morning", 7),

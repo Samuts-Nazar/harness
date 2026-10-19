@@ -441,3 +441,64 @@ def test_higher_authority_hears_only_what_the_guard_passes_up():
     w2.tick(eng2.scene.time + 12 * 60)
     holders2 = {e.payload["holder"] for e in eng2.log.active([nw.NEWS_VERSION])}
     assert {"col_guard", "col_velerad", "col_king"} <= holders2
+
+
+# -- threads, chronicle, skips, time hierarchy (coordinator additions) -----------------------------
+def test_time_hierarchy():
+    p = clk.parts(2 * clk.DAY + 20 * 60)
+    assert p["day"] == 3 and p["hour"] == 20 and p["season"] == "winter" and p["year"] == 1
+    assert clk.parts(clk.YEAR_DAYS * clk.DAY + clk.SEASON_DAYS * clk.DAY)["year"] == 2
+    assert clk.parts(clk.SEASON_DAYS * clk.DAY)["season"] == "spring"
+    assert [clk.scale_of(m) for m in (5, 120, 3 * clk.DAY, 100 * clk.DAY, 400 * clk.DAY)] == [
+        "scene", "segment", "skip", "season", "year"]
+
+
+def test_news_has_thread_participants_unresolved_and_a_restatement_is_not_new():
+    def verdict(q, st):
+        sames = [o for o in q.options if o.startswith("same_")]
+        follows = [o for o in q.options if o.startswith("follow_")]
+        return sames[0] if "restates" in q.text else (follows[0] if "development" in q.text else "new")
+
+    eng, w, _ = build({"news_thread": verdict})
+    _, _, nid = miracle(eng, w)
+    ev = eng.log.append("action", game_time=eng.scene.time, location="x", payload={})
+
+    def add(text):
+        return eng.facts.add_campaign(text, source_event_id=ev.id, game_time=eng.scene.time,
+                                      location="x", notability=0.8, knowers=[("innkeeper", WITNESSED)])
+
+    assert w.register_news([add("Rumour says the beer turned to blood. restates")]) == []  # not new
+    (dev,) = w.register_news([add("The guard came asking. development")])
+    ch = w.chronicle()
+    assert len(ch) == 2 and ch[0]["thread"] == nid and ch[1]["thread"] == nid  # one thread
+    assert ch[0]["participants"] == sorted([PLAYER, "drunk", "innkeeper"]) and ch[0]["unresolved"]
+    assert [t["thread"] for t in w.open_threads("innkeeper")] == [nid]
+    assert w.open_threads("trader") == []
+    w.resolve_thread(nid, "the guard settled it")
+    assert w.open_threads() == [] and not w.chronicle()[0]["unresolved"]
+
+
+def test_skip_days_runs_the_cheap_sim_and_writes_origin_linked_summaries():
+    eng, w, _ = build({"offscreen_act": "goal"}, goals={"innkeeper": "keep the tavern open"})
+    eng.agents.promote("innkeeper", eng.scene)
+    eng.leave_scene("innkeeper", stay_nearby=False)
+    r = w.skip_days(3)
+    assert r["to"] - r["from"] == 3 * clk.DAY and r["stopped"] is None
+    (s,) = r["summaries"]
+    assert s.payload["character"] == "innkeeper" and s.payload["sources"]
+    assert s.cause_id == s.payload["sources"][0]  # derived from, and removed with, its origin
+    assert any("to day 4" in f.content for f in eng.facts.visible_to("innkeeper", eng.scene.time))
+    asked = [q for _, qs in eng.judge.inner.asked for q in qs.values() if q.tag == "offscreen_act"]
+    assert len(asked) <= 3 * 3 + 2  # about every eight hours, not every step
+    eng.rollback(s.payload["sources"][0])
+    assert not eng.log.active([nw.PERIOD_SUMMARY])
+    import pytest
+
+    with pytest.raises(NotImplementedError):
+        w.skip_years(1)
+
+
+def test_rumour_writer_does_not_name_the_player_or_the_teller():
+    msgs = nw.writer_messages(MIRACLE, "exaggerate", 2, "the town", language=None)
+    body = msgs[1]["content"]
+    assert "stranger" in body and "do not mention who is telling" in body

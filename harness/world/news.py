@@ -2,7 +2,11 @@
 (ideas A1), and the prompts that write and check one version of an event.
 
 Event types written by the world (all derived state comes from them):
-- WORLD_NEWS      a noteworthy fact became news: payload {fact_id, origin, notability, text}
+- WORLD_NEWS      a noteworthy fact became news: payload {fact_id, origin, notability, text,
+                  thread (None: it starts its own thread), participants, unresolved}
+- THREAD_RESOLVED a thread of events was closed: payload {thread, reason}
+- PERIOD_SUMMARY  a derived summary of one agent's life over a skipped period: payload
+                  {character, from, to, text, sources}
 - NEWS_DELIVERY   someone carried it to a collective: payload {news, to, at, carrier}
 - NEWS_VERSION    a collective holds a version: payload {news, holder, place, text, operator,
                   hops, source, at, logged_at, fact_id, verified}
@@ -23,6 +27,7 @@ WORLD_NEWS, NEWS_DELIVERY, NEWS_VERSION, NEWS_HEARD = (
 WORLD_REACTION, OFFSCREEN_UPDATE, WORLD_MOVE, WORLD_TICK, CANON_EXECUTED, WORLD_ARRIVAL = (
     "world_reaction", "offscreen_update", "world_move", "world_tick", "canon_executed",
     "world_arrival")
+THREAD_RESOLVED, PERIOD_SUMMARY = "thread_resolved", "period_summary"
 
 NEWS_MIN_NOTABILITY = 0.5  # a fact below this stays with its witnesses
 BASE_DELAY = 10  # minutes before word starts to move
@@ -79,9 +84,12 @@ def writer_messages(true_text: str, operator: str, hops_: int, holder_name: str,
     change = DISTORTIONS[operator]
     body = (
         f"Event as it truly happened: {true_text}\n\n"
-        f"Retell it the way {holder_name} repeat it after it has passed through {hops_} "
-        f"retelling(s). Change to apply: {change}. Add no other invented facts. One or two "
-        "sentences, third person, no quotation marks, no commentary."
+        f"Retell it the way people repeat it after it has passed through {hops_} retelling(s) "
+        f"and reached {holder_name}. Change to apply: {change}. Add no other invented facts. "
+        "The person called 'the player' (or 'Demon') is a stranger whose name these people do "
+        "not know: call them 'the stranger', or by something seen. State the story itself; do not "
+        "mention who is telling it. One or two sentences, third person, no quotation marks, no "
+        "commentary."
         + (f" Write in {language}." if language else ""))
     return [{"role": "system", "content": "You write how a rumour is retold. Rumour writer."},
             {"role": "user", "content": body}]

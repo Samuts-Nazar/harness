@@ -26,8 +26,10 @@ from . import news as nw
 from .canon_adapter import CanonSource, NullCanon, ScheduledEvent
 from .places import UNLINKED_MINUTES, Place, WorldMap
 
+RECENT_NEWS, RECENT_NEWS_DAYS = 6, 2  # news items offered to the "is this new" judgment
 ROUTINE_HOURS = 8  # an agent with a goal and no news gets one judgment this often
 STEP_MINUTES, LONG_STEP_MINUTES, LONG_SPAN = 60, 180, 12 * 60
+SKIP_STEP_MINUTES, SKIP_SPAN = 720, 3 * 24 * 60  # a skip of days runs in half-day steps
 KINDS = ("town", "authority")
 
 # what an off-screen agent can do (the options offered depend on the situation)
@@ -181,23 +183,91 @@ class World:
 
     def register_news(self, fact_ids: Sequence[int], *, origin: str | None = None) -> list[int]:
         """Facts that are loud enough become news items: they can travel. Quiet ones stay with
-        their witnesses. Returns the ids of the new WORLD_NEWS events."""
+        their witnesses. One batched judgment tells a candidate that only restates a recent news
+        item (a rumour repeated in a scene is not a new event) from a new matter or a new
+        development of an open thread. Returns the ids of the new WORLD_NEWS events."""
         known = {e.payload["fact_id"] for e in self.news_events()}
-        out: list[int] = []
+        cands: list[Fact] = []
         for fid in fact_ids:
             f = self.eng.facts.get(fid)
             if f is None or fid in known or f.notability < nw.NEWS_MIN_NOTABILITY:
                 continue
             if not f.knowers:
                 continue  # nobody perceived it: nothing to carry
+            cands.append(f)
+        recent = [e for e in self.news_events() if e.game_time >= self.now - RECENT_NEWS_DAYS * clk.DAY
+                  ][-RECENT_NEWS:]
+        verdict: dict[int, str] = {}
+        if cands and recent:
+            qs: dict[str, Question] = {}
+            for f in cands:
+                opts = {"new": "a new matter, not about any of the listed items"}
+                for ne in recent:
+                    t = ne.payload["text"][:90]
+                    opts[f"same_{ne.id}"] = f"the same event, or only a retelling of or reaction to it: {t}"
+                    opts[f"follow_{ne.id}"] = f"a new development of that matter: {t}"
+                qs[str(f.id)] = choice_q(f"Is this fact a new matter? Fact: {f.content}", opts,
+                                         tag="news_thread")
+            got = self._ask(["Recent news items, oldest first."], qs)
+            if got:
+                verdict = {f.id: str(got[str(f.id)].answer) for f in cands}
+        out: list[int] = []
+        for f in cands:
+            v = verdict.get(f.id, "new")
+            if v.startswith("same_"):
+                continue  # already news
+            thread = None
+            if v.startswith("follow_"):
+                root = next((e for e in recent if e.id == int(v[7:])), None)
+                thread = self.thread_of(root) if root else None
             place = origin or self.here() or self.eng.scene.location
+            parts = sorted({k.character for k in f.knowers if k.character not in self.collectives})
             ev = self._log(nw.WORLD_NEWS, f.game_time,
-                           {"fact_id": fid, "origin": place, "notability": f.notability,
-                            "text": f.content},
+                           {"fact_id": f.id, "origin": place, "notability": f.notability,
+                            "text": f.content, "thread": thread, "participants": parts,
+                            "unresolved": True},
                            place=place if place in self.map.places else None,
                            cause=f.source_event_id, notability=f.notability)
             out.append(ev.id)
         return out
+
+    # -- threads and the chronicle (hooks for open-threads and a chronicle later) ----------------
+    @staticmethod
+    def thread_of(ne: Event) -> int:
+        return ne.payload.get("thread") or ne.id
+
+    def resolve_thread(self, thread: int, reason: str) -> Event:
+        """Mark a thread of events closed (nothing closes threads by itself yet)."""
+        return self._log(nw.THREAD_RESOLVED, self.now, {"thread": thread, "reason": reason},
+                         cause=thread)
+
+    def open_threads(self, character: str | None = None) -> list[dict[str, Any]]:
+        """Unresolved threads, newest development last: [{thread, items, participants, notability,
+        text}]; with `character`, only those they take part in."""
+        closed = {e.payload["thread"] for e in self.eng.log.active([nw.THREAD_RESOLVED])}
+        by: dict[int, list[Event]] = {}
+        for ne in self.news_events():
+            by.setdefault(self.thread_of(ne), []).append(ne)
+        out = []
+        for t, items in by.items():
+            if t in closed:
+                continue
+            ps = sorted({p for i in items for p in i.payload.get("participants", [])})
+            if character is not None and character not in ps:
+                continue
+            out.append({"thread": t, "items": [i.id for i in items], "participants": ps,
+                        "notability": max(i.payload["notability"] for i in items),
+                        "text": items[0].payload["text"]})
+        return out
+
+    def chronicle(self, since: int = 0) -> list[dict[str, Any]]:
+        """Noteworthy events in order: thread, participants, notability, unresolved."""
+        closed = {e.payload["thread"] for e in self.eng.log.active([nw.THREAD_RESOLVED])}
+        return [{"id": e.id, "at": e.game_time, "text": e.payload["text"],
+                 "thread": self.thread_of(e), "participants": e.payload.get("participants", []),
+                 "notability": e.payload["notability"],
+                 "unresolved": self.thread_of(e) not in closed}
+                for e in self.news_events() if e.id > since]
 
     def _deliveries(self, news_id: int, col: str) -> list[Event]:
         return [e for e in self.eng.log.active([nw.NEWS_DELIVERY])
@@ -617,7 +687,9 @@ class World:
         last = self._last_tick()
         if to <= last:
             return None
-        size = LONG_STEP_MINUTES if to - last > LONG_SPAN else STEP_MINUTES
+        span = to - last
+        size = (SKIP_STEP_MINUTES if span > SKIP_SPAN
+                else LONG_STEP_MINUTES if span > LONG_SPAN else STEP_MINUTES)
         t, stop = last, None
         while t < to:
             end = min(t + size, to)
@@ -702,6 +774,47 @@ class World:
         self.refresh_place()
         return stop
 
+    def skip_days(self, days: int) -> dict[str, Any]:
+        """Skip `days` of in-world time (the cheap off-screen sim for the known NPCs runs in
+        half-day steps), then write, for every agent who did something meanwhile, a derived
+        period summary: a record in the agent's own memory, linked to the updates it came from.
+        Interruptible like a wait. Years are a hook: see `skip_years`."""
+        start = self.now
+        stop = self.wait(days * clk.DAY)
+        summaries = self.summarise_period(start, self.now)
+        return {"from": start, "to": self.now, "stopped": stop, "summaries": summaries}
+
+    def skip_years(self, years: int) -> None:
+        """Hook, not built. Would run `skip_days` in season-sized steps, then age the cast,
+        decay collective moods and let the canon pull re-judge scheduled events; the same
+        period-summary records would be written per agent."""
+        raise NotImplementedError("skipping years is a documented hook (task 17)")
+
+    def summarise_period(self, start: int, end: int) -> list[Event]:
+        """One derived PERIOD_SUMMARY per agent with updates in [start, end]: code-built from the
+        agent's updates (no model call), stored as a fact the agent knows (they lived it), with
+        `cause_id` = the first update so a rollback removes it."""
+        out: list[Event] = []
+        for c in self._eligible(end) + [a for a in self.eng.agents.agents() if a != PLAYER]:
+            ups = [u for u in self.updates(c) if start < u.game_time <= end]
+            if not ups or any(e.payload["character"] == c and e.payload["from"] == start
+                              for e in self.eng.log.active([nw.PERIOD_SUMMARY])):
+                continue
+            seen: dict[str, int] = {}
+            for u in ups:
+                seen[u.payload["phrase"]] = seen.get(u.payload["phrase"], 0) + 1
+            what = "; ".join(f"{p}" + (f" ({n} times)" if n > 1 else "") for p, n in seen.items())
+            text = (f"{self._name(c)}, from day {clk.parts(start)['day']} to day "
+                    f"{clk.parts(end)['day']}: {what}.")
+            ev = self._log(nw.PERIOD_SUMMARY, end, {
+                "character": c, "from": start, "to": end, "text": text,
+                "sources": [u.id for u in ups]}, cause=ups[0].id, participants=[c])
+            self.eng.facts.add_campaign(text, source_event_id=ev.id, game_time=end,
+                                        location=self.eng.scene.location, notability=0.3,
+                                        knowers=[(c, WITNESSED, None)])
+            out.append(ev)
+        return out
+
     def interpret(self, text: str) -> Plan:
         """One batched judgment: duration, a trip, a wait."""
         here = self.here()
@@ -729,7 +842,11 @@ class World:
             mins = (clk.minutes_of(plan.duration) if plan.wait == clk.WAIT_FOR
                     else clk.until_hour(self.now, clk.WAIT_TARGETS[plan.wait][1]))
             before = self.now
-            wt.interrupted_by = self.wait(mins)
+            if mins >= 2 * clk.DAY:  # days pass: the cheap sim for the known NPCs and summaries
+                sk = self.skip_days(mins // clk.DAY)
+                wt.interrupted_by = sk["stopped"]
+            else:
+                wt.interrupted_by = self.wait(mins)
             wt.waited = self.now - before
         else:
             self.refresh_place()
@@ -794,6 +911,9 @@ class World:
                            "what": e.payload["phrase"], "kind": e.payload["kind"],
                            "place": self.map.name(e.payload["place"]), "at": e.game_time,
                            "arrives": e.payload["arrives"]} for e in sel(nw.OFFSCREEN_UPDATE)],
+            "summaries": [{"character": names(e.payload["character"]), "text": e.payload["text"]}
+                          for e in sel(nw.PERIOD_SUMMARY)],
+            "threads": self.open_threads(),
             "arrivals": [{"text": e.payload["text"], "at": e.game_time}
                          for e in sel(nw.WORLD_ARRIVAL)],
             "canon": [{"id": e.payload["canon_id"], "outcome": e.payload["outcome"],
