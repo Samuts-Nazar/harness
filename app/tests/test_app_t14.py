@@ -116,7 +116,8 @@ def test_debug_knowledge_lists_each_character_with_sources():
     assert set(k) == {"player", "horst", "elza"}
     items = k["horst"]["items"]
     assert any(i["kind"] == "name" and i["how"] == "acquainted" for i in items)
-    assert any(i["kind"] == "fact" and i["how"] == "told" and i["when_text"] for i in items)
+    assert any(i["kind"] == "fact" and i["how"] == "told" for i in items)
+    assert any(i["kind"] == "seen" and i["when_text"] for i in items)
     assert not any(i["kind"] == "name" and "Рагнар" in i["text"] for i in items)
 
 

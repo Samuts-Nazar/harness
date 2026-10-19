@@ -150,7 +150,7 @@ def test_knowledge_report_lists_what_each_character_knows_and_from_where():
     kinds = {r["kind"] for r in rep}
     assert {"fact", "name", "seen", "background"} <= kinds
     fact_row = next(r for r in rep if r["text"] == "The mill by the dam is old.")
-    assert fact_row["how"] == "told" and fact_row["when_text"] == "day 1, 00:00"
+    assert fact_row["how"] == "told" and fact_row["when_text"] is None  # pre-campaign: no "when"
     name_row = next(r for r in rep if r["kind"] == "name")
     assert "Горст" in name_row["text"] and name_row["how"] == "acquainted"
     heard = next(r for r in eng.knowledge_report("horst") if r["kind"] == "seen"
