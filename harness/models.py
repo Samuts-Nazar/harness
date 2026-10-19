@@ -20,6 +20,8 @@ SCRIPTED = "scripted"  # code-side marker event (setup, scripted changes)
 NOTICED = "noticed"  # salience verdict of one observer on one observation
 NOTICE_SHOWN = "notice_shown"  # a noteworthy observation was surfaced in the NPC's context
 ATTITUDE = "attitude"
+NAME_LEARNED = "name_learned"  # a character learned another's name (through a channel)
+CORRECTION = "correction"  # the player's note on a model error, kept per campaign
 
 # Live-state categories and operations
 INJURY, CLOTHING, INVENTORY, EQUIPMENT, INTERNAL = (
@@ -76,6 +78,9 @@ class CharacterProfile:
     id: str
     name: str
     description: str = ""
+    appearance: str = ""  # what an observer sees of them (short, in the output language). A
+    # character with an appearance is referred to by it until the viewer has learned the name;
+    # one without is known by name to everyone.
 
 
 @dataclass
