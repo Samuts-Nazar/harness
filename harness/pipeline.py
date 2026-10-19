@@ -25,6 +25,7 @@ from .glossary import Glossary
 from .judge import (
     Judge, JudgeError, JudgmentLog, LoggingJudge, choice_q, default_fake_judge, score_q, yes_no_q,
 )
+from . import knowledge
 from .memory import CharacterMemory, MemoryDeriver, MemoryWriter
 from .names import INTRODUCED, OVERHEARD, PLAYER_SAID, TOLD as NAME_TOLD, Names
 from .player_input import (
@@ -32,6 +33,7 @@ from .player_input import (
 )
 from .models import (
     ACTION as ACTION_EVENT,
+    CORRECTION,
     INTERRUPTION,
     NARRATION,
     PLAYER,
@@ -76,6 +78,22 @@ _OBSERVED = {  # how an observer sees a newly observable element
     "equipment": "{who} has {item} in hand or at the belt",
     "internal": "{who} visibly shows {item}",
 }
+
+
+@dataclass
+class Challenge:
+    """The answer to "how does he know that?". verdict: "channel" (the character could know it:
+    `public` says how in a few words, `detail` is the full event), "no_channel" (the line was
+    regenerated if it was the last one: `regenerated`, `text`, `new_event`) or "unavailable" (no
+    judge answered; nothing changed)."""
+    verdict: str
+    npc: str = ""
+    event: int = 0
+    public: str = ""
+    detail: str = ""
+    regenerated: bool = False
+    text: str = ""
+    new_event: int | None = None
 
 
 class InterruptionError(RuntimeError):
@@ -1146,6 +1164,102 @@ class Engine:
             pass  # keep the cut; simply record no facts from the kept part
         self.refresh_memory()
         return kept
+
+    # -- "how does he know that?" (model-error flow for knowledge leaks) -------------------------
+    def knowledge_report(self, character: str) -> list[dict[str, Any]]:
+        """What `character` knows and from where (debug view)."""
+        return knowledge.report(self, character)
+
+    def challenge_line(self, event_id: int, explanation: str = "") -> "Challenge":
+        """The player marks an NPC line as impossible ("he could not know this"). The speaker's
+        channels are checked for the claim (known facts with their sources, names, what the
+        character heard, the character's own background).
+
+        - No channel: the player's note is stored for the campaign and fed to later generations;
+          if this is the last NPC line it is regenerated with the note (the player's turn stays).
+        - A channel exists: nothing changes; the answer says what kind of channel and roughly when
+          (`public`), with the full event in `detail` (shown behind a spoiler tap)."""
+        ev = self.log.get(event_id)
+        if ev.type != UTTERANCE or ev.payload.get("speaker") == PLAYER or not self.log.is_active(
+                event_id):
+            raise ValueError("only a line an NPC said can be challenged")
+        npc, text = ev.payload["speaker"], ev.payload["text"]
+        explanation = explanation.strip()
+        # 1. a name the speaker had no channel to (certain: no judge needed)
+        known = frozenset(self.names.known_map(npc, before=event_id))
+        before_ev = [e for e in self.log.recent_dialogue(witnessed_by=npc, limit=10)
+                     if e.id < event_id]
+        heard = "\n".join(e.payload["text"] for e in before_ev)
+        leaked = self.names.unknown_mentioned(npc, text, heard, known)
+        item: knowledge.Item | None = None
+        why = ""
+        if leaked:
+            why = "name: " + ", ".join(self.names.real(c) for c in leaked)
+        else:
+            items = knowledge.items_for(self, npc, before=event_id)
+            try:
+                item = self._find_channel(npc, text, explanation, items)
+            except JudgeError as e:
+                self._note("challenge_unavailable", error=str(e))
+                return Challenge("unavailable", npc=npc, event=event_id)
+            why = "" if item else "no fact, name, heard line or background explains it"
+        if item is not None:
+            self._note("challenge_channel", npc=npc, event=event_id, channel=item.text,
+                       how=item.how)
+            return Challenge("channel", npc=npc, event=event_id,
+                             public=knowledge.public_channel(self, item),
+                             detail=knowledge.detail(self, item))
+        # 2. no channel: store the note, regenerate if this is the last NPC line
+        self._event(CORRECTION, [npc], {"npc": npc, "line": text, "explanation": explanation,
+                                        "line_event": event_id, "reason": why},
+                    witnesses=[], notability=0.1)
+        res = Challenge("no_channel", npc=npc, event=event_id, detail=why)
+        last = self.log.last_npc_utterance()
+        if last is None or last.id != event_id:
+            self._note("challenge_not_regenerated", event=event_id,
+                       reason="not the last NPC line")
+            return res
+        self._regenerate(ev, res)
+        return res
+
+    def _find_channel(self, npc: str, text: str, explanation: str,
+                      items: list["knowledge.Item"]) -> "knowledge.Item | None":
+        """Which of the character's channels explains the claim, if any (one choice judgment)."""
+        if not items:
+            return None
+        options = {it.key: f"[{it.kind}] {it.text}"[:220] for it in items}
+        options["none"] = "no item explains how the speaker could know this"
+        prof = self.profiles.get(npc)
+        state = [f"Speaker: {self.names.real(npc)}" + (f". {prof.description}" if prof else ""),
+                 f"Line: {text}",
+                 "The player says the speaker could not have known: "
+                 + (explanation or "something in this line")]
+        j = self.judge.ask(state, {"c": choice_q(
+            "Which one item is the channel through which the speaker learned what the player "
+            "says they could not know? Answer none if no item explains it.", options,
+            tag="knowledge_channel")})["c"]
+        by_key = {it.key: it for it in items}
+        return by_key.get(str(j.answer))
+
+    def _regenerate(self, old: Event, res: "Challenge") -> None:
+        """Replace the NPC line `old` by a new one generated with the correction in context. If
+        generating fails the old text is put back (the log is append-only, so as a new event)."""
+        npc = old.payload["speaker"]
+        self.log.rollback(old.id, "model error: no channel")
+        try:
+            text = self._npc_line(self._prep_npc(npc))
+        except Exception:
+            self._utterance(npc, old.payload["text"], replaces=old.id, restored=True)
+            self.refresh_memory()
+            raise
+        new = self._utterance(npc, text, replaces=old.id, regenerated=True)
+        self._learn_from_speech(new, npc, text)
+        try:
+            self._commit(self._extract([(npc, text)]), {npc: new})
+        except ExtractionRejected:
+            self._note("regenerated_line_not_extracted", event=new.id)
+        self.refresh_memory()
+        res.regenerated, res.text, res.new_event = True, text, new.id
 
     # -- off-screen -----------------------------------------------------
     def advance_offscreen(self, minutes: int) -> None:
