@@ -17,9 +17,12 @@ Status: closed decisions only. Anything not listed here is undecided. Do not des
 
 ## Model and spending policy
 
-- Paid API calls (OpenRouter) use cheap models only. No exceptions. Allowed: Jev (`typesafe/jev-1.13`, `typesafe/jev-1.14`), `anthropic/claude-haiku-5.5`, `google/gemini-3.1-flash-lite`, `deepseek/deepseek-v4-flash`, `qwen/qwen3.5-9b`, and models of similar or lower price. Sonnet-, Opus-, GPT-5.x-full-class and similar models are never called through the API.
-- In development and experiments, any strong-model judging or grading is done by the Claude Code agent itself (reading outputs and judging them in the session), never by a strong model over the API.
-- Tests and demos run on a fake provider by default. Network calls happen only when explicitly requested (a `--live` flag).
+- Paid API calls use cheap models only: input price at most 0.60 USD and output at most 2.50 USD per million tokens. Flagship-class models are never called over the API.
+- No Anthropic models in the engine.
+- The model for each role is chosen by a bake-off on our own tasks, from the live OpenRouter catalog, never from memory. The bake-off is re-run when notable new models appear.
+- Free (`:free`) models may be tested and used, but never as the only option for a role, because they disappear.
+- Strong-model judging in development is done by the Claude Code agent itself, never over the API.
+- Tests and demos use the fake provider by default; network only with `--live`.
 
 ## Core architecture
 

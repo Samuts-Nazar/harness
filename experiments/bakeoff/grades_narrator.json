@@ -1,0 +1,21 @@
+{
+ "_doc": "Blind grades by the Claude Code agent. uk: Ukrainian quality 0-5 (0 = not Ukrainian/unusable); pv: 1 = narrator decides the player character's feelings/actions/words beyond the player's input; cf: 1 = canon or scene-consistency error; speech: 1 = NPC speech in the output.",
+ "narrator/n01/A": {"uk": 0, "pv": 0, "cf": 0}, "narrator/n01/B": {"uk": 3, "pv": 0, "cf": 1}, "narrator/n01/C": {"uk": 3, "pv": 0, "cf": 0},
+ "narrator/n01/D": {"uk": 3, "pv": 0, "cf": 0}, "narrator/n01/E": {"uk": 4, "pv": 0, "cf": 0}, "narrator/n01/F": {"uk": 3, "pv": 0, "cf": 0},
+ "narrator/n02/A": {"uk": 4, "pv": 0, "cf": 0}, "narrator/n02/B": {"uk": 4, "pv": 0, "cf": 0}, "narrator/n02/C": {"uk": 3, "pv": 0, "cf": 1},
+ "narrator/n02/D": {"uk": 3, "pv": 0, "cf": 1}, "narrator/n02/E": {"uk": 2, "pv": 0, "cf": 1}, "narrator/n02/F": {"uk": 1, "pv": 0, "cf": 0},
+ "narrator/n03/A": {"uk": 4, "pv": 0, "cf": 0}, "narrator/n03/B": {"uk": 4, "pv": 0, "cf": 0}, "narrator/n03/C": {"uk": 4, "pv": 0, "cf": 0},
+ "narrator/n03/D": {"uk": 0, "pv": 0, "cf": 0}, "narrator/n03/E": {"uk": 5, "pv": 0, "cf": 0}, "narrator/n03/F": {"uk": 2, "pv": 0, "cf": 1},
+ "narrator/n04/A": {"uk": 4, "pv": 0, "cf": 0}, "narrator/n04/B": {"uk": 4, "pv": 1, "cf": 0}, "narrator/n04/C": {"uk": 4, "pv": 1, "cf": 0},
+ "narrator/n04/D": {"uk": 4, "pv": 0, "cf": 0}, "narrator/n04/E": {"uk": 2, "pv": 0, "cf": 0}, "narrator/n04/F": {"uk": 5, "pv": 0, "cf": 0},
+ "narrator/n05/A": {"uk": 5, "pv": 0, "cf": 0}, "narrator/n05/B": {"uk": 4, "pv": 0, "cf": 0}, "narrator/n05/C": {"uk": 5, "pv": 0, "cf": 0},
+ "narrator/n05/D": {"uk": 3, "pv": 0, "cf": 1}, "narrator/n05/E": {"uk": 3, "pv": 0, "cf": 0}, "narrator/n05/F": {"uk": 3, "pv": 0, "cf": 0},
+ "narrator/n06/A": {"uk": 4, "pv": 0, "cf": 0}, "narrator/n06/B": {"uk": 3, "pv": 0, "cf": 0}, "narrator/n06/C": {"uk": 4, "pv": 1, "cf": 0},
+ "narrator/n06/D": {"uk": 5, "pv": 0, "cf": 0}, "narrator/n06/E": {"uk": 3, "pv": 0, "cf": 0}, "narrator/n06/F": {"uk": 4, "pv": 0, "cf": 0},
+ "narrator/n07/A": {"uk": 3, "pv": 0, "cf": 0}, "narrator/n07/B": {"uk": 3, "pv": 0, "cf": 0}, "narrator/n07/C": {"uk": 5, "pv": 0, "cf": 0},
+ "narrator/n07/D": {"uk": 4, "pv": 0, "cf": 0}, "narrator/n07/E": {"uk": 4, "pv": 1, "cf": 0}, "narrator/n07/F": {"uk": 2, "pv": 0, "cf": 1},
+ "narrator/n08/A": {"uk": 4, "pv": 0, "cf": 0}, "narrator/n08/B": {"uk": 3, "pv": 0, "cf": 0}, "narrator/n08/C": {"uk": 2, "pv": 0, "cf": 0},
+ "narrator/n08/D": {"uk": 2, "pv": 0, "cf": 0}, "narrator/n08/E": {"uk": 3, "pv": 0, "cf": 0}, "narrator/n08/F": {"uk": 5, "pv": 0, "cf": 0},
+ "narrator/n09/A": {"uk": 4, "pv": 0, "cf": 0}, "narrator/n09/B": {"uk": 5, "pv": 0, "cf": 0}, "narrator/n09/C": {"uk": 3, "pv": 0, "cf": 0},
+ "narrator/n09/D": {"uk": 3, "pv": 1, "cf": 0}, "narrator/n09/E": {"uk": 4, "pv": 1, "cf": 0}, "narrator/n09/F": {"uk": 0, "pv": 1, "cf": 0}
+}

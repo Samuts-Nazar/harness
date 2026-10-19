@@ -1,0 +1,180 @@
+[
+ {
+  "id": "n01",
+  "location": "Зала Каер Морхену",
+  "time": "День 3, 19:00",
+  "present": [
+   "player",
+   "vesemir",
+   "lambert"
+  ],
+  "canon": [
+   "Каер Морхен — фортеця Школи Вовка в горах Кедвену.",
+   "Весемір — найстарший відьмак Каер Морхену."
+  ],
+  "campaign": [
+   "Рагнар учора повернувся з полювання в долині."
+  ],
+  "state": [],
+  "recent": [],
+  "player": "Я підходжу до каміна й питаю Весеміра, чи були новини з долини.",
+  "notes": "Speakers: vesemir (lambert optional). No NPC speech in the prose."
+ },
+ {
+  "id": "n02",
+  "location": "Придорожня корчма",
+  "time": "День 5, 20:30",
+  "present": [
+   "player",
+   "hostomyl",
+   "jaskier"
+  ],
+  "canon": [],
+  "campaign": [
+   "Надворі дощ, дорога розмита."
+  ],
+  "state": [],
+  "recent": [],
+  "player": "Я кладу на стіл три орени й прошу кімнату на ніч.",
+  "notes": "Speakers: hostomyl. No speech."
+ },
+ {
+  "id": "n03",
+  "location": "Подвір'я Каер Морхену",
+  "time": "День 4, 10:00",
+  "present": [
+   "player",
+   "eskel"
+  ],
+  "canon": [],
+  "campaign": [],
+  "state": [
+   [
+    "eskel",
+    "equipment",
+    "тренувальний дерев'яний меч",
+    true
+   ]
+  ],
+  "recent": [],
+  "player": "Я викликаю Ескеля на тренувальний поєдинок дерев'яними мечами.",
+  "notes": "Narrator may show Eskel's actions but must not decide the fight's outcome for Ragnar's moves or write Ragnar's thoughts; no speech."
+ },
+ {
+  "id": "n04",
+  "location": "Лісова дорога",
+  "time": "День 6, 06:00",
+  "present": [
+   "player"
+  ],
+  "canon": [],
+  "campaign": [
+   "Рагнар третій день іде до Новіграда."
+  ],
+  "state": [],
+  "recent": [],
+  "player": "Я зупиняюсь і прислухаюсь до лісу.",
+  "notes": "No NPCs present: speakers must be empty. Must not invent that Ragnar hears specific things that are not world facts? (world may supply)."
+ },
+ {
+  "id": "n05",
+  "location": "Корчма «Під сірою мишею»",
+  "time": "День 7, 21:00",
+  "present": [
+   "player",
+   "guard",
+   "merchant"
+  ],
+  "canon": [
+   "Срібло — зброя відьмаків проти чудовиськ."
+  ],
+  "campaign": [
+   "У місті заборонено носити оголену зброю."
+  ],
+  "state": [],
+  "recent": [],
+  "player": "Я мовчки оголюю срібний меч і кладу його на стіл.",
+  "notes": "Guard reacts by action; speakers may include guard; no speech in prose."
+ },
+ {
+  "id": "n06",
+  "location": "Кімната Тріс",
+  "time": "День 8, 15:00",
+  "present": [
+   "player",
+   "triss"
+  ],
+  "canon": [
+   "Тріс Мерігольд — чародійка з Марибору."
+  ],
+  "campaign": [],
+  "state": [
+   [
+    "player",
+    "injury",
+    "глибока рана на передпліччі",
+    true
+   ]
+  ],
+  "recent": [],
+  "player": "Я розповідаю Тріс про рану й показую їй руку.",
+  "notes": "Narrator must not write Ragnar's own words beyond the given; speakers: triss; no speech."
+ },
+ {
+  "id": "n07",
+  "location": "Ринок у містечку",
+  "time": "День 9, 12:00",
+  "present": [
+   "player",
+   "smith",
+   "child"
+  ],
+  "canon": [],
+  "campaign": [],
+  "state": [],
+  "recent": [],
+  "player": "Я питаю коваля, скільки коштує підкувати коня.",
+  "notes": "Speakers: smith (child optional); no speech."
+ },
+ {
+  "id": "n08",
+  "location": "Нічний табір біля дороги",
+  "time": "День 10, 23:00",
+  "present": [
+   "player",
+   "coen",
+   "lambert"
+  ],
+  "canon": [],
+  "campaign": [
+   "Небо чисте, вогнище майже догоріло."
+  ],
+  "state": [],
+  "recent": [],
+  "player": "Я мовчки лягаю спати, залишивши варту Койону.",
+  "notes": "Must not narrate Ragnar's dreams/thoughts as decisions; may have speakers empty or minimal; no speech."
+ },
+ {
+  "id": "n09",
+  "location": "Зала Каер Морхену",
+  "time": "День 11, 18:00",
+  "present": [
+   "player",
+   "lambert",
+   "vesemir"
+  ],
+  "canon": [],
+  "campaign": [
+   "Ламберт уранці насміхався з Рагнара за програний поєдинок."
+  ],
+  "state": [],
+  "recent": [
+   [
+    "lambert",
+    "Ну що, знову програв дерев'яному мечу?"
+   ]
+  ],
+  "player": "Я сварюся з Ламбертом і кажу йому, що він невдячний.",
+  "notes": "Trap: narrator tempted to write Lambert's retort. Must not. Speakers: lambert."
+ }
+]
