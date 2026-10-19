@@ -77,6 +77,7 @@ _OBSERVED = {  # how an observer sees a newly observable element
     "inventory": "{who} is carrying {item}",
     "equipment": "{who} has {item} in hand or at the belt",
     "internal": "{who} visibly shows {item}",
+    "appearance": "{who} has {item}",
 }
 
 
@@ -513,8 +514,10 @@ class Engine:
         scene, and a wrong guess only costs one line."""
         npcs = [c for c in self.scene.present if c != PLAYER]
         low = narration.lower()
-        hit = sorted((low.find(self.ctx.name(c).lower()), c) for c in npcs
-                     if self.ctx.name(c).lower() in low)
+        forms = {c: [self.ctx.name(c).lower(), self.names.label(c).lower()] if self.names.hidden(c)
+                 else [self.ctx.name(c).lower()] for c in npcs}
+        hit = sorted((min(low.find(f) for f in forms[c] if f in low), c) for c in npcs
+                     if any(f in low for f in forms[c]))
         return ([c for _, c in hit] or npcs[:1])[: self.max_speakers]
 
     def _decide_speakers(self, state: list[str], npcs: dict[str, str], narration: str
@@ -548,7 +551,7 @@ class Engine:
 
         if speakers is not None:
             return None, act
-        npcs = {c: self.ctx.name(c) for c in sc.present if c != PLAYER}
+        npcs = {c: self.ctx.describe(c) for c in sc.present if c != PLAYER}
         state = self.ctx.director_state(sc, player_text, narration)
 
         def spk() -> list[str]:

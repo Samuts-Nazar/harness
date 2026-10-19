@@ -377,7 +377,7 @@ class ContextBuilder:
             '{"new_facts": [{"content": str, "source": <one of: ' + keys + '>, '
             '"notability": number 0..1, "location": optional str}],\n'
             ' "state_changes": [{"character": <id>, "category": "injury"|"clothing"|"inventory"|'
-            '"equipment"|"internal", "op": "add"|"remove"|"reveal"|"hide", "item": str, '
+            '"equipment"|"internal"|"appearance", "op": "add"|"remove"|"reveal"|"hide", "item": str, '
             '"observable": true|false, "source": <segment>}]}\n'
             f"Characters: {who}. Do not say who knows or saw a fact; that is decided elsewhere. "
             '"remove" only works on an item the character currently has; "reveal"/"hide" change '

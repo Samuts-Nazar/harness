@@ -24,9 +24,9 @@ NAME_LEARNED = "name_learned"  # a character learned another's name (through a c
 CORRECTION = "correction"  # the player's note on a model error, kept per campaign
 
 # Live-state categories and operations
-INJURY, CLOTHING, INVENTORY, EQUIPMENT, INTERNAL = (
-    "injury", "clothing", "inventory", "equipment", "internal")
-STATE_CATEGORIES = (INJURY, CLOTHING, INVENTORY, EQUIPMENT, INTERNAL)
+INJURY, CLOTHING, INVENTORY, EQUIPMENT, INTERNAL, APPEARANCE = (
+    "injury", "clothing", "inventory", "equipment", "internal", "appearance")
+STATE_CATEGORIES = (INJURY, CLOTHING, INVENTORY, EQUIPMENT, INTERNAL, APPEARANCE)
 OPS = ("add", "remove", "reveal", "hide")
 
 # How a character came to know a fact

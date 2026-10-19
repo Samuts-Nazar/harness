@@ -17,12 +17,14 @@ from .campaigns import Stack
 
 
 NARRATIONS = [  # (text, observable actions); who speaks is decided by the director (fake rules below)
-    ("Дощ барабанить по ґонту, і корчма ніби стискається навколо вогнища. Горст обтрушує мокрий "
-     "плащ і довго, оцінююче дивиться на меч біля твоєї руки.", ["Horst looks at Рагнар's sword"]),
-    ("Ельза нервово м'яє фартух. За сусіднім столом хтось замовкає й прислухається, а вогонь у "
-     "каміні тріскає, кидаючи тіні на стіни.", ["Ельза leans closer to the table"]),
-    ("Горст кладе на стіл важкий шкіряний кошіль. Глухо дзенькає метал, і Ельза різко підводить "
-     "очі, ніби це дзенькання вдарило її.", ["Horst puts a leather purse on the table"]),
+    ("Дощ барабанить по ґонту, і корчма ніби стискається навколо вогнища. Кремезний сивий чоловік "
+     "обтрушує мокрий плащ і довго, оцінююче дивиться на меч біля твоєї руки.",
+     ["Горст looks at Рагнар's sword"]),
+    ("Жінка в темній хустці нервово м'яє фартух. За сусіднім столом хтось замовкає й прислухається, "
+     "а вогонь у каміні тріскає, кидаючи тіні на стіни.", ["Ельза leans closer to the table"]),
+    ("Кремезний сивий чоловік кладе на стіл важкий шкіряний кошіль. Глухо дзенькає метал, і жінка "
+     "в темній хустці різко підводить очі, ніби це дзенькання вдарило її.",
+     ["Горст puts a leather purse on the table"]),
 ]
 LINES = {
     "Горст": [
@@ -39,6 +41,12 @@ LINES = {
         "Тридцять, а як же. Тільки гроші нічого не вирішують, бо чудовисько на млині не питає, "
         "скільки йому заплатили за твою голову, відьмаку.",
     ],
+}
+LOOKS = {  # what the offline stack "reads" from a character file when there is one
+    "label": "юнак із золотими очима та мечем",
+    "observable": [{"category": "appearance", "item": "golden eyes"},
+                   {"category": "appearance", "item": "black claws"}],
+    "hidden": [{"category": "appearance", "item": "scars across the back"}],
 }
 FACTS = [
     "Горст offers the witcher fifty orens and as much again for proof",
@@ -80,6 +88,8 @@ class FakeUk:
             if "translate" in sys:
                 body = json.loads(messages[1]["content"])
                 return json.dumps([TRANSLATIONS.get(t, t) for t in body], ensure_ascii=False)
+            if "character sheet" in sys:  # the look of the player character (task 14)
+                return json.dumps(LOOKS, ensure_ascii=False)
             if "fact extractor" in sys:
                 i = self.n["extractor"]
                 self.n["extractor"] += 1
@@ -110,8 +120,10 @@ TRANSLATIONS = {
 }
 
 
-def _mentioned(state, name_text):  # type: ignore[no-untyped-def]
-    return name_text in " ".join(state).split("Narration:")[-1]
+def _forms(option: str) -> list[str]:
+    """The ways a narration may refer to an option "Name (what is seen)": either part."""
+    name, _, rest = option.partition(" (")
+    return [name.lower(), rest.rstrip(")").lower()] if rest else [name.lower()]
 
 
 def fake_judge() -> FakeJudge:
@@ -119,15 +131,17 @@ def fake_judge() -> FakeJudge:
     characters the narration names (the first named speaks first)."""
     def first(q, state):  # type: ignore[no-untyped-def]
         text = " ".join(state).split("Narration:")[-1]
-        hits = sorted((text.find(n), c) for c, n in q.options.items() if c != "nobody"
-                      and n in text)
+        low = text.lower()
+        hits = sorted((low.find(f), c) for c, n in q.options.items() if c != "nobody"
+                      for f in _forms(n) if f and f in low)
         return hits[0][1] if hits else "nobody"
 
     return FakeJudge({
         "attitude_direction": "neutral", "relationship_magnitude": 0,
         "director_first": first,
-        "director_also": lambda q, st: q.text.split(" also ")[0].removeprefix("Would ")
-        in " ".join(st).split("Narration:")[-1],
+        "director_also": lambda q, st: any(
+            f in " ".join(st).split("Narration:")[-1].lower()
+            for f in _forms(q.text.split(" also ")[0].removeprefix("Would "))),
     })
 
 

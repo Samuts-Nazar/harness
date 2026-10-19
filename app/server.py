@@ -10,12 +10,13 @@ import json
 from pathlib import Path
 
 from starlette.applications import Starlette
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, StreamingResponse
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from .game import Busy, Game
+from .game import Busy, Game, explain
 
 STATIC = Path(__file__).parent / "static"
 KEEPALIVE = 15.0
@@ -59,6 +60,28 @@ def create_app(game: Game) -> Starlette:
     async def debug(_: Request) -> JSONResponse:
         return JSONResponse(game.debug)
 
+    async def challenge(request: Request) -> JSONResponse:
+        body = await request.json()
+        try:
+            event = int(body["event"])
+        except (KeyError, TypeError, ValueError):
+            return JSONResponse({"error": "Не вказано репліку."}, status_code=400)
+        try:
+            out = await run_in_threadpool(game.challenge, event, str(body.get("explanation", "")))
+        except Busy:
+            return JSONResponse({"error": "Хід триває."}, status_code=409)
+        except (ValueError, KeyError):
+            return JSONResponse({"error": "Цю репліку не можна оскаржити."}, status_code=400)
+        except Exception as e:  # noqa: BLE001 - shown to the player, nothing changes
+            return JSONResponse({"error": explain(e)}, status_code=502)
+        return JSONResponse(out)
+
+    async def knowledge(_: Request) -> JSONResponse:
+        try:
+            return JSONResponse(await run_in_threadpool(game.knowledge))
+        except Busy:
+            return JSONResponse({"error": "Хід триває."}, status_code=409)
+
     async def events(request: Request) -> StreamingResponse:
         after = int(request.headers.get("last-event-id") or request.query_params.get("after") or 0)
         until_idle = request.query_params.get("until_idle") == "1"  # curl/tests: end when quiet
@@ -95,6 +118,8 @@ def create_app(game: Game) -> Starlette:
         Route("/api/campaign/new", new_campaign, methods=["POST"]),
         Route("/api/panel", panel),
         Route("/api/debug", debug),
+        Route("/api/challenge", challenge, methods=["POST"]),
+        Route("/api/knowledge", knowledge),
         Route("/api/events", events),
         Mount("/static", StaticFiles(directory=STATIC), name="static"),
     ])
