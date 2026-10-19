@@ -15,3 +15,4 @@ experiments/results/
 experiments/*/results/
 campaigns/
 campaigns/
+.claude/worktrees/
