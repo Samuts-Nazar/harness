@@ -20,7 +20,7 @@ from typing import Any
 
 from ..policy import Spend
 from ..providers import OpenRouterProvider, Provider
-from . import chunk, extract
+from . import chunk, extract, extract2
 from .store import add_record, create_store
 from .vocab import ATTITUDES, CHANNELS, EKINDS, PARTS, REACTIONS
 
@@ -75,12 +75,16 @@ class Ingestor:
     def __init__(self, provider: Provider, model: str, source: str | Path, out_db: str | Path,
                  *, raw_dir: str | Path | None = None, spend: TokenSpend | None = None,
                  first: int = BOOK_FIRST, last: int = BOOK_LAST,
-                 chapters: list[tuple[int, str]] | None = None, log=print) -> None:
+                 chapters: list[tuple[int, str]] | None = None, log=print, replay: bool = False,
+                 v2: bool = False) -> None:
         self.provider, self.model, self.source = provider, model, Path(source)
         self.out_db, self.raw_dir = out_db, Path(raw_dir) if raw_dir else None
         self.spend = spend or TokenSpend()
         self.first, self.last, self.chapters = first, last, chapters or CHAPTERS
         self.log = log
+        self.v2 = v2          # scene-timeline pass supplies time and place (extract2)
+        self.scenes: list[dict[str, Any]] = []
+        self.replay = replay  # re-use the saved raw replies in raw_dir instead of calling the model
         self.stats: dict[str, Any] = {"format_failures": 0, "dropped": [], "calls": 0, "window_failures": 0}
         self.entities: dict[str, dict[str, Any]] = {}
 
@@ -89,6 +93,11 @@ class Ingestor:
         if self.raw_dir:
             self.raw_dir.mkdir(parents=True, exist_ok=True)
             (self.raw_dir / f"{name}.json").write_text(json.dumps(obj, ensure_ascii=False, indent=1))
+
+    def _load_raw(self, name: str) -> Any | None:
+        if self.replay and self.raw_dir and (self.raw_dir / f"{name}.json").exists():
+            return json.loads((self.raw_dir / f"{name}.json").read_text())
+        return None
 
     def _drop(self, what: str, why: str, **kw: Any) -> None:
         self.stats["dropped"].append({"what": what, "why": why, **kw})
@@ -111,12 +120,50 @@ class Ingestor:
 
     def entity_pass(self, paras: list[chunk.Para]) -> None:
         text = "\n".join(f"[L{p.line}] {p.text}" for p in paras)
-        msgs = extract.entity_prompt(text)
-        obj, fails = extract.ask_json(self.provider, self.model, msgs)
-        self.stats["format_failures"] += fails
-        self._save_raw("entities", obj)
+        obj = self._load_raw("entities")
+        if obj is None:
+            obj, fails = extract.ask_json(self.provider, self.model, extract.entity_prompt(text))
+            self.stats["format_failures"] += fails
+            self._save_raw("entities", obj)
         for e in obj.get("entities") or []:
             self._take_entity(e, "entity_pass")
+
+    def timeline_pass(self, paras: list[chunk.Para]) -> None:
+        text = "\n".join(f"[L{p.line}] {p.text}" for p in paras)
+        obj = self._load_raw("timeline")
+        if obj is None:
+            obj, fails = extract.ask_json(self.provider, self.model, extract2.timeline_prompt(text))
+            self.stats["format_failures"] += fails
+            self._save_raw("timeline", obj)
+        self.scenes = [s for s in obj.get("scenes") or [] if isinstance(s, dict)
+                       and isinstance(s.get("from_line"), int) and isinstance(s.get("to_line"), int)]
+
+    def _scene_at(self, line: int) -> dict[str, Any] | None:
+        for s in self.scenes:
+            if s["from_line"] <= line <= s["to_line"]:
+                return s
+        return None
+
+    def _place_id(self, name: Any) -> str | None:
+        if not isinstance(name, str) or not name.strip():
+            return None
+        n = name.strip().lower()
+        for eid, e in self.entities.items():
+            if e["type"] == "place" and n in [str(e["name"]).lower(), *[str(a).lower() for a in e.get("aliases") or []]]:
+                return eid
+        return None
+
+    def _apply_scene(self, ev: dict[str, Any], lines: set[int]) -> None:
+        first = (ev["_lines_ok"] or [min(lines)])[0]
+        sc = self._scene_at(first)
+        past = ev.get("past")
+        if isinstance(past, (int, float)) and past >= 0:
+            ev["time"] = {"kind": "before", "years_before": past}
+        elif sc and isinstance(sc.get("day"), int):
+            ev["time"] = {"kind": "day", "day": sc["day"], "part": sc.get("part")}
+        else:
+            ev["time"] = {"kind": "unknown"}
+        ev["place"] = self._place_id(sc.get("place")) if sc else None
 
     # ---- events ---------------------------------------------------------------------------
     def event_pass(self, windows: list[list[chunk.Passage]]) -> list[dict[str, Any]]:
@@ -125,16 +172,24 @@ class Ingestor:
         for wi, win in enumerate(windows):
             text = chunk.tagged(win)
             lines = {p.line for ps in win for p in ps.paras}
-            msgs = extract.event_prompt(text, list(self.entities.values()), prior[-14:])
             t0 = time.time()
-            try:
-                obj, fails = extract.ask_json(self.provider, self.model, msgs)
-            except extract.JsonFailure as e:
-                self.stats["window_failures"] += 1
-                self._drop("window", "no valid json", window=wi, err=str(e)[:160])
-                continue
-            self.stats["format_failures"] += fails
-            self._save_raw(f"window_{wi:02d}", obj)
+            obj = self._load_raw(f"window_{wi:02d}")
+            if obj is None:
+                if self.v2:
+                    sc_txt = "\n".join(f"L{x['from_line']}-L{x['to_line']}: day {x.get('day')}, {x.get('part')}, "
+                                       f"place {x.get('place')}" for x in self.scenes
+                                       if x["to_line"] >= min(lines) and x["from_line"] <= max(lines))
+                    msgs = extract2.event_prompt2(text, list(self.entities.values()), prior[-14:], sc_txt)
+                else:
+                    msgs = extract.event_prompt(text, list(self.entities.values()), prior[-14:])
+                try:
+                    obj, fails = extract.ask_json(self.provider, self.model, msgs)
+                except extract.JsonFailure as e:
+                    self.stats["window_failures"] += 1
+                    self._drop("window", "no valid json", window=wi, err=str(e)[:160])
+                    continue
+                self.stats["format_failures"] += fails
+                self._save_raw(f"window_{wi:02d}", obj)
             for e in obj.get("new_entities") or []:
                 self._take_entity(e, f"window {wi}")
             n_new = 0
@@ -146,6 +201,8 @@ class Ingestor:
                 ev["_lines_ok"] = sorted(int(x) for x in (ev.get("lines") or [])
                                          if isinstance(x, int) and x in lines)
                 ev["_win_lines"] = (min(lines), max(lines))
+                if self.v2:
+                    self._apply_scene(ev, lines)
                 out.append(ev)
                 n_new += 1
                 tag = f"e{len(out)} [L{(ev['_lines_ok'] or [min(lines)])[0]}]"
@@ -192,6 +249,23 @@ class Ingestor:
                                 (rid, eid, g, "member_of", None, None))
         # events
         last_t = 0
+        # story time at a text line, from events that carry a story day: a person told about a past
+        # event learns it when the telling happens, not when the event happened
+        day_marks = sorted((min(e["_lines_ok"]), story_minutes(e.get("time"), 0)[0]) for e in events
+                           if e["_lines_ok"] and isinstance(e.get("time"), dict) and e["time"].get("kind") == "day"
+                           and story_minutes(e.get("time"), 0)[1] != "unknown")
+
+        def time_at_line(ln: int | None, default: int) -> int:
+            if ln is None:
+                return default
+            t = default
+            for lmin, tm in day_marks:
+                if lmin <= ln:
+                    t = tm
+                else:
+                    break
+            return t
+
         seen_quotes: set[str] = set()
         norm_arc = chunk.norm(arc_text)
         order = 0
@@ -258,8 +332,14 @@ class Ingestor:
                     self._drop("knower", "bad channel", event=rid, raw=str(k)[:100])
                     continue
                 src = k.get("source") if k.get("source") in self.entities else None
-                lt, lp, _, _ = story_minutes(k.get("when"), t_from) if k.get("when") else (t_from, prec, None, None)
                 ll = k.get("line") if isinstance(k.get("line"), int) else None
+                if k.get("when"):
+                    lt, lp, _, _ = story_minutes(k.get("when"), t_from)
+                elif k["channel"] in ("told", "heard", "hearsay", "read", "inferred") and ev["_lines_ok"]:
+                    lt = max(t_from, time_at_line(ll or ev["_lines_ok"][0], t_from))
+                    lp = "day"
+                else:
+                    lt, lp = t_from, prec
                 known.add(k["entity"])
                 con.execute("INSERT INTO canon_knower VALUES (?,?,?,?,?,?,?,?)",
                             (rid, k["entity"], k["channel"], src, max(0, lt - t_from) if lt >= t_from else 0,
@@ -288,6 +368,9 @@ class Ingestor:
         self.log(f"{self.model}: {len(paras)} paragraphs, {len(passages)} passages, {len(windows)} windows")
         self.entity_pass(paras)
         self.log(f"  entities: {len(self.entities)}, ${self.spend.total:.4f}")
+        if self.v2:
+            self.timeline_pass(paras)
+            self.log(f"  scenes: {len(self.scenes)}, ${self.spend.total:.4f}")
         events = self.event_pass(windows)
         con = self.load(paras, passages, events, chunk.file_sha256(self.source))
         counts = {t: con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in (
@@ -297,7 +380,7 @@ class Ingestor:
                "calls": self.spend.calls, "tokens_in": self.spend.tokens_in, "tokens_out": self.spend.tokens_out,
                "counts": counts, "format_failures": self.stats["format_failures"],
                "window_failures": self.stats["window_failures"], "dropped": self.stats["dropped"]}
-        self._save_raw("report", rep)
+        self._save_raw("report_replay" if self.replay else "report", rep)
         return rep
 
 
@@ -308,12 +391,14 @@ def main() -> None:
     ap.add_argument("--source", default="data/witcher_books.txt")
     ap.add_argument("--out", required=True)
     ap.add_argument("--raw")
+    ap.add_argument("--v2", action="store_true", help="scene-timeline pass supplies time and place")
+    ap.add_argument("--replay", action="store_true", help="reload from the saved raw replies, no API calls")
     ap.add_argument("--cap", type=float, default=0.2, help="spend cap in USD for this run")
     a = ap.parse_args()
     load_dotenv(os.environ.get("HARNESS_ENV", ".env"))
     spend = TokenSpend(cap=a.cap)
     prov = OpenRouterProvider(spend=spend, timeout=300)
-    rep = Ingestor(prov, a.model, a.source, a.out, raw_dir=a.raw, spend=spend).run()
+    rep = Ingestor(prov, a.model, a.source, a.out, raw_dir=a.raw, spend=spend, replay=a.replay, v2=a.v2).run()
     rep.pop("dropped")
     print(json.dumps(rep, ensure_ascii=False))
 

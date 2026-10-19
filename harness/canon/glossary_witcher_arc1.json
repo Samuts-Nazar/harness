@@ -1,0 +1,559 @@
+{
+ "world": "witcher",
+ "scope": "Останнє бажання: Голос розуму-1, Відьмак (Ukrainian translation by Сергій Легеза)",
+ "note": "Canonical Ukrainian forms as the translation spells them (nominative). `variants` are forms a model is likely to produce instead (Latin transliteration, Russian forms, wrong spellings, English titles): replace them with `canonical`. `cases` lists oblique forms seen in the text, so a matcher does not mangle them. Hand-checked against the text of the arc.",
+ "entries": [
+  {
+   "id": "char:geralt",
+   "canonical": "Ґеральт",
+   "type": "person",
+   "titles": [
+    "відьмак",
+    "рівієць",
+    "Ґеральт із Рівії"
+   ],
+   "variants": [
+    "Geralt",
+    "Gerald",
+    "Геральт",
+    "Гелальт",
+    "Geralt of Rivia",
+    "Ґералт"
+   ],
+   "cases": [
+    "Ґеральта",
+    "Ґеральту",
+    "Ґеральтом",
+    "Ґеральте"
+   ]
+  },
+  {
+   "id": "char:velerad",
+   "canonical": "Велерад",
+   "type": "person",
+   "titles": [
+    "бургомістр Визіма"
+   ],
+   "variants": [
+    "Velerad",
+    "Велераду",
+    "Верелад",
+    "Велерат"
+   ],
+   "cases": [
+    "Велерада",
+    "Велераду",
+    "Велерадом",
+    "Велераде"
+   ]
+  },
+  {
+   "id": "char:foltest",
+   "canonical": "Фольтест",
+   "type": "person",
+   "titles": [
+    "король",
+    "володар Темерії, Понтару й Магакаму"
+   ],
+   "variants": [
+    "Foltest",
+    "Фолтест",
+    "Фольтеста"
+   ],
+   "cases": [
+    "Фольтеста",
+    "Фольтесту",
+    "Фольтестом",
+    "Фольтесте"
+   ]
+  },
+  {
+   "id": "char:ostrit",
+   "canonical": "Остріт",
+   "type": "person",
+   "titles": [
+    "вельможа"
+   ],
+   "variants": [
+    "Ostrit",
+    "Острит",
+    "Остритт"
+   ],
+   "cases": [
+    "Остріта",
+    "Остріту",
+    "Остріте"
+   ]
+  },
+  {
+   "id": "char:segelin",
+   "canonical": "Сеґелін",
+   "type": "person",
+   "titles": [
+    "бородань"
+   ],
+   "variants": [
+    "Segelin",
+    "Сегелін",
+    "Сегелин"
+   ],
+   "cases": [
+    "Сеґеліна",
+    "Сеґеліну",
+    "Сеґеліне",
+    "Сеґеліном"
+   ]
+  },
+  {
+   "id": "char:adda",
+   "canonical": "Адда",
+   "type": "person",
+   "titles": [
+    "королівська сестра"
+   ],
+   "variants": [
+    "Adda",
+    "Ада"
+   ],
+   "cases": [
+    "Адди",
+    "Адді",
+    "Аддою",
+    "Адду"
+   ]
+  },
+  {
+   "id": "char:medell",
+   "canonical": "Меделл",
+   "type": "person",
+   "titles": [
+    "старий король"
+   ],
+   "variants": [
+    "Medell",
+    "Меддел"
+   ],
+   "cases": [
+    "Меделла"
+   ]
+  },
+  {
+   "id": "char:vizimir",
+   "canonical": "Визімір",
+   "type": "person",
+   "titles": [
+    "король Новіграда"
+   ],
+   "variants": [
+    "Vizimir",
+    "Визимир",
+    "Візімір"
+   ],
+   "cases": [
+    "Визіміра",
+    "Визіміром"
+   ]
+  },
+  {
+   "id": "char:dalka",
+   "canonical": "Далька",
+   "type": "person",
+   "titles": [
+    "дочка Визіміра"
+   ],
+   "variants": [
+    "Dalka",
+    "Дальку"
+   ],
+   "cases": [
+    "Дальку",
+    "Дальки"
+   ]
+  },
+  {
+   "id": "char:zhmutyk",
+   "canonical": "Жмутик",
+   "type": "person",
+   "titles": [
+    "стражник"
+   ],
+   "variants": [
+    "Zhmutyk",
+    "Жмутік",
+    "Жмутек"
+   ],
+   "cases": [
+    "Жмутику"
+   ]
+  },
+  {
+   "id": "coll:veduny",
+   "canonical": "Відуни",
+   "type": "collective",
+   "titles": [
+    "чаклуни",
+    "маги"
+   ],
+   "variants": [
+    "Vedun",
+    "Wise Ones",
+    "Відунів",
+    "Ведуни"
+   ],
+   "cases": [
+    "Відунів",
+    "Відунам",
+    "Відунами"
+   ]
+  },
+  {
+   "id": "creature:stryga",
+   "canonical": "стриґа",
+   "type": "creature",
+   "titles": [],
+   "variants": [
+    "strzyga",
+    "striga",
+    "стрига",
+    "стріга",
+    "стригa"
+   ],
+   "cases": [
+    "стриґи",
+    "стриґу",
+    "стриґою",
+    "стриґо"
+   ]
+  },
+  {
+   "id": "char:princess",
+   "canonical": "принцеса",
+   "type": "person",
+   "titles": [
+    "королівська донька"
+   ],
+   "variants": [
+    "princess",
+    "Princess"
+   ],
+   "cases": [
+    "принцеси",
+    "принцесу",
+    "принцесі",
+    "принцесою"
+   ]
+  },
+  {
+   "id": "place:vizim",
+   "canonical": "Визім",
+   "type": "place",
+   "titles": [],
+   "variants": [
+    "Vizima",
+    "Wyzim",
+    "Візім",
+    "Визима",
+    "Візима",
+    "Визим"
+   ],
+   "cases": [
+    "Визіма",
+    "Визімі",
+    "Визімом"
+   ]
+  },
+  {
+   "id": "place:temeria",
+   "canonical": "Темерія",
+   "type": "place",
+   "titles": [],
+   "variants": [
+    "Temeria",
+    "Темерiя"
+   ],
+   "cases": [
+    "Темерії",
+    "Темерію"
+   ]
+  },
+  {
+   "id": "place:pontar",
+   "canonical": "Понтар",
+   "type": "place",
+   "titles": [],
+   "variants": [
+    "Pontar"
+   ],
+   "cases": [
+    "Понтару"
+   ]
+  },
+  {
+   "id": "place:mahakam",
+   "canonical": "Магакам",
+   "type": "place",
+   "titles": [],
+   "variants": [
+    "Mahakam",
+    "Махакам"
+   ],
+   "cases": [
+    "Магакаму",
+    "Магакамі",
+    "Магакамом"
+   ]
+  },
+  {
+   "id": "place:novigrad",
+   "canonical": "Новіград",
+   "type": "place",
+   "titles": [],
+   "variants": [
+    "Novigrad",
+    "Новиград"
+   ],
+   "cases": [
+    "Новіграда",
+    "Новіграді"
+   ]
+  },
+  {
+   "id": "place:redania",
+   "canonical": "Реданія",
+   "type": "place",
+   "titles": [],
+   "variants": [
+    "Redania",
+    "Реданiя"
+   ],
+   "cases": [
+    "Реданії",
+    "Реданію"
+   ]
+  },
+  {
+   "id": "place:rivia",
+   "canonical": "Рівія",
+   "type": "place",
+   "titles": [],
+   "variants": [
+    "Rivia",
+    "Ривия",
+    "Рівiя"
+   ],
+   "cases": [
+    "Рівії",
+    "Рівію"
+   ]
+  },
+  {
+   "id": "place:linvar-gate",
+   "canonical": "брама Линварів",
+   "type": "place",
+   "titles": [],
+   "variants": [
+    "Linvar gate",
+    "Лінварів",
+    "брама Лінварів",
+    "Linwar Gate"
+   ],
+   "cases": []
+  },
+  {
+   "id": "place:old-narakort",
+   "canonical": "«Старий Наракорт»",
+   "type": "place",
+   "titles": [
+    "корчма"
+   ],
+   "variants": [
+    "Old Narakort",
+    "Starý Narakort",
+    "Старий Наракорт"
+   ],
+   "cases": [
+    "«Старого Наракорту»"
+   ]
+  },
+  {
+   "id": "place:pid-lysom",
+   "canonical": "«Під Лисом»",
+   "type": "place",
+   "titles": [
+    "корчма"
+   ],
+   "variants": [
+    "Under the Fox",
+    "Pid Lysom",
+    "Під Лисом",
+    "«Під Лисицею»"
+   ],
+   "cases": [
+    "«Під Лисом»"
+   ]
+  },
+  {
+   "id": "place:old-palace",
+   "canonical": "старий палац",
+   "type": "place",
+   "titles": [
+    "замок"
+   ],
+   "variants": [
+    "old palace",
+    "the old castle"
+   ],
+   "cases": [
+    "старого палацу",
+    "старому палаці"
+   ]
+  },
+  {
+   "id": "place:new-palace",
+   "canonical": "новий палац",
+   "type": "place",
+   "titles": [
+    "резиденція короля"
+   ],
+   "variants": [
+    "new palace"
+   ],
+   "cases": [
+    "нового палацу"
+   ]
+  },
+  {
+   "id": "place:crypt",
+   "canonical": "крипта",
+   "type": "place",
+   "titles": [
+    "підземелля"
+   ],
+   "variants": [
+    "crypt"
+   ],
+   "cases": [
+    "крипти",
+    "крипту",
+    "крипті"
+   ]
+  },
+  {
+   "id": "item:silver-sword",
+   "canonical": "срібний меч",
+   "type": "item",
+   "titles": [
+    "меч на чудовиськ"
+   ],
+   "variants": [
+    "silver sword"
+   ],
+   "cases": [
+    "срібного меча"
+   ]
+  },
+  {
+   "id": "item:steel-sword",
+   "canonical": "меч на людей",
+   "type": "item",
+   "titles": [
+    "сталевий меч"
+   ],
+   "variants": [
+    "steel sword"
+   ],
+   "cases": []
+  },
+  {
+   "id": "item:sapphire-inclusion",
+   "canonical": "інклюз",
+   "type": "item",
+   "titles": [
+    "сапфір"
+   ],
+   "variants": [
+    "inclusion sapphire",
+    "sapphire"
+   ],
+   "cases": [
+    "інклюзу",
+    "сапфіра"
+   ]
+  },
+  {
+   "id": "currency:oren",
+   "canonical": "орен",
+   "type": "item",
+   "titles": [],
+   "variants": [
+    "oren",
+    "orens",
+    "орени",
+    "оренів"
+   ],
+   "cases": [
+    "оренів",
+    "орени",
+    "орена"
+   ]
+  },
+  {
+   "id": "title:witcher",
+   "canonical": "відьмак",
+   "type": "term",
+   "titles": [],
+   "variants": [
+    "witcher",
+    "ведьмак",
+    "відмак"
+   ],
+   "cases": [
+    "відьмака",
+    "відьмаку",
+    "відьмаком",
+    "відьмаче",
+    "відьмаки"
+   ]
+  },
+  {
+   "id": "title:mayor",
+   "canonical": "бургомістр",
+   "type": "term",
+   "titles": [],
+   "variants": [
+    "burgomaster",
+    "mayor",
+    "бурмістр"
+   ],
+   "cases": [
+    "бургомістра",
+    "бургомістру",
+    "бургомістре"
+   ]
+  },
+  {
+   "id": "term:sign-aard",
+   "canonical": "Знак Аард",
+   "type": "term",
+   "titles": [],
+   "variants": [
+    "Aard",
+    "Sign of Aard",
+    "Аарт"
+   ],
+   "cases": []
+  },
+  {
+   "id": "term:sign-yrden",
+   "canonical": "Знак Ирден",
+   "type": "term",
+   "titles": [],
+   "variants": [
+    "Yrden",
+    "Ірден",
+    "Ирден"
+   ],
+   "cases": []
+  }
+ ]
+}
