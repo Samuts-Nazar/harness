@@ -163,3 +163,9 @@ def test_profiles_with_manner_round_trip_through_a_saved_campaign(tmp_path):
     again = Engine.open_campaign("c", FakeProvider(), root=tmp_path)
     assert again.profiles["innkeeper"].manner
     again.close()
+
+
+def test_npc_system_never_says_narrator():
+    # app/stacks.py's fake and the debug Recorder tell roles apart by words in the system prompt
+    s = Style.load("witcher", exemplars=False)
+    assert "narrator" not in s.npc_system(CharacterProfile("h", "Горст", "Староста.")).lower()

@@ -23,7 +23,7 @@ Language of the sheet: English, because the engine's prompts are English. Output
 - Women with a stake in the matter (widows, innkeepers' wives): sharp, practical, say the unsayable, turn a question back on the asker, hide what they know behind a household detail.
 
 ## Irony and subtext
-- Irony is dry and sits in the contrast: something lethal said in an everyday tone, something petty said with ceremony. The narrator and the characters both do it.
+- Irony is dry and sits in the contrast: something lethal said in an everyday tone, something petty said with ceremony. The narrating voice and the characters both do it.
 - Characters lie, bluff, fish, test; they rarely announce what they want. Subtext is carried by what is dodged.
 - A digression that seems idle (a dead wife's proverb, a rumour about a neighbour) reveals the speaker.
 - Humour never explains itself and never winks at the reader.
