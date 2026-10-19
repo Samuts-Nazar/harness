@@ -38,7 +38,8 @@ CREATE TABLE canon_event (id INTEGER PRIMARY KEY REFERENCES record(id), ekind TE
   loudness REAL NOT NULL CHECK (loudness BETWEEN 0 AND 1), order_key INTEGER NOT NULL,
   when_prec TEXT NOT NULL, confidence REAL NOT NULL,
   review TEXT NOT NULL DEFAULT 'unreviewed' CHECK (review IN ('unreviewed','ok','fixed','dropped')),
-  day INTEGER, part TEXT, quote TEXT, lines TEXT NOT NULL DEFAULT '[]', local_id TEXT);
+  day INTEGER, part TEXT, quote TEXT, lines TEXT NOT NULL DEFAULT '[]', local_id TEXT,
+  day_to INTEGER, gist_uk TEXT, kw_uk TEXT, scene INTEGER, time_conf REAL, time_basis TEXT, src_from INTEGER, src_to INTEGER);
 CREATE VIRTUAL TABLE canon_event_fts USING fts5(text, tokenize='unicode61 remove_diacritics 0');
 CREATE TABLE canon_participant (event_id INTEGER NOT NULL REFERENCES canon_event(id),
   entity TEXT NOT NULL REFERENCES entity(id), role TEXT NOT NULL, PRIMARY KEY (event_id, entity, role));
@@ -54,6 +55,8 @@ CREATE TABLE canon_evidence (record_id INTEGER NOT NULL REFERENCES record(id),
   PRIMARY KEY (record_id, passage_id));
 CREATE TABLE canon_relation (id INTEGER PRIMARY KEY REFERENCES record(id), a TEXT NOT NULL, b TEXT NOT NULL,
   rtype TEXT NOT NULL, from_order INTEGER, to_order INTEGER);
+CREATE TABLE canon_embedding (event_id INTEGER NOT NULL REFERENCES canon_event(id), model TEXT NOT NULL,
+  dim INTEGER NOT NULL, vec BLOB NOT NULL, PRIMARY KEY (event_id, model));
 CREATE INDEX idx_knower_entity ON canon_knower(entity);
 CREATE INDEX idx_part_entity ON canon_participant(entity);
 """

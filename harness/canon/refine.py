@@ -50,6 +50,11 @@ def _t(day: int, part: str | None) -> int:
     return (day - 1) * 1440 + PARTS.get(part or "", 12) * 60
 
 
+def event_embed_text(gist_uk: str | None, kw_uk: str | None, body: str) -> str:
+    """What is embedded for an event: the Ukrainian gist and keywords plus the English record."""
+    return " ".join(x for x in (gist_uk, kw_uk, body) if x)
+
+
 def slug(s: str) -> str:
     t = "".join(c if c.isalnum() else "-" for c in s.lower()).strip("-")
     return re.sub("-+", "-", t)[:40] or "x"
@@ -115,6 +120,14 @@ class Refiner:
             if s.from_line <= ln <= s.to_line:
                 return i, s
         return None
+
+    def learn_line(self, ev: dict[str, Any], ln: int | None) -> int | None:
+        """The line where a holder learns an event: the model's line only if it lies near the event's own
+        lines (models return 1 or 0 for 'unknown'); otherwise the event's first line."""
+        first = min(ev["lines"]) if ev["lines"] else None
+        if ln is not None and first is not None and ln in self.paras and abs(ln - first) <= 40:
+            return ln
+        return first
 
     def time_at_line(self, ln: int | None) -> int | None:
         if ln is None:
@@ -314,7 +327,7 @@ class Refiner:
         if learned_t is None:
             learned_t = t
             if channel in ("told", "heard", "hearsay", "read", "inferred"):
-                lt = self.time_at_line(line or (min(ev["lines"]) if ev["lines"] else None))
+                lt = self.time_at_line(self.learn_line(ev, line))
                 learned_t = max(t, lt) if lt is not None else t
         old = self.con.execute("SELECT 1 FROM canon_knower WHERE event_id=? AND entity=?", (eid, entity)).fetchone()
         if old and only_new:
@@ -354,7 +367,7 @@ class Refiner:
         for ev in self.events():
             for k in ev["know"]:
                 if k["channel"] in ("told", "heard", "hearsay", "read", "inferred"):
-                    lt = self.time_at_line(k["learned_line"] or (min(ev["lines"]) if ev["lines"] else None))
+                    lt = self.time_at_line(self.learn_line(ev, k["learned_line"]))
                     if lt is not None:
                         lt = max(lt, ev["t_from"])
                         self.con.execute("UPDATE canon_knower SET learned_t=?, delay_minutes=? WHERE event_id=? AND entity=?",
@@ -454,7 +467,18 @@ class Refiner:
         self.con.execute("UPDATE canon_meta SET ingest_version='pilot-2'")
         self.con.commit()
 
-    def run(self) -> dict[str, Any]:
+    # ---- 7. embeddings -------------------------------------------------------------------
+    def pass_embed(self, embedder: Any) -> None:
+        from .embed import pack
+        self.con.execute("CREATE TABLE IF NOT EXISTS canon_embedding (event_id INTEGER NOT NULL, model TEXT NOT NULL, "
+                         "dim INTEGER NOT NULL, vec BLOB NOT NULL, PRIMARY KEY (event_id, model))")
+        rows = list(self.con.execute("SELECT r.id, r.body, c.gist_uk, c.kw_uk FROM record r JOIN canon_event c ON c.id=r.id"))
+        vecs = embedder.embed([event_embed_text(r["gist_uk"], r["kw_uk"], r["body"]) for r in rows])
+        for r, v in zip(rows, vecs):
+            self.con.execute("INSERT OR REPLACE INTO canon_embedding VALUES (?,?,?,?)", (r["id"], embedder.model, len(v), pack(v)))
+        self.con.commit()
+
+    def run(self, embedder: Any = None) -> dict[str, Any]:
         t0 = time.time()
         self.pass_time()
         self.pass_places()
@@ -464,6 +488,8 @@ class Refiner:
         self.pass_gist()
         self.pass_reactions()
         self.rebuild_fts()
+        if embedder is not None:
+            self.pass_embed(embedder)
         counts = {t: self.con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in (
             "entity", "canon_event", "canon_participant", "canon_knower", "canon_reaction")}
         return {"seconds": round(time.time() - t0), "model_calls": self.stats["calls"], "code_rules": rules,

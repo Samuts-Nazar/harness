@@ -23,6 +23,15 @@ QUESTIONS = [
     ("Велерад", 7 * D + 600, "Що відбувалося в крипті цієї ночі?", "he only knows the outcome, not the fight"),
     ("Фольтест", 7 * D + 600, "Що Остріт пропонував відьмакові?", "the king was not there: must not know"),
 ]
+# extra questions written after the thresholds were set (generalisation check, task 16)
+EXTRA = [
+    ("корчмар", 1 * D, "Хто напав на відьмака в корчмі і що з ними сталося?", "the three men and their death"),
+    ("Велерад", 1 * D + 1300, "Скільки відьмак зажадав за роботу?", "the fee deal: 1500"),
+    ("Велерад", 1 * D, "Яка погода в Новіграді і скільки коштує хліб?", "nothing (unrelated)"),
+    ("Остріт", 7 * D, "Що Остріт сказав про Адду?", "his confession"),
+    ("Ґеральт", 2 * D, "Що розповів мірошник про напад?", "the miller's account and scars"),
+    ("Фольтест", 8 * D, "Чи знає король про підкуп, який пропонував Остріт?", "no: the king was not there"),
+]
 
 
 def find(canon: Canon, name: str) -> str | None:
@@ -40,8 +49,11 @@ def find(canon: Canon, name: str) -> str | None:
 
 
 def main(db: str) -> None:
-    canon = Canon(db)
-    for i, (who, as_of, q, expect) in enumerate(QUESTIONS, 1):
+    from dotenv import load_dotenv
+    from harness.canon.embed import OpenRouterEmbedder
+    load_dotenv('.env')
+    canon = Canon(db, OpenRouterEmbedder('qwen/qwen3-embedding-8b'))
+    for i, (who, as_of, q, expect) in enumerate(QUESTIONS + EXTRA, 1):
         hid = find(canon, who)
         print(f"\n### {i}. {who} ({hid}), as_of={as_of} (day {as_of // D + 1}), q: {q}")
         print(f"expected: {expect}")
@@ -51,7 +63,7 @@ def main(db: str) -> None:
         out = canon.recall(hid, q, as_of, k=4)
         print(f"  holder knows {out['n_known']} events in total by then")
         for e in out["events"]:
-            print(f"  - [{e['how_known']}{'<' + e['source'] if e['source'] else ''}, learned {e['learned_t']}] {e['what'][:170]}")
+            print(f"  - [{e['how_known']}{'<' + e['source'] if e['source'] else ''}, learned {e['learned_t']}, {e['score']}] #{e['id']} {e['what'][:150]}")
         if not out["events"]:
             print("  (nothing returned)")
 

@@ -25,7 +25,8 @@ for s, d in zip(scenes, json.loads((RAW / "timeline_final.json").read_text())):
 model = sys.argv[1] if len(sys.argv) > 1 else "deepseek/deepseek-v4.1-flash-1017"
 r = Refiner(prov, model, "campaigns/canon/pilot_deepseek2g.db", "campaigns/canon/pilot_v3.db", paras, scenes,
             raw_dir=RAW, glossary=Glossary.for_world("witcher"))
-rep = r.run()
+from harness.canon.embed import OpenRouterEmbedder
+rep = r.run(OpenRouterEmbedder('qwen/qwen3-embedding-8b'))
 rep["cost_usd"] = round(spend.total, 5)
 dropped = rep.pop("dropped")
 print(json.dumps(rep, ensure_ascii=False))

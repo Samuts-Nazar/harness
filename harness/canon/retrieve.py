@@ -22,12 +22,30 @@ STOP = {"що", "як", "чи", "це", "від", "про", "для", "його"
         "сталося", "трапилося", "проти", "ночі", "вночі", "сьогодні", "вчора", "хто", "така", "такий", "яку", "якою"}
 
 
+_SPLIT = re.compile(r"\s+(?:і|й|та|а також|або)\s+|[,;?!]\s*", re.I)
+
+
+def split_question(q: str) -> list[str]:
+    """The whole question first, then its clauses when it asks several things at once ("where from and who is")."""
+    whole = q.strip()
+    subs = [p.strip() for p in _SPLIT.split(whole) if len(stems(p)) >= 1]
+    return [whole] + subs if len(subs) > 1 else [whole]
+
+
+def _stem(w: str) -> str:
+    if len(w) > 6:
+        return w[:-2]
+    if len(w) >= 4 and w[-1] in "аяіуеєюиоії":
+        return w[:-1]
+    return w
+
+
 def stems(q: str) -> list[str]:
     out = []
     for w in _WORD.findall(q.lower()):
         if w in STOP:
             continue
-        out.append(w[:-2] if len(w) > 6 else w[:-1] if len(w) > 4 else w)
+        out.append(_stem(w))
     return list(dict.fromkeys(out))
 
 
@@ -37,13 +55,20 @@ def fts_query(q: str) -> str:
     for w in _WORD.findall(q.lower()):
         if w in STOP:
             continue
-        stem = w[:-2] if len(w) > 6 else w[:-1] if len(w) > 4 else w
-        out.append(f'"{stem}"*')
+        out.append(f'"{_stem(w)}"*')
     return " OR ".join(dict.fromkeys(out))
 
 
+SEM_MIN = 0.56      # cosine below this is noise for qwen/qwen3-embedding-8b on Ukrainian text (calibrated, docs/tools.md)
+SEM_BAND = 0.15     # keep events within this distance of the best score
+RARE = 0.25         # a query term is "rare" if it occurs in at most this share of the events
+
+
 class Canon:
-    def __init__(self, path: str | Path | sqlite3.Connection) -> None:
+    def __init__(self, path: str | Path | sqlite3.Connection, embedder: Any = None) -> None:
+        self.embedder = embedder
+        self._vecs: dict[int, list[float]] | None = None
+        self._df: tuple[int, dict[str, int]] | None = None
         if isinstance(path, sqlite3.Connection):
             self.con = path
         else:
@@ -101,38 +126,81 @@ class Canon:
         r = self.con.execute("SELECT text FROM canon_event_fts WHERE rowid=?", (eid,)).fetchone()
         return (r[0] if r else "").lower()
 
-    def recall(self, holder: str, query: str, as_of: int, k: int = 6, *, min_cover: float = 0.34) -> dict[str, Any]:
-        """Events the holder knows (by as_of) that answer the query. Relevance cutoff: an event must
-        contain enough of the query's content words (stems) or it is not returned, so an unrelated
+    def _load_vecs(self) -> dict[int, list[float]]:
+        if self._vecs is None:
+            from .embed import unpack
+            self._vecs = {}
+            if self.embedder is not None:
+                try:
+                    for r in self.con.execute("SELECT event_id, vec FROM canon_embedding WHERE model=?", (self.embedder.model,)):
+                        self._vecs[r["event_id"]] = unpack(r["vec"])
+                except sqlite3.OperationalError:
+                    pass
+        return self._vecs
+
+    def _semantic(self, parts: list[str]) -> list[dict[int, float]]:
+        """Cosine similarity of every event to each part of the question (empty without an embedder)."""
+        vecs = self._load_vecs()
+        if not vecs:
+            return [{} for _ in parts]
+        from .embed import cosine
+        try:
+            qs = self.embedder.embed(parts)
+        except Exception:  # noqa: BLE001 - a failed embedding call must not stop play: lexical recall still works
+            return [{} for _ in parts]
+        return [{eid: cosine(q, v) for eid, v in vecs.items()} for q in qs]
+
+    def _is_rare(self, term: str) -> bool:
+        if self._df is None:
+            texts = [r[0].lower() for r in self.con.execute("SELECT text FROM canon_event_fts")]
+            self._df = (max(1, len(texts)), {})
+            self._texts = texts
+        n, cache = self._df
+        if term not in cache:
+            cache[term] = sum(1 for t in self._texts if term in t)
+        return cache[term] / n <= RARE
+
+    def recall(self, holder: str, query: str, as_of: int, k: int = 6, *, min_cover: float = 0.6) -> dict[str, Any]:
+        """Events the holder knows (by as_of) that answer the query. Two signals: a multilingual embedding
+        (when an embedder is given) and Ukrainian full-text over gist, keywords, quote and record. An event
+        is returned only if it clears a relevance bar: semantic similarity >= SEM_MIN, or at least half of
+        the query's RARE content words occur in it (names that occur everywhere do not count). An unrelated
         question gets nothing back rather than the nearest noise."""
         hs = self.holders(holder)
         ph = ",".join("?" * len(hs))
         known = {r["event_id"]: dict(r) for r in self.con.execute(
             f"SELECT event_id, entity, channel, source, learned_t FROM canon_knower "
             f"WHERE entity IN ({ph}) AND COALESCE(learned_t, -999999999) <= ?", (*hs, as_of))}
-        terms = stems(query)
-        rank: dict[int, float] = {}
-        for i, eid in enumerate(self._fts_ids("canon_event_fts", query)):
-            if eid in known:
-                rank[eid] = rank.get(eid, 0) + 1.0 / (1 + i)
-        for i, pid in enumerate(self._fts_ids("canon_passage_fts", query)):
-            for r in self.con.execute("SELECT record_id FROM canon_evidence WHERE passage_id=?", (pid,)):
-                if r["record_id"] in known:
-                    rank[r["record_id"]] = rank.get(r["record_id"], 0) + 0.7 / (1 + i)
-        ments = self._mentioned(query)
-        # relevance gate on content words: names of mentioned entities count as terms too
-        need = 0 if not terms else max(1, int(len(terms) * min_cover + 0.999))
-        kept: dict[int, float] = {}
-        for eid, sc in rank.items():
+        parts = split_question(query)
+        sems = self._semantic(parts)
+        lex_ids = {e for e in self._fts_ids("canon_event_fts", query) if e in known}
+        for part in parts[1:]:
+            lex_ids |= {e for e in self._fts_ids("canon_event_fts", part) if e in known}
+        cand = set(lex_ids) | {e for e in known if any(sm.get(e, 0) >= SEM_MIN for sm in sems)}
+        scored: dict[int, float] = {}
+        for eid in cand:
             txt = self._event_text(eid)
-            cover = sum(1 for t in terms if t in txt)
-            if cover >= need:
-                kept[eid] = sc + 0.3 * cover
-        for ent in ments:
+            best = None
+            for part, sm in zip(parts, sems):
+                terms = stems(part)
+                rare = [t for t in terms if self._is_rare(t)]
+                lex = (sum(1 for t in rare if t in txt) / len(rare)) if rare else 0.0
+                s_ = sm.get(eid, 0.0)
+                passes = s_ >= SEM_MIN or (rare and lex >= min_cover) or \
+                    (not rare and not sm and terms and sum(1 for t in terms if t in txt) >= max(1, len(terms) // 2))
+                if passes:
+                    v = s_ + 0.3 * lex
+                    best = v if best is None else max(best, v)
+            if best is not None:
+                scored[eid] = best
+        for ent in self._mentioned(query):
             for r in self.con.execute("SELECT event_id FROM canon_participant WHERE entity=?", (ent,)):
-                if r["event_id"] in kept:
-                    kept[r["event_id"]] += 0.25
-        top = sorted(kept, key=lambda e: -kept[e])[:k]
+                if r["event_id"] in scored:
+                    scored[r["event_id"]] += 0.03
+        if scored:
+            best = max(scored.values())
+            scored = {e: v for e, v in scored.items() if v >= best - SEM_BAND}
+        top = sorted(scored, key=lambda e: -scored[e])[:k]
         events = []
         for eid in top:
             e = self.con.execute(
@@ -146,7 +214,7 @@ class Canon:
                            "t": e["t_from"], "day": e["day"], "how_known": kn["channel"],
                            "source": self.name(kn["source"]) if kn["source"] else None,
                            "learned_t": kn["learned_t"], "quote": e["quote"], "kind": e["ekind"],
-                           "own_reaction": own})
+                           "own_reaction": own, "score": round(scored[eid], 3)})
         return {"holder": holder, "as_of": as_of, "events": events, "profile": self.profile(holder),
                 "n_known": len(known)}
 
