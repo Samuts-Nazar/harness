@@ -24,6 +24,7 @@ load_dotenv(ROOT / ".env")
 load_dotenv("/home/cock/projects/harness/.env")  # a worktree has no .env of its own
 from app.campaigns import Recorder  # noqa: E402
 from app.stacks import live_stack  # noqa: E402
+from harness.glossary import Glossary  # noqa: E402
 from harness.models import NARRATION, PLAYER, UTTERANCE  # noqa: E402
 from harness.style import Style  # noqa: E402
 from harness.world import pilot  # noqa: E402
@@ -74,7 +75,8 @@ def main() -> None:
     stack = live_stack(budget)
     rec = Recorder(stack.provider, stack.models, stack.spend)
     eng, world = pilot.build(rec, stack.judge, stack.models, style=Style.load("witcher"),
-                             record_language="English", output_language="Ukrainian")
+                             record_language="English", output_language="Ukrainian",
+                             glossary=Glossary.for_world("witcher"))
     instrument(world, stack.spend)
     out: dict = {"turns": []}
     print(f"start: {clock(eng.scene.time)}, {eng.scene.location}")

@@ -18,7 +18,7 @@ from typing import Any, Mapping, Sequence
 
 from ..judge import JudgeError, Question, choice_q, score_q, yes_no_q
 from ..models import (
-    HEARD, PLAYER, WITNESSED, CharacterProfile, Event, Fact, Scene,
+    HEARD, PLAYER, UTTERANCE, WITNESSED, CharacterProfile, Event, Fact, Scene,
 )
 from ..providers import ProviderError
 from . import clock as clk
@@ -194,6 +194,9 @@ class World:
                 continue
             if not f.knowers:
                 continue  # nobody perceived it: nothing to carry
+            src = self.eng.log.get(f.source_event_id) if f.source_event_id else None
+            if src is not None and src.type == UTTERANCE and f.notability < nw.SPEECH_MIN_NOTABILITY:
+                continue  # words are not an event unless they are loud (a proclamation, a threat)
             cands.append(f)
         recent = [e for e in self.news_events() if e.game_time >= self.now - RECENT_NEWS_DAYS * clk.DAY
                   ][-RECENT_NEWS:]
@@ -343,7 +346,7 @@ class World:
     def _make_version(self, ne: Event, col: Collective, at: int, source: str | None,
                       hop: int) -> Event:
         p = ne.payload
-        true = p["text"]
+        true = nw.about_the_stranger(p["text"])
         origin_name = self.map.name(p["origin"])
         dist = self.map.minutes(p["origin"], col.place)
         state = [f"Event (what truly happened): {true}", f"Where: {origin_name}",
@@ -456,11 +459,11 @@ class World:
         p = ne.payload
         n = p["notability"]
         opts = [R_IGNORE]
-        if n >= 0.55:
-            opts.append(R_ASK)
         if n >= 0.65:
+            opts.append(R_ASK)
+        if n >= 0.75:
             opts.append(R_PATROL)
-        if n >= 0.8:
+        if n >= 0.85:
             opts.append(R_SEEK)
         qs: dict[str, Question] = {"act": choice_q(
             f"{col.name} ({col.role}) has just heard this. How does it react, judged by how big "
@@ -474,7 +477,7 @@ class World:
         got = self._ask([f"What reached them: {self._version_text(ve)}",
                          f"Where it happened: {self.map.name(p['origin'])}",
                          f"Notability 0..1: {n:.2f}"], qs)
-        kind = str(got["act"].answer) if got else (R_ASK if n >= 0.55 else R_IGNORE)
+        kind = str(got["act"].answer) if got else (R_ASK if n >= 0.65 else R_IGNORE)
         go_up = bool(got["up"].answer) if got and "up" in got else False
         if up and n >= 0.9:
             go_up = True  # a very big event always reaches the top
@@ -518,7 +521,7 @@ class World:
         done = {i for u in self.updates(c) for i in u.payload.get("news", [])}
         out = []
         for ne in self.news_events():
-            if ne.id in done or ne.game_time > upto or ne.payload["notability"] < 0.5:
+            if ne.id in done or ne.game_time > upto or ne.payload["notability"] < nw.NEWS_MIN_NOTABILITY:
                 continue
             f = self.eng.facts.get(ne.payload["fact_id"])
             if f and any(k.character == c and k.how == WITNESSED for k in f.knowers):
@@ -802,8 +805,10 @@ class World:
                 continue
             seen: dict[str, int] = {}
             for u in ups:
-                seen[u.payload["phrase"]] = seen.get(u.payload["phrase"], 0) + 1
-            what = "; ".join(f"{p}" + (f" ({n} times)" if n > 1 else "") for p, n in seen.items())
+                if u.payload["kind"] not in (A_ROUTINE, A_GOAL):  # the ordinary is one line
+                    seen[u.payload["phrase"]] = seen.get(u.payload["phrase"], 0) + 1
+            what = ("; ".join(f"{p}" + (f" ({n} times)" if n > 1 else "") for p, n in seen.items())
+                    or "went about the usual routine")
             text = (f"{self._name(c)}, from day {clk.parts(start)['day']} to day "
                     f"{clk.parts(end)['day']}: {what}.")
             ev = self._log(nw.PERIOD_SUMMARY, end, {

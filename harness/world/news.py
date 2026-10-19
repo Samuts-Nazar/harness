@@ -29,18 +29,24 @@ WORLD_REACTION, OFFSCREEN_UPDATE, WORLD_MOVE, WORLD_TICK, CANON_EXECUTED, WORLD_
     "world_arrival")
 THREAD_RESOLVED, PERIOD_SUMMARY = "thread_resolved", "period_summary"
 
-NEWS_MIN_NOTABILITY = 0.5  # a fact below this stays with its witnesses
+NEWS_MIN_NOTABILITY = 0.65  # a fact below this stays with its witnesses
+SPEECH_MIN_NOTABILITY = 0.8  # something only said aloud must be this loud to travel as news
 BASE_DELAY = 10  # minutes before word starts to move
 PACE_BASE = 2.2  # minutes of delay per minute of distance, minus the notability
 
 
 def reach_minutes(notability: float) -> int:
     """How far (in walking minutes) news of this notability can travel. Quiet events do not leave
-    their witnesses; the reach grows fast with notability: 0.5 about 80 minutes (the neighbouring
-    streets), 0.7 about 12 hours of walking, 0.9 about a day and a half, 1.0 two days."""
+    their witnesses; the reach grows fast with notability: 0.65 about 2 hours of walking (the
+    city), 0.7 about 4.5 hours, 0.8 about 12 hours, 0.9 a day, 1.0 a day and a half."""
     if notability < NEWS_MIN_NOTABILITY:
         return 0
-    return int(8000 * (notability - 0.4) ** 2)
+    return int(12000 * (notability - 0.55) ** 2)
+
+
+def about_the_stranger(text: str) -> str:
+    """A rumour does not know the player character's label: "the player" becomes "the stranger"."""
+    return re.sub(r"\b([Tt])he player\b(?!'s name)", lambda m: m.group(1) + "he stranger", text)
 
 
 def arrival_delay(notability: float, distance: int) -> int | None:

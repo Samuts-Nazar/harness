@@ -67,13 +67,13 @@ def test_until_hour_and_buckets():
 
 
 def test_reach_grows_with_notability_and_quiet_stays_home():
-    assert nw.reach_minutes(0.3) == 0 and nw.reach_minutes(0.49) == 0
-    r = [nw.reach_minutes(n) for n in (0.5, 0.6, 0.7, 0.8, 0.9, 1.0)]
+    assert nw.reach_minutes(0.3) == 0 and nw.reach_minutes(0.64) == 0
+    r = [nw.reach_minutes(n) for n in (0.65, 0.7, 0.8, 0.9, 1.0)]
     assert r == sorted(r) and r[0] < r[-1]
-    assert nw.arrival_delay(0.5, 30) is not None
-    assert nw.arrival_delay(0.5, 500) is None  # a small event never gets that far
+    assert nw.arrival_delay(0.65, 30) is not None
+    assert nw.arrival_delay(0.65, 500) is None  # a small event never gets that far
     assert nw.arrival_delay(0.9, 500) is not None
-    assert nw.arrival_delay(0.9, 60) < nw.arrival_delay(0.5, 60)  # loud news is faster
+    assert nw.arrival_delay(0.9, 60) < nw.arrival_delay(0.65, 60)  # loud news is faster
 
 
 # -- news -------------------------------------------------------------------------------------
@@ -85,10 +85,12 @@ def test_only_loud_perceived_facts_become_news_once():
     quiet = eng.facts.add_campaign("A quiet word", source_event_id=ev2.id,
                                    game_time=eng.scene.time, location="x", notability=0.4,
                                    knowers=[("innkeeper", WITNESSED)])
+    mid = eng.facts.add_campaign("A quiet word", source_event_id=ev2.id, game_time=eng.scene.time,
+                                 location="x", notability=0.6, knowers=[("innkeeper", WITNESSED)])
     nobody = eng.facts.add_campaign("Narration only", source_event_id=ev2.id,
                                     game_time=eng.scene.time, location="x", notability=0.9,
                                     knowers=[])
-    assert w.register_news([quiet, nobody]) == []
+    assert w.register_news([quiet, mid, nobody]) == []
     assert [e.id for e in w.news_events()] == [nid]
 
 
@@ -132,7 +134,7 @@ def test_distant_place_never_hears_a_quiet_event_and_far_hears_a_loud_one():
     w.collectives["col_far"] = type(w.collectives["col_town"])(
         "col_far", "селяни", "far", "town", role="villagers")
     eng.profiles["col_far"] = CharacterProfile("col_far", "селяни")
-    miracle(eng, w, n=0.6)  # reach about 320 minutes
+    miracle(eng, w, n=0.7)  # reach about 270 minutes
     w.resolve(eng.scene.time + 3000, kinds=("town",))
     assert "col_far" not in {e.payload["holder"] for e in eng.log.active([nw.NEWS_VERSION])}
     miracle(eng, w, n=0.95, text="The king's tower fell")
@@ -205,7 +207,7 @@ def test_authority_reacts_by_scale_and_escalates():
 def test_small_event_is_not_met_with_force():
     eng, w, _ = build({"authority_reaction": lambda q, st: R_PATROL if R_PATROL in q.options
                        else "ignore"})
-    miracle(eng, w, n=0.52, text="The demon juggled coins")
+    miracle(eng, w, n=0.66, text="The demon juggled coins")
     w.tick(eng.scene.time + 4 * 60)
     for e in eng.log.active([nw.WORLD_REACTION]):  # patrol is not even on offer at this scale
         assert e.payload["kind"] in ("ignore", "ask_around")
@@ -502,3 +504,16 @@ def test_rumour_writer_does_not_name_the_player_or_the_teller():
     msgs = nw.writer_messages(MIRACLE, "exaggerate", 2, "the town", language=None)
     body = msgs[1]["content"]
     assert "stranger" in body and "do not mention who is telling" in body
+
+
+def test_spoken_words_are_news_only_when_loud_and_rumours_say_stranger():
+    eng, w, _ = build()
+    ut = eng.log.append("utterance", game_time=eng.scene.time, location="x",
+                        payload={"speaker": "innkeeper", "text": "hm"})
+    mk = lambda n: eng.facts.add_campaign("The innkeeper grumbled about the licence",  # noqa: E731
+                                          source_event_id=ut.id, game_time=eng.scene.time,
+                                          location="x", notability=n, knowers=[("drunk", WITNESSED)])
+    assert w.register_news([mk(0.7)]) == []
+    assert len(w.register_news([mk(0.85)])) == 1
+    assert nw.about_the_stranger("The player raises a hand; the player's eyes flash") == (
+        "The stranger raises a hand; the stranger's eyes flash")
