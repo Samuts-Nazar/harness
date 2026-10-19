@@ -14,6 +14,7 @@ from .memory import CharacterMemory, MemoryDeriver
 from .models import ACTION, UTTERANCE, CharacterProfile, Event, Fact, Knower, Scene, format_time
 from .providers import Messages
 from .state import LiveState
+from .style import Style
 
 
 @dataclass
@@ -60,11 +61,15 @@ class ContextBuilder:
         record_language: str | None = None,
         glossary: Glossary | None = None,
         narration: str = "json",
+        style: Style | None = None,
     ) -> None:
         """`language`: what the player reads (narration, NPC speech). `record_language`: what
         the extractor writes facts in. None: no instruction (the model's own choice).
         `glossary`: every rendered context goes through it (one form of each name) and each prompt
-        lists the names it mentions. `narration`: "prose" (free text) or "json" (task 3)."""
+        lists the names it mentions. `narration`: "prose" (free text) or "json" (task 3).
+        `style`: the Sapkowski-style wording and exemplars (harness/style.py); None keeps the
+        task 12 prompts."""
+        self.style = style
         self.language, self.record_language = language, record_language
         self.glossary, self.narration = glossary, narration
         self.log, self.facts, self.intents = log, facts, intents
@@ -89,7 +94,9 @@ class ContextBuilder:
         return msgs
 
     def _line(self, e: Event) -> str:
-        return f"{self.name(e.payload['speaker'])}: {e.payload['text']}"
+        # `speech`: the spoken part of a line with the speaker's own beats (task 15); the beats
+        # are separate action events, so they are not repeated here
+        return f"{self.name(e.payload['speaker'])}: {e.payload.get('speech', e.payload['text'])}"
 
     def _scene_header(self, scene: Scene) -> str:
         who = ", ".join(self.name(c) for c in scene.present)
@@ -146,11 +153,20 @@ class ContextBuilder:
             "own words as one continuous speech: no stage directions, no other characters' lines."
             + (f" Speak in {self.language}." if self.language else "")
         )
+        system = f"You are {prof.name}. {prof.description}".strip()
+        if self.style is not None:
+            system = self.style.npc_system(prof)
+            instruction = self.style.npc_instruction(prof, self.language)
+            examples = self.style.npc_examples_section(" ".join([
+                scene.location, prof.description, *(e.payload["text"] for e in seen[-2:]),
+                *(it.fact.content for it in mem.knows[-4:])]))
+            if examples:
+                parts.append(examples)
         known = (self.knowledge_lines(mem) + [self._seen(e) for e in seen]
                  + [f"- (own condition) {e.category}: {e.item}" for e in mem.state]
                  + [f"- (just noticed) {f.content}" for _, f in mem.noticed])
         return NpcView(
-            system=f"You are {prof.name}. {prof.description}".strip(), sections=parts,
+            system=system, sections=parts,
             seen=[self._seen(e) for e in seen], instruction=instruction, known=known,
             name=prof.name, finish=self.finish)
 
@@ -200,9 +216,15 @@ class ContextBuilder:
                 "character does, not what they say. Do not decide what the player character says, does or feels beyond "
                 "what the player gave."
                 + (f"\nWrite in {self.language}." if self.language else ""))
+            system = "You are the narrator of a role-playing game. Write vivid prose."
+            if self.style is not None:
+                system = self.style.narrator_system()
+                examples = self.style.narrator_examples_section(" ".join([
+                    scene.location, player_input, *(f.content for f in campaign[-3:])]))
+                if examples:
+                    parts.insert(-1, examples)
             return self.finish([
-                {"role": "system",
-                 "content": "You are the narrator of a role-playing game. Write vivid prose."},
+                {"role": "system", "content": system},
                 {"role": "user", "content": "\n\n".join(parts)},
             ])
         parts.append(

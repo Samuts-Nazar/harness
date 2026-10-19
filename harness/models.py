@@ -76,6 +76,7 @@ class CharacterProfile:
     id: str
     name: str
     description: str = ""
+    manner: str = ""  # how this person talks (task 15); generated once, stored with the profile
 
 
 @dataclass
