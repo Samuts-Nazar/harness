@@ -1,5 +1,7 @@
 # Task 18A: prior art, infrastructure and techniques (2026-10-19)
 
+> Lead spot-check (2026-10-19): Hidden Door fast/slow post (2026-10-16; slow lane up to 20 calls; 0.5% of turns waited) and NCP-Bench arXiv 2608.08160 (best model 42% commitment survival after 20 turns) confirmed. Note: the "about 21 s per turn" figure is from task 6; after task 9/12 a live turn is about 16 s with parallel NPC chains.
+
 Method: live web search and page fetches on 2026-10-19; no code changes, no paid API calls. Page summaries came from a fetch tool that sometimes saw only an abstract; such claims are marked (abstract). I read `docs/decisions.md`, `docs/tools.md`, `reports/code_study/SUMMARY.md`, `reports/canon_pilot/SUMMARY.md`, `docs/HANDOFF.md`, `reports/decision_gaps.md`. I did NOT read `design/schema.md`, `ideas/*`, or the pilot test plan in full, so schema-level statements are hedged.
 
 ## Verdict
