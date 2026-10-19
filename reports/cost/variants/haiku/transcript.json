@@ -1,0 +1,162 @@
+[
+ {
+  "turn": 1,
+  "note": "",
+  "player": "I step inside, shake the rain off my cloak and ask for a room.",
+  "narration": "The door of the roadside inn groans open and rain comes in with the white-haired stranger. Geralt pulls the hood back from his face and shakes the wet from his heavy cloak, the drops spattering the warped floorboards near the hearth. The fire within crackles and throws long shadows across low beams hung with dried herbs and tallow lamps. At the bar the innkeeper, a broad man with flour still dusting his forearms, looks up from a tankard he was drying, and his eyes drop at once to the naked blade at Geralt's belt, dark stains streaking its length despite the rain. In a corner by the fire Dandelion sits with his lute across his knees, his feathered cap tipped back, and he lifts his brows in open interest, a half-smile tugging at his mouth as he takes in the sword, the blood, and the weariness in the witcher's stance. Outside, the wind worries at the shutters, and somewhere beyond the village to the east, out past the fields, the old mill waits in the dark.",
+  "lines": [
+   [
+    "innkeeper",
+    "You'll have a room, aye, if you've coin. But I'll not have blood dripping on my floorboards, so you'll be telling me whose blood that is before you go up. Sheep, or something with more teeth? Three nights now we've been finding what's left of the flock east of the village, and the dog too, and nobody here's sleeping sound. And the mill out there's been dark since the miller's girl walked off toward it with her lantern. So you tell me plain, stranger, are you the sort that hunts the thing that did it, or the sort that's come to make it worse?"
+   ],
+   [
+    "bard",
+    "Ah, now there's a question worth a tankard of ale! And I'll say this for our hooded friend: a man who walks in out of the rain with a bloodied blade at his hip has either had a very busy evening or a very interesting one, and I intend to find out which. So, Geralt, my ever-so-mysterious companion, do tell our worried host whose blood that is, before he decides to bar the stairs and set the dogs on you. Though between you and me, I'd wager it's not the sheep's, given the look of you. And if you're the sort who hunts what's been tearing up the east fields, good, we could use someone who doesn't tremble at the sight of a lantern. If instead you're bound for that dark mill, well, I'd wager a silver piece you'd find my company a fine thing on the walk there, for I've a feeling that old mill has a story worth a song or two, and I've never once been able to resist a good tale."
+   ]
+  ]
+ },
+ {
+  "turn": 2,
+  "note": "",
+  "player": "I ask the innkeeper what has been going on around here lately.",
+  "narration": "Geralt's question hangs in the smoky air between the hearth and the bar. The innkeeper sets down his tankard with a heavy thud and rubs a floury hand across his jaw, glancing toward the shuttered window as if the wind outside might carry the answer to him. Beside the fire, Dandelion draws a slow, pleased breath and settles his fingers over the strings of his lute, not yet plucking them, clearly content to let the story unfold on its own. A log shifts and sends a brief spray of sparks up the chimney. Outside, the rain drums harder against the shutters, and far to the east the dark bulk of the old mill seems to lean a little closer to the village in the gathering night.",
+  "lines": [
+   [
+    "innkeeper",
+    "I don't know what to tell you."
+   ],
+   [
+    "bard",
+    "Oh, come now, good host, you know a great deal more than you let on, I'd wager. Three nights of torn sheep, a dog in pieces, and a lantern that walked off into a dark mill? That's not nothing, that's a whole ballad waiting to be sung, and you're sitting on the first verse like a hen on an egg. So let me ask it plainer, since our Geralt has the manners of a wet stone: what did the miller's girl look like when she left? Was she frightened, or was she walking toward something she already knew? Because I've heard that kind of silence before, and it usually means someone's keeping a secret that bites. And if you won't tell us, well, the wager still stands. A silver piece says we find more answers at that mill than you'll ever get out of this tankard."
+   ]
+  ]
+ },
+ {
+  "turn": 3,
+  "note": "",
+  "player": "I ask him how long the animals have been dying.",
+  "narration": "Geralt's question cuts through the smoke and the hum of low talk. The innkeeper's broad shoulders sag, and for a long moment he only stares at the grain-dusted boards beneath his boots, as if counting the nights himself. Across the room Dandelion tilts his head, the lute still resting quiet on his knees, his eyes sharpening with the particular interest of a man who has just heard the first true note of a song. The fire pops. Outside, the rain eases to a hissing drizzle, and somewhere beyond the village the wind carries a faint, thin sound that might be a sheep's bleat or might be nothing at all. The innkeeper's silence stretches, heavy and deliberate, and the room seems to lean toward him, waiting for whatever he will decide to admit.",
+  "lines": [
+   [
+    "innkeeper",
+    "Three nights, that's how long. First was a ewe, the next night two lambs and old Marta's dog, the last night the rest of Hollis's flock, all of it scattered over the east pasture like someone emptied a sack. Nobody's seen the thing that does it. We only hear it, and what we hear I'll not repeat in front of a bard who'll make a song of it. And the girl, the miller's Elsbeth, she walked out toward that mill at dusk with her lantern, and that was the last anyone saw of her. Her mother's not stopped weeping since. So you'll forgive me if I don't much care for bloody steel in my common room. Tell me it's sheep, stranger. Tell me."
+   ]
+  ]
+ },
+ {
+  "turn": 4,
+  "note": "",
+  "player": "I turn to the bard and ask what he knows about the old mill.",
+  "narration": "Geralt's question turns the room toward the bard, and Dandelion lets out a low breath, setting his lute carefully against the bench as though it might be needed for a more serious kind of story. He leans forward, elbows on his knees, and the firelight catches the amused glint in his eyes that never quite reaches his mouth. The innkeeper has not moved from behind the bar, his floury arms folded tight across his chest, watching the two travelers the way a man watches a dog he is not yet sure will bite. Beyond the shuttered window the drizzle thins to nothing and the east wind rises, carrying with it a faint, uneven sound from the far pasture that makes every head in the common room turn toward the dark glass before dropping again. The old mill lies somewhere out past the fields, a black shape against a blacker sky, its wheel long silent and its door, by all accounts, left ajar.",
+  "lines": [
+   [
+    "bard",
+    "Ah, the old mill! Now you've asked the one question I was itching to be asked. Here's what I know, and I'll tell it fair. The mill's been dark since the miller's girl walked off toward it with her lantern, and nobody's been brave or foolish enough to go knock on its door since. Folk say the wheel still turns on windless nights, slow and creaking, like something inside is still grinding grain. I can't swear to that, mind you, but I've never met a rumor that didn't have a grain of truth stuck in its teeth. And here's the part our host won't say aloud: he's keeping something back. You can see it in the way his hand grips that bar, like it might fly off if he lets go. So I'll sweeten the pot, Geralt. You walk up that muddy road to the mill, and I'll walk beside you with my lute and my sharp tongue. If the answers are there, I'll make a ballad of them, and you'll owe me nothing but a silver piece, which I'll happily take from the winnings. Deal?"
+   ]
+  ]
+ },
+ {
+  "turn": 5,
+  "note": "two-NPC dialogue",
+  "player": "I ask both of them together: who was the miller's daughter, and who saw her last?",
+  "narration": "The question hangs in the smoky air like a struck bell. Dandelion's grin falters for the briefest moment, replaced by something more careful, and he glances toward the bar before answering with his eyes rather than his tongue. The innkeeper's jaw works once, twice, as though chewing on words he would rather swallow. Beyond the shutters the wind shifts, and the faint uneven sound from the east pasture rises again, thin and wrong, then dies away. A log settles in the hearth with a soft crack, sending a spray of sparks up the flue. Somewhere in the room a mug is set down a little too hard. Both men now look at Geralt, and the silence stretches long enough to become its own answer, waiting for whichever of them will break it first.",
+  "lines": [
+   [
+    "innkeeper",
+    "The innkeeper's jaw works, and he sets both floury hands flat on the bar. He breaks off, eyes flicking to the shuttered window and back. He shakes his head hard."
+   ],
+   [
+    "bard",
+    "Ah, so the question's landed right in the middle of the room, hasn't it? Elsbeth, that's her name, the miller's only girl. As for who saw her last... well, our host won't say it, and I'd wager he's been carrying that particular bit around since dusk, poor fellow. But I'll tell you what the village whispers when they think no one's listening: she was seen heading out past the east pasture with her lantern swinging, and no one saw her come back. That's all I've got, Geralt, and I don't love how little it is. So perhaps the mill is where the rest of the verse is hiding. Shall we go find out, before our friend here takes that bar off its hinges?"
+   ]
+  ]
+ },
+ {
+  "turn": 6,
+  "note": "second-hand: bard heard it from the innkeeper",
+  "player": "I ask the bard what the innkeeper just said about the howling.",
+  "narration": "Dandelion pauses with his tankard halfway to his lips, eyebrows lifting as he recalls the question the player has put to him. The innkeeper has not spoken of any howling at all, and the bard's sharp eyes flick from Geralt to the bar, where the big man's hands have gone still against the wood. Outside, the faint uneven sound from the east pasture stirs again, thin and wrong, and for a heartbeat the whole common room seems to lean toward the shutters. Dandelion sets his mug down with a careful click, his lute shifting on his knees as he weighs whether to press the point or to deflect it with a joke. The hearth crackles. The innkeeper's silence thickens around the bar like wet wool.",
+  "lines": [
+   [
+    "bard",
+    "Howling? Oh, Geralt, you've caught me with my tankard halfway to my lips and my mouth running ahead of my sense! The innkeeper said nothing about howling, not in so many words. What he said was that nobody has seen the creature killing the animals, it's only ever heard. Heard, mind you, and that's a different beast entirely. I'd wager that's what has half the village sleeping with their shutters barred. But if you're asking whether he's mentioned a howl, well, he has the look of a man who'd rather not describe one, so I'll leave that verse for him to sing. Shall we press him, or shall we let the wheel of the old mill do the talking for us?"
+   ]
+  ]
+ },
+ {
+  "turn": 7,
+  "note": "",
+  "player": "I tell them I killed a drowner at the river crossing this afternoon, and show the claw.",
+  "narration": "Geralt sets his dark-stained hand on the scarred table and lays the grey, hooked claw down beside his tankard. Its length is longer than a man's finger and its edge is ridged like old bone, flecked with dried river silt that has not quite washed away. The innkeeper's eyes drop to it at once, and the color drains slowly from his broad face beneath the flour. Dandelion leans in, the lute sliding a finger's width on his knees, and he studies the claw with the same hungry attention he gives a good verse. Behind the shutters the thin, wrong sound from the east pasture rises once and falls away, as though something out there has heard the word drowner and is listening. The hearth pops, sending a spark up the chimney, and the room holds still around the three of them.",
+  "lines": [
+   [
+    "innkeeper",
+    "The innkeeper's face goes the color of tallow as his eyes lock on that grey claw. He takes one step back from the bar, then another, and his voice drops to a rasp. He swallows hard and glances at the shuttered window."
+   ],
+   [
+    "bard",
+    "Well now, that's a verse I didn't expect to hear before supper! A drowner's claw, Geralt, and still wet enough to make our host go pale as new cheese. Look at him, friend. He's counting shutters in his head. And you'd better hope he isn't counting the cost of the floorboards, because I'd wager the stain won't scrub out. So here's the tune, plain as I can sing it. You've killed a drowner, and our host has seen just enough to know what it means. That tells me the thing in the east fields might not be a wolf at all, or not only one. A drowner doesn't wander far from water, and I don't hear a river anywhere near that pasture. Which means either something's dragged it out of its home, or something worse is hunting in its place. Either way, the mill's looking more and more like the place to start. And mark me, Geralt, I'll not take back my wager. A silver piece says the mill keeps more secrets than our frightened friend behind the bar ever will."
+   ]
+  ]
+ },
+ {
+  "turn": 8,
+  "note": "",
+  "player": "I ask the innkeeper whether he trusts what the bard says about the mill.",
+  "narration": "Geralt turns his hooded gaze from the grey claw to the innkeeper and puts the question plainly, his voice low enough that it carries only as far as the bar. The innkeeper's broad hands tighten on the rag he has been turning over and over, flour dust drifting from his forearms. His eyes slide past Geralt toward the shuttered window, then back to the bard, who sits with the lute balanced across his knees and an easy, expectant smile, as though he has already won the wager. The innkeeper's jaw works. For a long breath the only sounds are the hearth popping and the rain drumming on the roof. Beyond the shutters the thin, uneven sound from the east pasture stirs again, closer this time, and then stops dead, as if whatever made it has turned its head toward the inn to listen.",
+  "lines": [
+   [
+    "innkeeper",
+    "Trust him? I trust nobody who carries a sword that's still wet and walks in out of the rain asking for a bed. But aye, I'll say this much. The mill's dark, and it's been dark since Elsbeth walked up that path. Nobody's gone to knock on that door, not one soul in three nights, and there's a reason for that. The old wheel still turns on still nights, slow and creaking, like something inside's still grinding grain. I've heard it. Don't you go telling me it's the wind."
+   ]
+  ]
+ },
+ {
+  "turn": 9,
+  "note": "unlearnable: should be refused/unknown",
+  "player": "I ask the bard if he has heard anything about a witcher named Vesemir.",
+  "narration": "Geralt's question hangs in the smoke-thick air of the common room, and Dandelion's easy smile does not waver, though his fingers drift over the lute strings and stop, as if the name has touched a nerve he would rather not show. He sets the instrument more carefully across his knees and tilts his head, studying the hooded witcher with the bright, measuring interest of a man who has heard a good story and suspects it is about to get better. Behind the bar the innkeeper's rag goes still in his fist; the name seems to mean nothing to him, and he only watches the two of them with wary eyes. Beyond the shutters the far pasture is silent, and the rain keeps drumming on the roof, steady and indifferent, as though it has nothing to do with old witchers or the dead.",
+  "lines": [
+   [
+    "bard",
+    "Vesemir? Now there's a name that makes a bard sit up straighter, Geralt. I've heard it sung in a few places, always in the same tone people use for old debts and older storms. Old White Wolf, they call him in some of the taverns, and never to his face, I'd wager. A witcher's name travels faster than his horse, but the tales that ride with it are half true at best, and I've never trusted a ballad that made a monster-slayer sound too tidy. Why do you ask? If he's your teacher, or your kin, or simply someone you owe a favor to, say so, and I'll tell you honestly what I've heard. If he's the reason you carry that claw and that blade, well, I'd like to know that too, before we go walking up to a dark mill together."
+   ]
+  ]
+ },
+ {
+  "turn": 10,
+  "note": "",
+  "player": "I put a few coins on the bar and ask the innkeeper to send word to the village elder.",
+  "narration": "Geralt slides a few coins across the scarred wood of the bar, the metal chiming faintly against the grain. The innkeeper's eyes drop to the money, then climb back to the hooded witcher's face, and for a long moment he says nothing, flour-dusted forearms resting on the counter. Coins are a language he understands. He tucks the silver into his apron with a practiced motion, though his jaw tightens as though he is weighing whether the errand is worth the trouble it might bring him. Across the room Dandelion's gaze flicks from the coins to the innkeeper and back, the lute still resting quietly on his knees. Beyond the shutters the rain hammers on, and somewhere out past the fields, the thin, wrong sound has not yet started again.",
+  "lines": [
+   [
+    "innkeeper",
+    "The innkeeper pockets the coins, but his eyes stay hard on Geralt."
+   ]
+  ]
+ },
+ {
+  "turn": 11,
+  "note": "",
+  "player": "I ask the bard to play something quiet while I clean my sword.",
+  "narration": "Geralt pulls a rag and a whetstone from his pack and sets the bloodied blade across his knees, working the cloth along the steel in slow, deliberate strokes while the dark stain smears and lifts. Dandelion's fingers find the strings of his lute and coax out something low and unhurried, a melody that drifts through the smoke-darkened common room without pressing against anyone's nerves. The innkeeper keeps his place behind the bar, the coins still heavy in his apron, his flour-dusted hands folded on the wood as his eyes track the witcher's every movement. The drowner's claw rests on the table, its silt-flecked ridges catching the lamplight, and the room seems to lean toward the music as if grateful for it. Beyond the shutters, rain keeps hammering, and the wind carries nothing from the east pasture.",
+  "lines": [
+   [
+    "bard",
+    "Quiet, he asks. Very well, a quiet tune for a quiet room, though I'd wager the walls have heard worse. Mind the whetstone, Geralt, you'll wear that blade thinner than your patience. And you, good host, you can unclench your fingers from the bar. The coins are in your apron, the elder's word is on its way, and nobody's bleeding on your floorboards yet. Not that the night's finished, mind you. A tune is a fine thing, but I've never yet seen a silver piece stay silent for long. So tell me, friend, when the elder comes, will you send him up the mill road with us, or will you leave the three of us to haunt it alone?"
+   ]
+  ]
+ },
+ {
+  "turn": 12,
+  "note": "",
+  "player": "I ask the innkeeper who else stayed here this week.",
+  "narration": "Geralt's question hangs in the smoky air above the bar like a dropped knife. The innkeeper's thick fingers tighten on the wood, flour pale against the knuckles, and for a long moment he says nothing at all, only breathes through his nose while the coins shift heavily in his apron. Behind him a stack of tankards stands gleaming, and a guttering lamp throws his shadow long across the planks. Dandelion's melody dips and slows under his fingers, the strings going soft as he listens, and his eyes drift from the innkeeper's jaw to the drowner's claw on the table and back again. The witcher's whetstone pauses on the blade. Through the shutters the rain eases for a heartbeat, and from far beyond the eastern fields comes that thin, uneven sound again, faint and wrong, then cut off as though something out there has lifted its head to hear who is speaking of strangers at the inn.",
+  "lines": [
+   [
+    "innkeeper",
+    "The innkeeper's knuckles go white on the bar. He glances at the shuttered window, then back at Geralt, and his voice comes low and rough."
+   ]
+  ]
+ }
+]

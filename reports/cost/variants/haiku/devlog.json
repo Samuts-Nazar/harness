@@ -1,0 +1,100 @@
+[
+ {
+  "kind": "npc_line_rejected",
+  "npc": "innkeeper",
+  "text": "Lately? Lately is what you'd get if you'd been living under a rock, stranger. Three nights now. Three nights the flock east of the village has come up torn to ribbons, and the old Hallen dog with it, the poor beast. Not a wolf, or not any wolf I've ever seen. Wolves don't leave a whole ewe hanging from the fence post like laundry. And the men who went out with pitchforks the first night came back white as milk and wouldn't say what they'd seen, only that it was big, and it was quick, and it went up the mill road. The miller's girl, Elsa, went out that same first evening. Took her lantern and walked off toward the old mill, meaning to fetch her father's grain sacks from the loft, so her mother says. Never came back. Her lantern was found on the mill steps the next morning, still lit, mind you, which I don't like at all. The miller's gone half mad with it. Sits in the taproom every night staring at his cup. So, you'll understand why I want to know whose blood is on that blade. And why I'm asking whether you mean to walk out there or if you're here to tell me something I don't want to hear."
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "innkeeper",
+  "text": "What's been going on? Same as it's been going on for three nights, stranger. Thing comes down off the hills after dark and tears into whatever's penned up east of the village. Ferdi Holt lost forty head to it the first night, then his dog the second, and last night old Sorrel's whole flock was scattered across the fields like wet washing. Nobody saw it clear. Just the screaming, and then nothing, and then us lot lying awake listening to the wind and wondering if it's coming down the road next. And the mill, aye, that's the part that gets under my skin. Miller's girl, Ilse, she's sixteen and sensible as they come. Went out at dusk with her lantern, saying she'd go check the old wheel was still turning for her father. Lantern went up the hill path and never came back down. Her father's been sitting by the door ever since, not saying a word. So you'll forgive me if I don't take kindly to a man walking in dripping blood and a sword the length of my arm. So I'll ask again, and I'd like a straight answer this time. Whose blood is it?"
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "innkeeper",
+  "text": "What's been going on? Death, stranger, that's what. Three nights running the flock east of the village has been found torn open, sheep scattered across the field like rags, and Aldous's sheepdog hanging from the fence post by its own guts. Nobody saw a thing. Nobody heard a thing, mind, except a howl or two that wasn't any wolf I've ever known. Folk bolt their doors at dusk now and pray till dawn. And the mill. Old Brenna's girl, Mara, walked off toward it with her lantern one evening, humming to herself like she hadn't a care. Her father's been out there every night since with a pitchfork, calling her name. Nothing but silence and that dark window staring back at him. So you'll understand me if I don't take kindly to a man walking in with blood on his blade and no word of why."
+ },
+ {
+  "kind": "npc_fallback",
+  "npc": "innkeeper",
+  "rejected": [
+   "Lately? Lately is what you'd get if you'd been living under a rock, stranger. Three nights now. Three nights the flock east of the village has come up torn to ribbons, and the old Hallen dog with it, the poor beast. Not a wolf, or not any wolf I've ever seen. Wolves don't leave a whole ewe hanging from the fence post like laundry. And the men who went out with pitchforks the first night came back white as milk and wouldn't say what they'd seen, only that it was big, and it was quick, and it went up the mill road. The miller's girl, Elsa, went out that same first evening. Took her lantern and walked off toward the old mill, meaning to fetch her father's grain sacks from the loft, so her mother says. Never came back. Her lantern was found on the mill steps the next morning, still lit, mind you, which I don't like at all. The miller's gone half mad with it. Sits in the taproom every night staring at his cup. So, you'll understand why I want to know whose blood is on that blade. And why I'm asking whether you mean to walk out there or if you're here to tell me something I don't want to hear.",
+   "What's been going on? Same as it's been going on for three nights, stranger. Thing comes down off the hills after dark and tears into whatever's penned up east of the village. Ferdi Holt lost forty head to it the first night, then his dog the second, and last night old Sorrel's whole flock was scattered across the fields like wet washing. Nobody saw it clear. Just the screaming, and then nothing, and then us lot lying awake listening to the wind and wondering if it's coming down the road next. And the mill, aye, that's the part that gets under my skin. Miller's girl, Ilse, she's sixteen and sensible as they come. Went out at dusk with her lantern, saying she'd go check the old wheel was still turning for her father. Lantern went up the hill path and never came back down. Her father's been sitting by the door ever since, not saying a word. So you'll forgive me if I don't take kindly to a man walking in dripping blood and a sword the length of my arm. So I'll ask again, and I'd like a straight answer this time. Whose blood is it?",
+   "What's been going on? Death, stranger, that's what. Three nights running the flock east of the village has been found torn open, sheep scattered across the field like rags, and Aldous's sheepdog hanging from the fence post by its own guts. Nobody saw a thing. Nobody heard a thing, mind, except a howl or two that wasn't any wolf I've ever known. Folk bolt their doors at dusk now and pray till dawn. And the mill. Old Brenna's girl, Mara, walked off toward it with her lantern one evening, humming to herself like she hadn't a care. Her father's been out there every night since with a pitchfork, calling her name. Nothing but silence and that dark window staring back at him. So you'll understand me if I don't take kindly to a man walking in with blood on his blade and no word of why."
+  ]
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "bard",
+  "text": "Ah, the most honest words ever spoken in a tavern, and the least useful! Come now, good host, you've been stewing over those torn sheep for three nights, and I'd wager you've worn a path between your hearth and that shuttered window besides. Something's got your floorboards creaking with worry. So let's try it another way: tell us the sheep were never the real trouble. What did the miller's girl say to you before she went off with that lantern? Did she mention the mill at all, or was it only the dark that frightened her? And Geralt, since you've decided to be the silent sort tonight, I'll speak for us both. If there's something out in that mill worth a sword and a bit of blood, I'd rather know it before we go knocking on its door. Besides, a silver piece is a silver piece, and I've never met a locked door I couldn't charm open with a verse or two."
+ },
+ {
+  "kind": "narrator_speech_rejected",
+  "attempt": 0,
+  "text": "Geralt's question hangs in the smoky air, and Dandelion turns from the innkeeper with the look of a man who has been waiting for exactly this. He sets his lute aside against the bench and leans forward, elbows on his knees, the firelight catching the silver at his ears. For a moment he regards Geralt over the rim of his tankard, weighing him, then his mouth curls into something between a smile and a sigh. The old mill, he says, is more story than stone: a place the village speaks of in lowered voices, where the wheel has not turned in living memory and where the miller's family once heard singing through the walls on quiet nights. The bard's fingers tap a slow rhythm against the wood of the table as he speaks, and the innkeeper, still gripping the bar, lifts his eyes to Geralt's bloodied blade and then back to the bard, as though deciding which of the two strangers is the greater danger to his floorboards."
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "bard",
+  "text": "Ah, the old mill! Now you're speaking my language, Geralt. Mind you, I only know what every tavern gossip in three villages has been chewing on this week, but that's the best sort of knowledge for a bard: half truth, half rumour, and all of it ripe for a verse. They say the mill's been dark since Elsbeth walked up that path with her lantern swinging, and that the wheel hasn't turned since. Some say the miller himself went looking and never came back, though I've heard that tale told two different ways before supper. So tell me, friend, do you mean to walk up there tonight, in the rain, with that blade at your hip? Because if you do, I'll not let you go alone. Consider the silver piece our wager, and I'll sing you the whole sorry tale on the way, so you'll know what you're walking into."
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "bard",
+  "text": "Ah, the old mill! Now you're speaking my language, Geralt. Mind you, I know only what every tavern gossip in three villages knows: the place was a grain mill once, back when the millwheel still turned and the miller still sang at his work. Then the miller's wife passed, the wheel fell silent, and the miller grew quiet and strange, keeping to himself with his daughter Elsbeth and his bolted doors. And now the girl's gone off into that dark place with a lantern, and our good host here won't meet anyone's eye. So you tell me, friend, what's a grieving man to make of that, and what's a bard to make of it, except a ballad with a very sad refrain? I'd wager you'll find more truth standing in that mill's doorway than in all the ale this inn has ever poured. Shall we go see? My lute and I are at your service, for the price of one silver piece and a good story at the end of it."
+ },
+ {
+  "kind": "narrator_bad_speakers",
+  "proposed": [
+   "innkeeper (Innkeeper)",
+   "bard (Dandelion)"
+  ],
+  "kept": [
+   "innkeeper",
+   "bard"
+  ]
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "innkeeper",
+  "text": "Elsbeth. That's her name, the miller's girl, all of seventeen summers, with hair the color of wet straw and a laugh you could hear clear across the green. Her father Tomas ran that mill for thirty years, and he's the one who taught her to read the sky and the weather. She was last seen by old Jenn, who keeps the cart path, walking east at dusk with her lantern swinging, humming some nonsense tune. Jenn said she didn't look frightened. She looked like someone who was going somewhere she'd been before. That's the part that's kept me awake, stranger, more than the sheep. A girl doesn't walk toward a dark mill like that unless she thinks she knows what's waiting. So no, I won't say more than that. And you'll keep that blade in its sheath while you're under my roof."
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "innkeeper",
+  "text": "The miller's girl is Elsbeth, Aldric the miller's only child, and she's no more than seventeen summers. Last one who saw her was Hollis's boy, the one who minds the lower pasture. He swore she came down the road at dusk with her lantern swinging, humming some tune, and went off the path toward the mill like she had somewhere she meant to be. He's not slept since, and neither has her mother. So don't you go looking at me like I'm keeping her in a cupboard. I've told you all I've got, and it's more than I wanted to."
+ },
+ {
+  "kind": "narrator_bad_speakers",
+  "proposed": [
+   "bard (Dandelion)"
+  ],
+  "kept": [
+   "bard"
+  ]
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "bard",
+  "text": "Ah, now there's a sight to make a bard's fingers itch! Look at the way our host has gone pale as new milk, Geralt. A drowner's claw, is it? Grey and hooked like a fishhook somebody forged in a bad mood. I've heard the river folk talk of such things, but I'd never have guessed one would come calling this far from the water. And here's the thing that sets my ears twitching: a drowner's a creature of the riverbank, not of the east pasture. So either you've happened upon something that wandered a long way from home, or there's more than one sort of hungry thing about these parts, and the innkeeper knows it better than either of us. Shall I play you a little tune while he gathers his courage, or would you rather he just tell us straight which one it is?"
+ },
+ {
+  "kind": "narrator_bad_speakers",
+  "proposed": [
+   "bard (Dandelion)"
+  ],
+  "kept": [
+   "bard"
+  ]
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "bard",
+  "text": "Vesemir, you say? Now that's a name that carries some weight in a tavern, Geralt. I've heard it sung once or twice, in the mouths of men who'd rather not say it too loudly. A white-haired old wolf of the Path, if the tales are true, and I'd wager the tales are rather kinder to him than he'd be to himself. But I won't pretend I know much more than that, and I'll not sell you a ballad I can't back. Why do you ask, friend? Is he the one who taught you to swing that blade, or is he the one you're hoping to find on the road ahead? Either way, mind our host there. He's gone white as a sheet at the name, and I'd rather not have the whole inn hearing the rest of this tune."
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "bard",
+  "text": "Vesemir, is it? Now there's a name that carries a bit of weight in a tavern, Geralt. I've heard it sung once or twice, always by folk who spoke of him the way you'd speak of a storm that passed them by. Old wolf, grey as iron, the sort who turns up when a town's in trouble and leaves before anyone can thank him properly. Whether that's the same man you're after, I couldn't say for certain, but I'll not pretend the name means nothing to me. If you're asking because he's the one who trained you, or taught you whatever it is you do with that bloodied blade, then I'd wager there's a ballad in that too, and a far better one than the sheep and the lantern. Mind you, I'll want the whole tale over a pint sometime, not just the name thrown at me like a dropped coin. For now, though, let's keep our eyes on that mill, shall we? Our host looks like he's about to swallow his rag."
+ }
+]

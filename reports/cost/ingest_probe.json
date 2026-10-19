@@ -1,0 +1,348 @@
+{
+ "chapter_chars": 69763,
+ "chunks": 13,
+ "models": {
+  "anthropic/claude-haiku-5.5": {
+   "rows": [
+    {
+     "in": 2925,
+     "out": 1300,
+     "cost": 0.0009425,
+     "latency": 6.48,
+     "valid_json": true,
+     "n_events": 6
+    },
+    {
+     "in": 2580,
+     "out": 1279,
+     "cost": 0.0008975,
+     "latency": 5.91,
+     "valid_json": true,
+     "n_events": 6
+    },
+    {
+     "in": 2909,
+     "out": 1851,
+     "cost": 0.0012164,
+     "latency": 8.56,
+     "valid_json": true,
+     "n_events": 9
+    },
+    {
+     "in": 2817,
+     "out": 1897,
+     "cost": 0.0012302,
+     "latency": 7.69,
+     "valid_json": true,
+     "n_events": 8
+    },
+    {
+     "in": 2810,
+     "out": 1554,
+     "cost": 0.001058,
+     "latency": 7.0,
+     "valid_json": true,
+     "n_events": 7
+    },
+    {
+     "in": 2956,
+     "out": 1610,
+     "cost": 0.0011006,
+     "latency": 7.1,
+     "valid_json": true,
+     "n_events": 6
+    },
+    {
+     "in": 2473,
+     "out": 681,
+     "cost": 0.0005878,
+     "latency": 3.65,
+     "valid_json": true,
+     "n_events": 3
+    },
+    {
+     "in": 2830,
+     "out": 1036,
+     "cost": 0.000801,
+     "latency": 5.64,
+     "valid_json": true,
+     "n_events": 4
+    },
+    {
+     "in": 2922,
+     "out": 1386,
+     "cost": 0.0009852,
+     "latency": 6.77,
+     "valid_json": true,
+     "n_events": 6
+    },
+    {
+     "in": 2963,
+     "out": 744,
+     "cost": 0.0006683,
+     "latency": 4.27,
+     "valid_json": true,
+     "n_events": 4
+    },
+    {
+     "in": 2945,
+     "out": 1759,
+     "cost": 0.001174,
+     "latency": 7.97,
+     "valid_json": true,
+     "n_events": 9
+    },
+    {
+     "in": 2986,
+     "out": 1115,
+     "cost": 0.0008561,
+     "latency": 4.91,
+     "valid_json": true,
+     "n_events": 6
+    },
+    {
+     "in": 391,
+     "out": 304,
+     "cost": 0.0001911,
+     "latency": 2.06,
+     "valid_json": true,
+     "n_events": 2
+    }
+   ],
+   "in": 34507,
+   "out": 16516,
+   "cost": 0.0117087,
+   "latency_sum": 78.01,
+   "valid": 13,
+   "events": 76
+  },
+  "deepseek/deepseek-v4-flash": {
+   "rows": [
+    {
+     "in": 2821,
+     "out": 1631,
+     "cost": 0.000875,
+     "latency": 3.97,
+     "valid_json": true,
+     "n_events": 18
+    },
+    {
+     "in": 2554,
+     "out": 1268,
+     "cost": 0.0004908064,
+     "latency": 18.47,
+     "valid_json": true,
+     "n_events": 5
+    },
+    {
+     "in": 2796,
+     "out": 1991,
+     "cost": 0.0006533611,
+     "latency": 23.09,
+     "valid_json": true,
+     "n_events": 8
+    },
+    {
+     "in": 2724,
+     "out": 2432,
+     "cost": 0.00103508,
+     "latency": 58.64,
+     "valid_json": true,
+     "n_events": 14
+    },
+    {
+     "in": 2707,
+     "out": 1370,
+     "cost": 0.00073551,
+     "latency": 175.25,
+     "valid_json": true,
+     "n_events": 7
+    },
+    {
+     "in": 2829,
+     "out": 1126,
+     "cost": 0.000462371,
+     "latency": 9.03,
+     "valid_json": true,
+     "n_events": 7
+    },
+    {
+     "in": 2366,
+     "out": 492,
+     "cost": 0.0003232656,
+     "latency": 6.62,
+     "valid_json": true,
+     "n_events": 3
+    },
+    {
+     "in": 2740,
+     "out": 236,
+     "cost": 0.0001127672,
+     "latency": 3.46,
+     "valid_json": true,
+     "n_events": 2
+    },
+    {
+     "in": 2784,
+     "out": 611,
+     "cost": 0.000200382,
+     "latency": 5.75,
+     "valid_json": true,
+     "n_events": 4
+    },
+    {
+     "in": 2840,
+     "out": 1148,
+     "cost": 0.0006586,
+     "latency": 2.99,
+     "valid_json": true,
+     "n_events": 9
+    },
+    {
+     "in": 2751,
+     "out": 1532,
+     "cost": 0.00082695,
+     "latency": 5.34,
+     "valid_json": true,
+     "n_events": 10
+    },
+    {
+     "in": 2817,
+     "out": 2095,
+     "cost": 0.0010836,
+     "latency": 5.78,
+     "valid_json": true,
+     "n_events": 10
+    },
+    {
+     "in": 350,
+     "out": 217,
+     "cost": 0.00010976,
+     "latency": 4.98,
+     "valid_json": true,
+     "n_events": 2
+    }
+   ],
+   "in": 33079,
+   "out": 16149,
+   "cost": 0.0075674533000000006,
+   "latency_sum": 323.37,
+   "valid": 13,
+   "events": 99
+  },
+  "qwen/qwen3.5-9b": {
+   "rows": [
+    {
+     "in": 2507,
+     "out": 353,
+     "cost": 0.00033895,
+     "latency": 10.25,
+     "valid_json": true,
+     "n_events": 2
+    },
+    {
+     "in": 2169,
+     "out": 629,
+     "cost": 0.00031125,
+     "latency": 6.07,
+     "valid_json": true,
+     "n_events": 5
+    },
+    {
+     "in": 2461,
+     "out": 434,
+     "cost": 0.0003112,
+     "latency": 4.98,
+     "valid_json": true,
+     "n_events": 4
+    },
+    {
+     "in": 2367,
+     "out": 2053,
+     "cost": 0.00054465,
+     "latency": 17.31,
+     "valid_json": true,
+     "n_events": 7
+    },
+    {
+     "in": 2321,
+     "out": 475,
+     "cost": 0.00035085,
+     "latency": 7.3,
+     "valid_json": true,
+     "n_events": 1
+    },
+    {
+     "in": 2466,
+     "out": 1222,
+     "cost": 0.0005521,
+     "latency": 18.01,
+     "valid_json": true,
+     "n_events": 7
+    },
+    {
+     "in": 2057,
+     "out": 473,
+     "cost": 0.00027665,
+     "latency": 19.38,
+     "valid_json": true,
+     "n_events": 2
+    },
+    {
+     "in": 2364,
+     "out": 769,
+     "cost": 0.00035175,
+     "latency": 12.33,
+     "valid_json": true,
+     "n_events": 4
+    },
+    {
+     "in": 2465,
+     "out": 1368,
+     "cost": 0.00037504,
+     "latency": 13.22,
+     "valid_json": true,
+     "n_events": 8
+    },
+    {
+     "in": 2442,
+     "out": 739,
+     "cost": 0.00035505,
+     "latency": 14.57,
+     "valid_json": true,
+     "n_events": 6
+    },
+    {
+     "in": 2362,
+     "out": 1173,
+     "cost": 0.00034145,
+     "latency": 9.03,
+     "valid_json": true,
+     "n_events": 8
+    },
+    {
+     "in": 2504,
+     "out": 931,
+     "cost": 0.00039005,
+     "latency": 11.61,
+     "valid_json": true,
+     "n_events": 6
+    },
+    {
+     "in": 314,
+     "out": 6,
+     "cost": 3.23e-05,
+     "latency": 0.79,
+     "valid_json": true,
+     "n_events": 0
+    }
+   ],
+   "in": 28799,
+   "out": 10625,
+   "cost": 0.00453129,
+   "latency_sum": 144.85,
+   "valid": 13,
+   "events": 60
+  }
+ }
+}

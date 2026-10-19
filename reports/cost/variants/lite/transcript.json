@@ -1,0 +1,153 @@
+[
+ {
+  "turn": 1,
+  "note": "",
+  "player": "I step inside, shake the rain off my cloak and ask for a room.",
+  "narration": "The common room is thick with the scent of damp wool and stale ale, the air hazy with smoke that clings to the low, timbered ceiling. As you cross the threshold, the floorboards groan under your boots, and the sudden shift in the room's atmosphere is palpable; conversations die away into uneasy whispers. The innkeeper, a man whose jowls sag like worn leather, freezes with a rag mid-swipe over the counter, his eyes locking instantly onto the iron in your grip. Near the hearth, Dandelion sits perched on a stool, his lute resting forgotten across his lap as his gaze darts from your blood-stained blade to the darkening windows beyond.",
+  "lines": [
+   [
+    "innkeeper",
+    "Keep that cursed steel out of my common room, Witcher! I don’t care if you’ve been butchering every beast from here to the Pontar, I won’t have that blood dripping on my floorboards and bringing the stench of death into my hearth. We’ve had enough trouble in these parts—sheep ripped to shreds, dogs silenced in the night, and poor Elara gone missing near that mill, likely snatched by whatever hell-spawn is haunting these woods. You look like you’ve been tangling with something foul already, and if you're looking for a room, you’ll sheath that blade and leave your grisly business at the door, or you can take your trade and your stains back out into the rain."
+   ],
+   [
+    "bard",
+    "Now, now, good innkeeper, let’s not be hasty with our hospitality, for have you ever considered that the blood staining our friend’s blade is far less concerning than the bloodthirsty beast currently terrorizing your precious sheep? Look at him—moody, damp, and smelling faintly of ozone and swamp-water, exactly as a Witcher ought to be when he’s finished earning his keep! Geralt, my dear, stoic companion, do put that terrifying piece of cutlery away before you give the poor man a permanent twitch, though I daresay the sight of it is infinitely preferable to whatever creature snatched that girl, Elara, near the mill. We’ve heard the rumors, innkeeper, and while I’m sure a room and a flagon of your finest ale would settle the Witcher’s nerves—and my own, as I’ve a song about a miller’s daughter that is woefully incomplete—perhaps you’d be better served telling us exactly what you saw before the darkness swallowed her whole, instead of worrying about a few measly drops of rain and monster-gore on your floorboards?"
+   ]
+  ]
+ },
+ {
+  "turn": 2,
+  "note": "",
+  "player": "I ask the innkeeper what has been going on around here lately.",
+  "narration": "The innkeeper’s knuckles whiten as he grips the edge of the scarred wooden counter, his gaze flickering nervously between Geralt’s unsheathed steel and the shuttered windows. A heavy silence descends upon the room, broken only by the rhythmic drip of rainwater from Geralt's cloak onto the floorboards. Outside, the wind howls against the timbers, carrying the scent of mud and coming storm. The innkeeper finally lets out a shuddering breath, his reluctance visibly warring with the desperate need to speak of the horrors haunting his doorstep.",
+  "lines": [
+   [
+    "innkeeper",
+    "Keep your bard quiet and your steel sheathed, Witcher, or I’ll find someone with a heavier club to toss you both back into the mud! You want to know what’s been going on? Misery is what’s been going on! First, it was the sheep, found in pieces like someone took a dull saw to them, and not a sound from the dogs—not a whimper, not a growl, just silence where there should be life. Then, little Elara... she went up that path to the mill at dusk with a lantern swinging in her hand, and that was the last anyone saw of her. The mill’s been cold and hollow for ages, a place for rot and shadows, and now the woods east of the village are crawling with whatever took her. You reek of the swamp, and you’ve got the blood of something foul on your hands, so don’t look at me like I’m the one hiding secrets. You want a room? Fine. But you put that blade in a chest or leave it in the stables, and you don’t bring any of that cursed rot inside these walls, or I’ll bar the door and let the thing in the mill find its own way in to finish you off!"
+   ]
+  ]
+ },
+ {
+  "turn": 3,
+  "note": "",
+  "player": "I ask him how long the animals have been dying.",
+  "narration": "The innkeeper flinches at the directness of the inquiry, his eyes darting toward the hearth as if the firelight itself might betray him. He wipes his sweating palms against his stained apron, the fabric bunching under his trembling grip. The air in the common room grows stiflingly thick, smelling of old ale, damp wool, and the metallic tang of the Witcher’s recent hunt. Outside, the shutters groan against the gusts, and the Innkeeper visibly shrinks, his defiance beginning to erode into a brittle, jagged terror.",
+  "lines": [
+   [
+    "innkeeper",
+    "Three nights, Witcher. Three nights of waking up to the smell of copper and rot carried on the wind. The first time, it was just the Miller’s flock, and I thought—maybe wolves, or some stray wyvern prowling down from the peaks. But the dogs didn't bark, they didn't even whine, they just stopped being. Then the neighbor’s hound was found in pieces near the bridge, cleaned out like someone was looking for treasure in its gut. It’s been three nights of terror, and every evening the shadows around that godforsaken mill seem to stretch a little further toward the village. If you’re going to go poking your nose into that darkness, do it fast and leave me out of the fallout, because this place hasn't known a quiet night since the sun set on that girl, and I’m tired of praying that my door is strong enough to keep the nightmare out."
+   ]
+  ]
+ },
+ {
+  "turn": 4,
+  "note": "",
+  "player": "I turn to the bard and ask what he knows about the old mill.",
+  "narration": "Dandelion’s posture shifts instantly, his playful demeanor replaced by the rehearsed intensity of a man who makes his living on half-truths and local legends. He casts a wary look toward the shuttered windows, as if the mill’s shadow might be peering through the cracks, before leaning over the rough-hewn table. The flickering hearth fire casts long, skeletal shadows across his face, accentuating the sudden grimness in his eyes. He lowers his voice to a conspiratorial rasp, the air around him still heavy with the lingering scent of the swamp clinging to the Witcher’s cloak.",
+  "lines": [
+   [
+    "bard",
+    "Geralt, you truly do pick the most cheerful topics for a sunset chat, don't you? As for that old mill, it’s a wretched, hollowed-out husk of a place, spoken of in hushed, trembling tones by every traveler who has the misfortune to pass it after dusk. The locals say the rot isn't just in the floorboards—it’s in the very air surrounding it, a palpable heaviness that clings to your cloak like graveyard mist. It has stood empty since poor Elara vanished, and if the tales are true, she wasn't the first thing to be pulled into its shadows, but she was certainly the last one seen walking toward that lantern-lit trap. It’s a place of ill omen, my friend, where the silence is far heavier than any scream could ever be, and if you're planning on investigating, I suggest we do it with eyes wide open and perhaps a silver blade held much tighter than the one you just tucked away, because whatever tore that hound apart and silenced the village dogs isn't merely hungry—it's hunting, and I fear the mill is its larder."
+   ]
+  ]
+ },
+ {
+  "turn": 5,
+  "note": "two-NPC dialogue",
+  "player": "I ask both of them together: who was the miller's daughter, and who saw her last?",
+  "narration": "The innkeeper flinches at the mention of the girl, his knuckles turning white as he grips his apron. He shifts his weight, eyes darting to the hearth as if the firelight itself might fail him. Dandelion sits back, the usual cadence of his voice lost to a heavy, somber gravity, his fingers tracing the wood grain of the table rather than his instrument. A draft snakes through the room, rattling the shutters and bringing with it the faint, metallic scent of stagnant water and cold fear.",
+  "lines": [
+   [
+    "innkeeper",
+    "I don't know what to tell you."
+   ],
+   [
+    "bard",
+    "Oh, come now, my good man, wringing your hands until they’re raw won’t bring the poor girl back, nor will it bar the door against what’s lurking in the reeds! We’re not looking for a culprit to hang, we’re looking for a name—a face—so that when we face this horror, we know exactly what it took from this village. Elara, you said, but surely she was more than just a name to the people here! Who saw her walking toward that cursed lantern light? Was it a friend, a lover, or perhaps just a lonely traveler who thought the mill was a sanctuary instead of a slaughterhouse? Speak up, man, because silence is a luxury we lost the moment the first sheep went missing, and frankly, I’d much rather compose a ballad about a heroic rescue than a eulogy for a girl lost to the rot of a dying mill!"
+   ]
+  ]
+ },
+ {
+  "turn": 6,
+  "note": "second-hand: bard heard it from the innkeeper",
+  "player": "I ask the bard what the innkeeper just said about the howling.",
+  "narration": "The innkeeper freezes at the bard's prodding, his eyes glazing over with a mixture of terror and sudden recollection. He sways slightly, as if struck by a phantom blow, and the heavy, damp air in the room seems to constrict around them. Geralt’s sharp gaze shifts from the trembling man to his companion, waiting for the bard to interpret the panicked murmurs that preceded their current conversation. Dandelion, his usual flair replaced by an unsettling stillness, glances at the innkeeper with a grim tightening of his jaw, clearly having caught details that now hang in the thick, ozone-heavy air like a suffocating shroud.",
+  "lines": [
+   [
+    "bard",
+    "I don't know what to tell you."
+   ]
+  ]
+ },
+ {
+  "turn": 7,
+  "note": "",
+  "player": "I tell them I killed a drowner at the river crossing this afternoon, and show the claw.",
+  "narration": "Geralt tosses the dripping, blackened claw onto the scarred wood of the table. It lands with a wet thud, the sharp talons curling in death. The innkeeper flinches violently at the sight, his face draining of what little color remained, while the scent of rot from the specimen battles with the sharp, metallic tang of ozone already clinging to the witcher. Dandelion watches the exchange with a lingering, guarded look, his fingers drumming nervously against the polished wood of his lute, clearly weighing the heavy burden of the information he has yet to divulge.",
+  "lines": [
+   [
+    "innkeeper",
+    "I don't know what to tell you."
+   ],
+   [
+    "bard",
+    "By the gods, Geralt, must you always be so dramatic with your trophies? Though, I suppose if the sight of a rotting drowner claw doesn't loosen our friend’s tongue, nothing will! Look at him, shaking like a dry leaf in a gale, and honestly, can you blame him? First his livestock, then his neighbors, and now he’s trapped in a nightmare where the animals don't just die, they vanish into the very shadows of that wretched mill. We’ve heard the tales—the silencing of the hounds, the girl walking toward a phantom lantern, and the rot that has swallowed the east woods whole. Tell us, innkeeper, is that claw the reason you’re hiding in the corners, or have you heard the howling at night too? Because if that creature is bold enough to stalk the village, we’re going to need more than just a terrified silence to keep us alive until morning!"
+   ]
+  ]
+ },
+ {
+  "turn": 8,
+  "note": "",
+  "player": "I ask the innkeeper whether he trusts what the bard says about the mill.",
+  "narration": "The innkeeper stares at the drowner claw, his breath hitching in his chest. As he looks toward Dandelion, his eyes dart to the shadows creeping across the floorboards as if expecting them to snake forward and claim him. A fine tremor runs through his hands, and he clutches his apron as he slowly turns his gaze from the grotesque trophy to the witcher, his silence stretching thick and suffocating in the dim, stale air of the common room.",
+  "lines": [
+   [
+    "innkeeper",
+    "Don't look at me like that, Witcher, and keep your hands off that slimy, rotting thing! You think a trophy like that makes me feel safer? It just proves that the filth you hunt is already inside our fence. You ask if I trust him? I trust that the miller’s daughter walked toward that mill and never walked out, and I trust that the woods are turning into a graveyard where even the dogs are too terrified to yelp before they’re torn to pieces. Whether it’s a drowner, a ghoul, or some damn phantom lantern leading children into the rot, it’s all the same to me—it’s death, and it’s getting closer every single night. The shadows near that mill don't just sit there; they reach, and they hunger, and if you're planning on staying, you'd better kill whatever is stalking us before it decides my inn is the next place to feed. Now take that severed claw off my table before I lose the rest of my lunch, and if you're going to the mill, do it before the sun drops, because I won't open this door for anyone—not even you—once the darkness takes hold of the road."
+   ]
+  ]
+ },
+ {
+  "turn": 9,
+  "note": "unlearnable: should be refused/unknown",
+  "player": "I ask the bard if he has heard anything about a witcher named Vesemir.",
+  "narration": "The heavy, stifling atmosphere of the inn seems to press down on the room, the innkeeper's frantic gaze lingering on the dark window as if expecting the shadows themselves to breach the glass. Geralt's query cuts through the tension like a blade, shifting the focus from the grisly trophy to a name that hangs heavy with unspoken history. Dandelion's expression falters, his habitual bravado dimming as he contemplates the weight of the inquiry. The lute strapped to his back seems suddenly cumbersome, a silent witness to a conversation that has wandered far from the immediate terror of the mill.",
+  "lines": [
+   [
+    "bard",
+    "Vesemir? Now there is a name that carries the weight of a dozen winters and more scars than I’ve had broken hearts, which, let me tell you, is a tally few men could boast! Why, of course I’ve heard of the old wolf—the master of Kaer Morhen himself, the man who taught our dear, brooding Geralt here that a frown is not actually a replacement for a personality! But Geralt, my friend, the timing of such a query is curious indeed; you’re looking for a mentor while we’re standing in the shadow of a mystery that makes the local innkeeper sweat through his tunic? If Vesemir were here, he’d likely tell you that questioning a terrified man about legendary witchers is a fool’s errand when there’s a girl lost to the rot and a beast that specializes in silent, gruesome slaughter! Though, if you’re hoping the old man might be lurking in the woods nearby, I’d be careful, for even a master of his craft might find these woods a bit too infested for comfort, especially with that phantom lantern dancing about like a cruel, flickering promise of death."
+   ]
+  ]
+ },
+ {
+  "turn": 10,
+  "note": "FAILED: ExtractionRejected: state_changes[0]: cannot remove inventory 'coins': player does not have it",
+  "player": "I put a few coins on the bar and ask the innkeeper to send word to the village elder.",
+  "narration": "",
+  "lines": []
+ },
+ {
+  "turn": 11,
+  "note": "",
+  "player": "I ask the bard to play something quiet while I clean my sword.",
+  "narration": "The innkeeper flinches as Geralt draws a sharpening stone from his satchel, his knuckles white as he grips the edge of the counter to keep his hands from trembling. Dandelion sighs, the bravado falling away to reveal a flicker of genuine apprehension; he eases the lute from his back, his fingers dancing across the strings to weave a low, melancholy melody that seems to weave itself into the scent of swamp water and old ozone. The flickering candlelight reflects in the cold steel of the witcher's blade, casting long, erratic shadows that stretch toward the boarded window as if reaching for the encroaching dark outside.",
+  "lines": [
+   [
+    "bard",
+    "There, there, Geralt, let the steel sing a lighter tune than the one the whetstone is carving into it. It’s a delicate balance, isn't it? Sharpening the edge that keeps our throats from being opened, while the shadows outside sharpen their own teeth. I must say, this melody—it’s a bit of a dirge, though perhaps that’s only fitting for a place where the lanterns are phantom lures and the hounds die without a whimper. I’ve traveled from the courts of Toussaint to the frozen reaches of the North, but I’ve rarely encountered a silence quite as heavy as the one currently filling this inn. You clean your blade with such practiced apathy, my friend, but tell me—between the rhythmic scrape of that stone and the frantic, shallow breathing of our host, do you ever find yourself wondering if the beast is waiting for that very sound to end? Because if we’re to head out into that rot-choked wood before the sun kisses the horizon goodbye, I should like to know if my lute will be providing the soundtrack to a hunt or a funeral."
+   ]
+  ]
+ },
+ {
+  "turn": 12,
+  "note": "",
+  "player": "I ask the innkeeper who else stayed here this week.",
+  "narration": "The innkeeper freezes at the sound of the witcher's voice, his knuckles turning a ghostly white as he grips the counter. He lifts his head slowly, his eyes darting to the heavy wooden door, then back to the blade resting on the witcher's lap. The innkeeper's breath hitches, a jagged, wet sound in the sudden lull of the lute's melody, as if the very mention of past guests threatens to summon the same shadows that swallowed Elara. He looks at the drowner claw sitting on the table, then at the sharpening stone in Geralt's hand, his lower lip trembling uncontrollably before he finally finds the strength to part his teeth.",
+  "lines": [
+   [
+    "innkeeper",
+    "You want names, Witcher? You want a list of souls for the record books before you go courting the grave? Nobody stays here! Not anymore! Travelers avoid this road like the plague, and the few fools who didn't know better—a merchant from the valley, a tanner passing through—they didn't stay long enough to matter. They heard the whimpering from the woods, they saw the shadows stretching toward the mill, and they packed their carts before the moon even climbed the sky. You’re the only ones who have lingered long enough to let that wretched sharpening stone grate against my nerves like a damn funeral bell. Every stroke you take, every rasp of that metal, it sounds like claws dragging against the shutters. Stop it! Just stop! You ask who stayed here? Nobody who walked out the front door the next morning, that's who. Now put that thing away or get out, because the sun is falling, the lantern at the mill is likely already lit, and I am not losing another night's sleep wondering if the next thing to tear through my floorboards is the beast or you."
+   ]
+  ]
+ }
+]
