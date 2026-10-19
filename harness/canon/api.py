@@ -87,7 +87,7 @@ class CanonCampaign:
         return campaign_t + self.offset
 
 
-JudgeFn = Callable[[str], str]   # a cheap-model call: prompt -> text
+JudgeFn = Callable[[str], str]   # a cheap-model text call: prompt -> text
 
 
 # Implementations live in harness/canon/play.py; these wrappers keep the contract readable in one file.
@@ -96,13 +96,16 @@ def scheduled_events(canon, after_t: int, until_t: int | None = None) -> list[Sc
     return impl(canon, after_t, until_t)
 
 
-def background(canon, character: str, topic: str, *, judge: JudgeFn, as_of: int,   # noqa: ANN001
-               stored: Sequence[Background] = ()) -> Background | None:
+def background(canon, character: str, topic: str, *, judge, as_of: int,   # noqa: ANN001
+               phrase: JudgeFn | None = None, stored: Sequence[Background] = (),
+               denied: Sequence[str] = ()) -> Background | None:
+    """`judge` is a harness.judge.Judge (typed yes/no, Jev first). The caller keeps the answer (a stored
+    Background, or the topic in `denied`) so that the same question is never asked twice."""
     from .play import background as impl
-    return impl(canon, character, topic, judge=judge, as_of=as_of, stored=stored)
+    return impl(canon, character, topic, judge=judge, as_of=as_of, phrase=phrase, stored=stored, denied=denied)
 
 
 def judge_event(canon, event: ScheduledEvent, changes: Sequence[str], *, judge: JudgeFn,   # noqa: ANN001
                 at_t: int) -> EventVerdict:
     from .play import judge_event as impl
-    return impl(canon, event, changes, judge=judge, at_t=at_t)
+    return impl(canon, event, changes, judge=judge, at_t=at_t)   # judge: JudgeFn (needs a reason, so text)

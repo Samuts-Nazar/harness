@@ -48,11 +48,16 @@ def find(canon: Canon, name: str) -> str | None:
     return r["entity"] if r else None
 
 
-def main(db: str) -> None:
+def main(db: str, verify: bool = False) -> None:
     from dotenv import load_dotenv
     from harness.canon.embed import OpenRouterEmbedder
     load_dotenv('.env')
     canon = Canon(db, OpenRouterEmbedder('qwen/qwen3-embedding-8b'))
+    judge = None
+    if verify:
+        from harness.judge import LLMJudge
+        from harness.providers import OpenRouterProvider
+        judge = LLMJudge(OpenRouterProvider(), 'deepseek/deepseek-v4.1-flash-1017')
     for i, (who, as_of, q, expect) in enumerate(QUESTIONS + EXTRA, 1):
         hid = find(canon, who)
         print(f"\n### {i}. {who} ({hid}), as_of={as_of} (day {as_of // D + 1}), q: {q}")
@@ -60,7 +65,7 @@ def main(db: str) -> None:
         if not hid:
             print("  (holder not found in this store)")
             continue
-        out = canon.recall(hid, q, as_of, k=4)
+        out = canon.recall(hid, q, as_of, k=4, verify=judge)
         print(f"  holder knows {out['n_known']} events in total by then")
         for e in out["events"]:
             print(f"  - [{e['how_known']}{'<' + e['source'] if e['source'] else ''}, learned {e['learned_t']}, {e['score']}] #{e['id']} {e['what'][:150]}")
@@ -69,4 +74,4 @@ def main(db: str) -> None:
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    main(sys.argv[1], len(sys.argv) > 2 and sys.argv[2] == 'verify')
