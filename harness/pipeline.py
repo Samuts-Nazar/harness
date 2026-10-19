@@ -41,7 +41,8 @@ from .models import (
     Scene,
 )
 from .narrator import (
-    NarrationError, NarratorOutput, clean_npc_line, has_quotes, has_speaker_line, parse_narration,
+    NarrationError, NarratorOutput, clean_npc_line, has_dash_speech, has_quotes, has_speaker_line,
+    parse_narration,
     strip_speech,
 )
 from .perception import ACTION, DESCRIPTION, SPEECH, perceivers
@@ -430,7 +431,8 @@ class Engine:
                                      [self._fix_names(a, "action") for a in out.actions],
                                      out.speakers)
             parsed = out
-            if has_speaker_line("\n".join(out.texts()), self._npc_names):
+            if (has_speaker_line("\n".join(out.texts()), self._npc_names)
+                    or has_dash_speech(out.description)):
                 ok = False
             elif on_candidate is not None:
                 ok = on_candidate(self._valid_speakers(out))

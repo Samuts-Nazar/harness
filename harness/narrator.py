@@ -17,6 +17,11 @@ QUOTE_RE = re.compile(
     r"|(?<!\w)'(?:[^'\n]|(?<=\w)'(?=\w)){3,}?'(?!\w)"  # apostrophes inside words stay inside
 )
 _LONG_QUOTE_RE = re.compile(r'["“«]([^"“”«»\n]+)["”»]')
+# dialogue dash (Ukrainian prose): a line or sentence that starts with a dash and a capital letter
+DASH_SPEECH_RE = re.compile(
+    r'(?:^|(?<=[.!?…:»]\s))[—–]\s*[А-ЯІЇЄҐA-Z«"]'
+    r'(?:[^\n]*?[,.!?…]\s*[—–]\s*[^.!?…\n]*[.!?…]|[^\n]*?[.!?…])',  # speech + ", — he says." tag
+    re.MULTILINE)
 STAGE_RE =re.compile(r"\([^)\n]*\)|\*[^*\n]+\*")
 
 
@@ -67,13 +72,18 @@ def has_speaker_line(text: str, npc_names: Collection[str]) -> bool:
     return bool(_speaker_line_re(npc_names).search(text))
 
 
+def has_dash_speech(text: str) -> bool:
+    """Direct speech written with a dialogue dash ("— Млин стоїть біля дамби, — каже вона.")."""
+    return bool(DASH_SPEECH_RE.search(text))
+
+
 def has_quotes(text: str) -> bool:
     return bool(QUOTE_RE.search(text))
 
 
 def strip_speech(text: str, npc_names: Collection[str]) -> str:
     text = _speaker_line_re(npc_names).sub("", text) if npc_names else text
-    text = QUOTE_RE.sub("", text)
+    text = DASH_SPEECH_RE.sub("", QUOTE_RE.sub("", text))
     return re.sub(r"[ \t]{2,}", " ", re.sub(r"\s+([,.;!?])", r"\1", text)).strip()
 
 

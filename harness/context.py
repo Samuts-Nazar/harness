@@ -196,7 +196,8 @@ class ContextBuilder:
                 "headings, no markup. Its length and shape follow the moment (a glance can be a "
                 "sentence, a crisis several paragraphs); do not settle into a fixed pattern. "
                 "Never write speech for anyone but the player: NPC lines are produced "
-                "separately. Do not decide what the player character says, does or feels beyond "
+                "separately, so no quotation marks and no dialogue dashes; show what a "
+                "character does, not what they say. Do not decide what the player character says, does or feels beyond "
                 "what the player gave."
                 + (f"\nWrite in {self.language}." if self.language else ""))
             return self.finish([

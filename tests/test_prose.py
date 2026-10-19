@@ -147,6 +147,17 @@ def test_speech_in_prose_is_rejected_and_regenerated():
     assert any(n["kind"] == "narrator_speech_rejected" for n in eng.devlog)
 
 
+def test_dialogue_dash_speech_is_caught_by_code_and_regenerated():
+    from harness.narrator import has_dash_speech, strip_speech
+
+    dashed = "Ельза опускає кухоль. — Млин стоїть біля дамби, — каже вона. За вікном дощ — ніби плаче."
+    assert has_dash_speech(dashed) and not has_dash_speech("Дощ шумить — ніби хтось ступив.")
+    assert strip_speech(dashed, []) == "Ельза опускає кухоль. За вікном дощ — ніби плаче."
+    eng, _ = prose_engine({"narrator": [dashed, "Ельза мовчить."], "extractor": ["none", diff()],
+                           "npc": ["x"]}, judge=director_judge("innkeeper"))
+    assert eng.turn("hi").narration == "Ельза мовчить."
+
+
 def test_a_json_answer_from_a_prose_narrator_is_tolerated():
     eng, _ = prose_engine({"narrator": [json.dumps({"description": "Rain."})],
                            "extractor": ["none", diff()], "npc": ["x"]},
