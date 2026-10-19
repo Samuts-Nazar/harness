@@ -33,7 +33,7 @@ button { cursor: pointer; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #1a1405; }
 .btn.primary:disabled { opacity: .35; }
 .btn.danger { background: #3a1f20; border-color: #6b3436; color: #ffd9d6; }
-.btn.sm { min-height: 40px; padding: 0 8px; font-size: 14px; flex: 1; }
+.btn.sm { min-height: 40px; padding: 0 4px; font-size: 13px; flex: 1; gap: 4px; white-space: nowrap; }
 .btn.wide { width: 100%; margin-top: 12px; }
 .btn.big { width: 100%; min-height: 56px; font-size: 18px; }
 
@@ -54,7 +54,7 @@ button { cursor: pointer; }
 
 /* журнал debug */
 #debugPanel { position: absolute; top: 0; left: 0; right: 0; z-index: 20;
-  height: 44%; background: rgba(12, 18, 20, .97); border-bottom: 2px solid var(--teal); display: flex; flex-direction: column; }
+  height: 44%; background: #0b1214; border-bottom: 2px solid var(--teal); display: flex; flex-direction: column; }
 .dbg-head { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; font-size: 14px; color: var(--teal); gap: 8px; flex-wrap: wrap; }
 .dbg-pace { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .chip-sm { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 5px 9px; font-size: 12px; min-height: 30px; }
@@ -94,7 +94,7 @@ button { cursor: pointer; }
 .sysnote.veil { background: repeating-linear-gradient(135deg, #181628, #181628 8px, #1d1a30 8px, #1d1a30 16px); color: #cfc8f5; border-color: #3a3360; }
 .badge { align-self: flex-start; font-size: 12px; color: var(--teal); background: #14282a; border: 1px solid #234a46; padding: 4px 9px; border-radius: 999px; }
 .errnote { font-size: 13px; color: var(--muted); }
-.react { display: inline-block; font-size: 13px; font-style: italic; color: var(--me); background: #231f38; border-radius: 999px; padding: 0 8px; margin: 0 2px; line-height: 1.5; font-family: var(--sans); }
+.react { display: inline; font-size: 13px; font-style: italic; color: var(--me); background: #231f38; border-radius: 999px; padding: 1px 8px; margin: 0 2px; line-height: 1.9; font-family: var(--sans); }
 
 /* інтерактивні слова */
 .ent { border-bottom: 1.5px dotted var(--accent); cursor: pointer; color: #f6dca4; }
@@ -199,3 +199,6 @@ textarea { min-height: 44px; max-height: 120px; }
 #pauseOv p { font-family: var(--serif); font-size: 22px; margin: 6px 0 18px; }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+
+.composer:not(.has-draft) .field-top { display: none; }
+.composer .field-top { min-height: 28px; }

@@ -86,7 +86,8 @@
     for (let i = 0; i < toks.length; i++) {
       await gate();
       if (run.signal) return false;
-      box.append(wordNode(toks[i], i), ' ');
+      if (i > 0) box.append(' ');
+      box.append(wordNode(toks[i], i));
       autoscroll();
       await sleep(wordDelay(toks[i].w, base), run);
     }
@@ -179,10 +180,12 @@
       handleCut(interrupted.utt, interrupted.shown, false);
       await reactionNarr(group, interrupted.who);
     } else if (sig === 'skip') {
+      trailOff(group);
       group.append(el('div', 'sysnote', '⏭ ' + out.summary));
       log('code', 'Пропуск: сцена минула одним реченням; подія записана');
       logBeatsOf(out);
     } else if (sig === 'veil') {
+      trailOff(group);
       group.append(el('div', 'sysnote veil', D.veilText));
       log('code', 'Завіса: решту виводу сховано; стан оновлено');
       logBeatsOf(out);
@@ -190,6 +193,11 @@
       logBeatsOf(out);
     }
     finishOutput(out, group);
+  }
+
+  function trailOff(group) {
+    const last = group.lastElementChild;
+    if (last && last.classList.contains('narr')) last.append('…');
   }
 
   function finishOutput(out, group) {
@@ -370,7 +378,7 @@
       b.onclick = () => {
         const u = S.speaking;
         if (!u) return;
-        u.say.append(el('span', 'react', r.marker), ' ');
+        u.say.append(' ', el('span', 'react', r.marker));
         autoscroll();
         const p = [0.91, 0.87, 0.95, 0.72][S.reactN++ % 4];
         log('code', `Подія: ${r.log} під час репліки ${D.ents[u.who].gen}; спостережувана, її сприймають усі присутні`);
@@ -387,6 +395,7 @@
   function updateIdle() {
     $('#btnSend').disabled = !(fAct.value.trim() || fSay.value.trim());
     $('#lockAct').hidden = $('#lockSay').hidden = $('#draftTools').hidden = !S.draft;
+    $('.composer').classList.toggle('has-draft', !!S.draft);
     $('#draftNote').hidden = !S.draft;
   }
   function clearDraft() {
@@ -654,7 +663,7 @@
     buildChar();
     bind();
     updateClock();
-    log('code', `Сесію ініціалізовано: «${D.scene.title}», день ${D.scene.day}. Журнал подій append-only`);
+    log('code', `Сесію ініціалізовано: ${D.scene.place}, день ${D.scene.day}. Журнал подій append-only`);
     log('code', 'Режим часу: покроковий (світ чекає на гравця); у фоні застосунку світ стоїть');
     nextOutput.cur = D.outputs[0];
     playOutput(D.outputs[0], D.outputs[0].beats);
