@@ -213,3 +213,7 @@ Chosen by the task 7 bake-off on our own Ukrainian test set (`reports/bakeoff/SU
 - Result on our task (blind, 360 NPC outputs, details in the task 15 report): luna and mimo-v2.6-pro tie on style (3.7 / 3.8 of 5) and Ukrainian (4.4 / 4.6); mimo costs 3.7x and takes 3x the time; glm-5.3 writes the liveliest lines but breaks Ukrainian (Chinese or Latin fragments in 27-30% of outputs, leaks 55%; luna showed 20% Latin fragments too, but those were English catchphrases copied from the manner notes, since fixed); qwen3.8-27b is worst (reasoning text leaking into replies). **Decision: no change; luna stays NPC and narrator.** mimo-v2.6-pro is a candidate only if latency stops mattering.
 - Alternatives not run: DeepSeek V4.1 flash (already the fallback), Gemini flash-lite (3.5), longcat 2.0, Cohere command-a-plus (0.30/1.50, Ukrainian quality unknown).
 - Checked: 2026-10-19. Re-check when a new model appears under the ceiling.
+
+### Character looks from the local file (task 14, 2026-10-19)
+- Role: derive the player character's observable and hidden traits from `data/Ragnar.md` (about 100 KB) once per file. Chosen: the existing extractor model `deepseek/deepseek-v4.1-flash-1017` (live catalog: context 1,048,576 tokens, $0.15/$0.60, weekday surcharge tier $0.30/$1.20, inside the price rule). One real call cost $0.0022. Alternatives not run: `openai/gpt-6-luna`, `qwen/qwen3.8-omni-flash` (same band; no need to compare for a one-off). No new library.
+- Checked: 2026-10-19.
