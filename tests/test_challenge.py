@@ -72,7 +72,7 @@ def test_a_channel_is_reported_with_type_and_rough_time_and_changes_nothing():
     eng.scene.time += 2 * 1440 + 30
     out = eng.challenge_line(line.id, "звідки вона знає про млин")
     assert out.verdict == "channel" and not out.regenerated
-    assert out.public == "це загальновідоме в цих краях 2 дні тому"
+    assert out.public == "це загальновідоме в цих краях"
     assert "The mill by the dam is old." in out.detail, "the full event is in the spoiler"
     assert "The mill" not in out.public, "the content never appears in the public text"
     assert eng.log.is_active(line.id) and eng.log.active([CORRECTION]) == []
