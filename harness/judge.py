@@ -1,10 +1,13 @@
 """Typed judgments: yes/no, choice, score. No text generation.
 
 Backends behind one interface (`Judge.ask`, which takes a *batch* of questions about one state):
-- `JevJudge`    — TypeSafe Jev via OpenRouter (`POST /api/alpha/decisions`).
+- `DecisionJudge` — a hosted decision model (Jev, pplx-decider, d1-ultra; one schema) via
+  OpenRouter `POST /api/v1/systemone`, with retry and backoff on HTTP 429 and 5xx.
+  `JevJudge` is the old name of the same class.
 - `LLMJudge`    — a cheap allowed LLM answering the same questions as JSON.
 - `EscalatingJudge` — Jev first; if its probability is below the threshold the same question goes
   to the LLM and the LLM's answer is used. Tags in `direct_tags` (relationship magnitude) skip Jev.
+- `FallbackJudge` — tries a backup judge when the primary raises `JudgeError`.
 - `FakeJudge` / `StubJudge` — deterministic, for tests and the offline demo.
 `LoggingJudge` records every judgment for the debug view.
 """
@@ -12,19 +15,24 @@ from __future__ import annotations
 
 import json
 import re
+import threading
+import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Iterator, Mapping, Sequence
 
 import httpx
 
-from .policy import Spend, check_model
-from .providers import Provider
+from .policy import DEFAULT_JUDGE_FIRST, Spend, check_decision_model
+from .providers import Provider, ProviderError
+from .retry import send_with_retry
 
 YES_NO, CHOICE, SCORE = "yes_no", "choice", "score"
 ESCALATE_BELOW = 0.8
 DIRECT_TAGS = frozenset({"relationship_magnitude"})  # Jev was weak here: LLM directly
-JEV_URL = "https://openrouter.ai/api/alpha/decisions"
+DECISION_URL = "https://openrouter.ai/api/v1/systemone"
+JEV_URL = DECISION_URL  # old name
 
 
 class JudgeError(RuntimeError):
@@ -94,32 +102,36 @@ def _jev_question(q: Question) -> dict[str, Any]:
     return {"type": "score", "criteria": list(q.legend), "instructions": q.text}
 
 
-def _jev_judgment(q: Question, a: Mapping[str, Any]) -> Judgment:
+def _jev_judgment(q: Question, a: Mapping[str, Any], backend: str = "jev") -> Judgment:
     try:
         if q.kind == YES_NO:
             p = float(a["noul"])
-            return Judgment(p >= 0.5, {"yes": p, "no": 1 - p}, max(p, 1 - p), backend="jev")
+            return Judgment(p >= 0.5, {"yes": p, "no": 1 - p}, max(p, 1 - p), backend=backend)
         probs = {k: float(v) for k, v in (a.get("probabilities") or {}).items()}
         if q.kind == CHOICE:
             ch = a["choice"]
-            return Judgment(ch, probs, probs.get(ch, 1.0), backend="jev")
+            return Judgment(ch, probs, probs.get(ch, 1.0), backend=backend)
         return Judgment(q.lo + float(a["score"]), probs, max(probs.values(), default=1.0),
-                        backend="jev")
+                        backend=backend)
     except (KeyError, TypeError, ValueError) as e:
         raise JudgeError(f"unexpected Jev answer {a!r}: {e}") from e
 
 
-class JevJudge(Judge):
-    """Several questions about the same state go out as ONE call."""
+class DecisionJudge(Judge):
+    """Generic client for the hosted decision models (Jev, pplx-decider, d1-ultra).
+    Several questions about the same state go out as ONE call. HTTP 429 and 5xx are retried
+    with exponential backoff; what still fails raises `JudgeError`."""
 
-    def __init__(self, api_key: str, model: str = "typesafe/jev-1.14", *,
-                 client: httpx.Client | None = None, url: str = JEV_URL,
-                 timeout: float = 60.0, spend: Spend | None = None) -> None:
-        check_model(model)
+    def __init__(self, api_key: str, model: str = DEFAULT_JUDGE_FIRST, *,
+                 client: httpx.Client | None = None, url: str = DECISION_URL,
+                 timeout: float = 60.0, spend: Spend | None = None, retries: int = 4,
+                 backoff: float = 1.0, sleep: Callable[[float], None] = time.sleep) -> None:
+        check_decision_model(model)
         self.model, self.url = model, url
         self.spend = spend or Spend()
         self._headers = {"Authorization": f"Bearer {api_key}"}
         self._client = client or httpx.Client(timeout=timeout)
+        self.retries, self.backoff, self._sleep = retries, backoff, sleep
         self.calls = 0
 
     def ask(self, state: Sequence[str], questions: Mapping[str, Question]) -> dict[str, Judgment]:
@@ -131,17 +143,38 @@ class JevJudge(Judge):
         self.calls += 1
         self.spend.check()
         try:
-            r = self._client.post(self.url, headers=self._headers, json=body)
+            r = send_with_retry(
+                lambda: self._client.post(self.url, headers=self._headers, json=body),
+                retries=self.retries, base=self.backoff, sleep=self._sleep)
             r.raise_for_status()
             j = r.json()
             self.spend.add(j.get("usage"))
             answers = j["answers"]
         except (httpx.HTTPError, KeyError, ValueError) as e:
-            raise JudgeError(f"Jev call failed: {e}") from e
+            raise JudgeError(f"{self.model} call failed: {e}") from e
         try:
-            return {n: _jev_judgment(q, answers[n]) for n, q in questions.items()}
+            return {n: _jev_judgment(q, answers[n], self.model) for n, q in questions.items()}
         except KeyError as e:
-            raise JudgeError(f"Jev answer missing {e}") from e
+            raise JudgeError(f"{self.model} answer missing {e}") from e
+
+
+JevJudge = DecisionJudge  # old name, same class
+
+
+class FallbackJudge(Judge):
+    """The primary judge; if it raises `JudgeError`, the backup answers instead."""
+
+    def __init__(self, primary: Judge, backup: Judge, on_fallback: Callable[[str], None] | None
+                 = None) -> None:
+        self.primary, self.backup, self.on_fallback = primary, backup, on_fallback
+
+    def ask(self, state: Sequence[str], questions: Mapping[str, Question]) -> dict[str, Judgment]:
+        try:
+            return self.primary.ask(state, questions)
+        except JudgeError as e:
+            if self.on_fallback:
+                self.on_fallback(str(e))
+            return self.backup.ask(state, questions)
 
 
 # -- LLM --------------------------------------------------------------------------------------
@@ -150,8 +183,19 @@ class LLMJudge(Judge):
 
     SYSTEM = "You are a module of a game engine that makes narrow judgments. Answer JSON only."
 
-    def __init__(self, provider: Provider, model: str) -> None:
-        self.provider, self.model = provider, model
+    def __init__(self, provider: Provider, model: str, fallback_model: str | None = None) -> None:
+        self.provider, self.model, self.fallback_model = provider, model, fallback_model
+
+    def _complete(self, messages: list[dict[str, str]]) -> str:
+        try:
+            return self.provider.complete(self.model, messages)
+        except ProviderError as e:
+            if not self.fallback_model:
+                raise JudgeError(f"LLM judge call failed: {e}") from e
+            try:
+                return self.provider.complete(self.fallback_model, messages)
+            except ProviderError as e2:
+                raise JudgeError(f"LLM judge call failed: {e2}") from e2
 
     @staticmethod
     def _spec(q: Question) -> str:
@@ -172,11 +216,11 @@ class LLMJudge(Judge):
         )
         raw = ""
         for attempt in range(2):  # one retry with a stricter instruction, like a strict matcher
-            raw = self.provider.complete(
-                self.model, [{"role": "system", "content": self.SYSTEM},
-                             {"role": "user", "content": prompt + (
-                                 "\nJSON object only: no prose, no code fences, every question "
-                                 "name present." if attempt else "")}])
+            raw = self._complete(
+                [{"role": "system", "content": self.SYSTEM},
+                 {"role": "user", "content": prompt + (
+                     "\nJSON object only: no prose, no code fences, every question "
+                     "name present." if attempt else "")}])
             m = re.search(r"\{.*\}", raw, re.DOTALL)
             try:
                 data = json.loads(m.group(0)) if m else None
@@ -244,21 +288,44 @@ class EscalatingJudge(Judge):
 
 # -- log --------------------------------------------------------------------------------------
 class JudgmentLog:
-    """Every judgment: question, answer, probability, escalated or not. For the debug view."""
+    """Every judgment: question, answer, probability, escalated or not. For the debug view.
+
+    Thread-safe. A worker thread can `capture()` its judgments into a private buffer; the caller
+    then `extend`s the log with the buffers in a fixed order, so the log does not depend on timing."""
 
     def __init__(self, path: Path | None = None) -> None:
         self.entries: list[dict[str, Any]] = []
         self.path = path
+        self._lock = threading.Lock()
+        self._local = threading.local()
+
+    @contextmanager
+    def capture(self) -> Iterator[list[dict[str, Any]]]:
+        buf: list[dict[str, Any]] = []
+        self._local.buf = buf
+        try:
+            yield buf
+        finally:
+            self._local.buf = None
 
     def record(self, tag: str, question: str, j: Judgment) -> None:
         e = {"tag": tag, "question": question, "answer": j.answer,
              "probability": round(j.probability, 4), "escalated": j.escalated,
              "backend": j.backend}
-        self.entries.append(e)
-        if self.path is not None:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            with self.path.open("a") as f:
-                f.write(json.dumps(e, ensure_ascii=False) + "\n")
+        buf = getattr(self._local, "buf", None)
+        if buf is not None:
+            buf.append(e)
+        else:
+            self.extend([e])
+
+    def extend(self, entries: Sequence[dict[str, Any]]) -> None:
+        with self._lock:
+            self.entries.extend(entries)
+            if self.path is not None and entries:
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                with self.path.open("a") as f:
+                    for e in entries:
+                        f.write(json.dumps(e, ensure_ascii=False) + "\n")
 
 
 class LoggingJudge(Judge):

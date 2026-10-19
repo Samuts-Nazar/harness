@@ -3,23 +3,29 @@
     nix develop --command python -m harness.demo            # offline, deterministic
     nix develop --command python -m harness.demo --live     # real cheap models (costs a little)
 
-`--live` loads `.env` (OPENROUTER_API_KEY, never printed) and uses the allowed cheap models:
-extractor, narrator, NPC lines and the escalation LLM are separately configurable; judgments go
-to Jev first and escalate to the LLM below probability 0.8. A spend cap stops runaway costs.
+`--live` loads `.env` (OPENROUTER_API_KEY, never printed) and uses the models chosen by the task 7
+bake-off (harness/policy.py): narrator and NPC gpt-6-luna, extractor deepseek-v4.1-flash, judgments
+to liquid/d1-ultra first and to gpt-6-luna below probability 0.8, each with a fallback from another
+vendor. Narration and NPC speech are in Ukrainian (`--language`). The turns of a live run are in
+Ukrainian; `--turns` sets how many (up to 5). `--sequential` switches the parallel turn off, to
+compare seconds per turn. A spend cap stops runaway costs.
 """
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import time
 from pathlib import Path
 
-from .judge import EscalatingJudge, FakeJudge, Judge, JevJudge, LLMJudge
+from .judge import DecisionJudge, EscalatingJudge, FakeJudge, FallbackJudge, Judge, LLMJudge
 from .models import EQUIPMENT, INJURY, PLAYER, CharacterProfile, Scene, format_time
 from .pipeline import Engine, ModelConfig
 from .policy import (
-    DEFAULT_EXTRACTOR, DEFAULT_JEV, DEFAULT_JUDGE_LLM, DEFAULT_NARRATOR, DEFAULT_NPC, Spend,
+    DEFAULT_EXTRACTOR, DEFAULT_JUDGE_FIRST, DEFAULT_JUDGE_LLM, DEFAULT_NARRATOR, DEFAULT_NPC,
+    FALLBACKS, Spend,
 )
+from .settings import DEFAULT_OUTPUT_LANGUAGE
 from .providers import FakeProvider, OpenRouterProvider, Provider
 from .state import StateChange
 from .streaming import InterruptHandle
@@ -34,6 +40,15 @@ TURNS = [  # (player input, live-interrupt after N words or None)
     ("I step inside, shake the rain off my cloak and ask for a room.", None),
     ("I ask the innkeeper what has been going on around here lately.", None),
     ("I turn to the bard and ask what he knows about the old mill.", 5),
+]
+
+
+TURNS_UK = [  # the live run: the same inn scene, in Ukrainian
+    ("Я заходжу досередини, струшую дощ з плаща й прошу кімнату на ніч.", None),
+    ("Я питаю корчмаря, що тут робилося останнім часом.", None),
+    ("Я повертаюся до барда й питаю, що він знає про старий млин.", None),
+    ("Я питаю корчмаря, скільки коштує вечеря і чи є гарячий суп.", None),
+    ("Я кладу на стіл монету й питаю, хто востаннє бачив овець живими.", None),
 ]
 
 
@@ -95,9 +110,12 @@ def live_stack(a: argparse.Namespace) -> tuple[Provider, Judge, ModelConfig, Spe
         raise SystemExit("--live needs OPENROUTER_API_KEY (env or .env)")
     spend = Spend(a.budget)
     provider = OpenRouterProvider(key, spend=spend)
-    models = ModelConfig(a.narrator_model, a.npc_model, a.extractor_model, a.judge_model)
-    judge = EscalatingJudge(JevJudge(key, a.jev_model, spend=spend),
-                            LLMJudge(provider, models.judge))
+    models = ModelConfig(a.narrator_model, a.npc_model, a.extractor_model, a.judge_model,
+                         FALLBACKS["narrator"], FALLBACKS["npc"], FALLBACKS["extractor"],
+                         FALLBACKS["judge_llm"])
+    first = FallbackJudge(DecisionJudge(key, a.decision_model, spend=spend),
+                          DecisionJudge(key, FALLBACKS["judge_first"], spend=spend))
+    judge = EscalatingJudge(first, LLMJudge(provider, models.judge, models.judge_fallback))
     return provider, judge, models, spend
 
 
@@ -108,7 +126,12 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--npc-model", default=DEFAULT_NPC)
     ap.add_argument("--extractor-model", default=DEFAULT_EXTRACTOR)
     ap.add_argument("--judge-model", default=DEFAULT_JUDGE_LLM, help="LLM for judge escalation")
-    ap.add_argument("--jev-model", default=DEFAULT_JEV)
+    ap.add_argument("--decision-model", default=DEFAULT_JUDGE_FIRST,
+                    help="decision model for the first judgment pass")
+    ap.add_argument("--language", default=DEFAULT_OUTPUT_LANGUAGE,
+                    help="language of narration and NPC speech")
+    ap.add_argument("--turns", type=int, default=0, help="number of turns (default: all)")
+    ap.add_argument("--sequential", action="store_true", help="no parallel calls within a turn")
     ap.add_argument("--budget", type=float, default=0.25, help="USD cap for a live run")
     ap.add_argument("--campaign-dir", default="campaigns/demo")
     a = ap.parse_args(argv)
@@ -123,7 +146,9 @@ def main(argv: list[str] | None = None) -> None:
     camp = Path(a.campaign_dir)
     # the demo starts fresh; the log is in memory, so stale memory files would only confuse
     eng = Engine(provider, PROFILES, Scene("Roadside inn", ("innkeeper", "bard"), 18 * 60),
-                 models=models, judge=judge, campaign_dir=camp)
+                 models=models, judge=judge, campaign_dir=camp, output_language=a.language,
+                 parallel=False if a.sequential else None)
+    print(f"[turn mode: {'parallel' if eng.parallel else 'sequential'}; language: {a.language}]")
     # background knowledge the characters bring to the scene (without it, the output check
     # correctly refuses every local detail an NPC invents)
     eng.facts.add_canon("Witchers hunt monsters for coin.", knowers=[("innkeeper", "told")])
@@ -140,7 +165,9 @@ def main(argv: list[str] | None = None) -> None:
     print(f"\n== {format_time(eng.scene.time)}: Geralt walks in ==")
     eng.enter_scene(PLAYER)
 
-    for text, cut in TURNS:
+    turns = (TURNS_UK if a.live else TURNS)[: a.turns or None]
+    took = []
+    for text, cut in turns:
         print(f"\n> Geralt: {text}")
         h = InterruptHandle() if cut else None
         n = 0
@@ -152,7 +179,9 @@ def main(argv: list[str] | None = None) -> None:
             if cut and n == cut and h is not None:
                 h.request()
 
+        t0 = time.perf_counter()
         r = _run_turn(eng, text, h, on_word)
+        took.append(time.perf_counter() - t0)
         print(f"\n[narration] {r.narration}")
         for act in r.actions:
             print(f"[action]    {act}")
@@ -177,6 +206,8 @@ def main(argv: list[str] | None = None) -> None:
     print(f"\nmemory files: {camp / 'memory'}  (git-ignored)")
     if spend is not None:
         print(f"API spend this run: ${spend.total:.4f} over {spend.calls} calls")
+        print("seconds per turn:", [round(t, 1) for t in took],
+              f"mean {sum(took) / max(len(took), 1):.1f}")
 
 
 def _run_turn(eng: Engine, text: str, h: InterruptHandle | None, on_word):  # type: ignore[no-untyped-def]

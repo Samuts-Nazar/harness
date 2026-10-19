@@ -36,7 +36,7 @@ def narr(description="N.", actions=(), speakers=()):
 def _wrap(script):
     """Plain-text narrator replies in a script become `{"description": ...}` JSON."""
     out = dict(script)
-    out["narrator"] = [n if n.lstrip().startswith("{") else narr(n) for n in script.get("narrator", [])]
+    out["narrator"] = [n if isinstance(n, Exception) or n.lstrip().startswith("{") else narr(n) for n in script.get("narrator", [])]
     return out
 
 
@@ -45,3 +45,15 @@ def make_engine(script, present=(PLAYER, "innkeeper", "bard"), outside=(), **kw)
     scene = Scene("Inn", tuple(present), time=0, outside=tuple(outside))
     eng = Engine(provider, PROFILES, scene, models=ModelConfig(), **kw)
     return eng, provider
+
+
+@pytest.fixture(autouse=True)
+def price_catalog():
+    """Prices come from a fixture, never from the network."""
+    from pathlib import Path
+
+    from harness import policy
+
+    policy.set_catalog(json.loads((Path(__file__).parent / "fixtures" / "catalog.json").read_text()))
+    yield
+    policy.set_catalog(None)
