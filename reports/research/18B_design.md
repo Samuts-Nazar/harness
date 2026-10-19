@@ -1,5 +1,7 @@
 # 18B: design research. What a full world simulation and a whole-life experience need
 
+> Lead spot-check (2026-10-19): arXiv 2605.26492 (11 words in 88.3% of stories) and the Bicking Hidden Door review ("commit to outcomes before prose", "allow consequential failure") confirmed. arXiv 2607.00527 exists and surveys 53 AI-native games, but its abstract does not mention "memory instability" or "proposal-and-verification"; that attribution is unverified.
+
 Date of research: 2026-10-19. Web research only, 0 USD API spend, no code touched.
 Reading note: the search tool returned page summaries, so numbers are "as reported by the page". Items marked [snippet] I did not read in full. arXiv IDs 26MM.xxxxx mean year 2026, month MM.
 
