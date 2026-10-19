@@ -14,6 +14,16 @@ from app.server import create_app
 from app.stacks import FakeUk, fake_stack
 
 
+import pytest as _pytest
+import app.campaigns as _campaigns
+
+
+@_pytest.fixture(autouse=True)
+def _no_local_character_file(monkeypatch, tmp_path):
+    """App tests never read the local, uncommitted character file (data/Ragnar.md)."""
+    monkeypatch.setattr(_campaigns, "DATA_FILE", tmp_path / "missing.md")
+
+
 def make(pace: float = 0.0, stack=None, root=None) -> Game:
     stack = stack or fake_stack()
     root = root or tempfile.mkdtemp(prefix="harness-app-")
