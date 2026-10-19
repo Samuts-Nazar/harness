@@ -218,7 +218,8 @@ class World:
         cands: list[tuple[int, str | None, int]] = []
         dist = self.map.minutes(p["origin"], col.place)
         d = nw.arrival_delay(p["notability"], dist)
-        if d is not None:
+        # a higher authority hears only what the one below passes up (or a carrier brings)
+        if d is not None and not any(o.up == col.id for o in self.collectives.values()):
             cands.append((news.game_time + d, self._notional_source(news, col), nw.hops(dist)))
         for e in self._deliveries(news.id, col.id):
             cands.append((e.payload["at"], e.payload["carrier"], 1))

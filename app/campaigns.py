@@ -175,6 +175,7 @@ class Campaign:
     translate: Translator | None = None
     title: str = TITLE
     intro: str = INTRO
+    world: Any = None  # harness.world.World when the campaign has a world beyond the scene (task 17)
 
     def transcript(self) -> list[dict[str, Any]]:
         """What the player has seen so far, rebuilt from the event log (a reopened campaign)."""

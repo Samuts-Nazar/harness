@@ -428,3 +428,16 @@ def test_pilot_collectives_exist_as_pseudo_characters():
     for c in pilot_collectives(vizima()):
         assert c.id in eng.profiles
     assert eng.profiles["col_guard"].name == "міська варта"
+
+
+def test_higher_authority_hears_only_what_the_guard_passes_up():
+    eng, w, _ = build({"authority_reaction": "ignore", "authority_escalate": False})
+    miracle(eng, w, n=0.8)
+    w.tick(eng.scene.time + 12 * 60)
+    holders = {e.payload["holder"] for e in eng.log.active([nw.NEWS_VERSION])}
+    assert "col_guard" in holders and "col_velerad" not in holders and "col_king" not in holders
+    eng2, w2, _ = build({"authority_reaction": "ignore", "authority_escalate": True})
+    miracle(eng2, w2, n=0.8)
+    w2.tick(eng2.scene.time + 12 * 60)
+    holders2 = {e.payload["holder"] for e in eng2.log.active([nw.NEWS_VERSION])}
+    assert {"col_guard", "col_velerad", "col_king"} <= holders2
