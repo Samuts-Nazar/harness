@@ -1,0 +1,100 @@
+"""HTTP layer (Starlette): static page, JSON actions, and one Server-Sent Events stream.
+
+Stream = SSE (server to client, auto-reconnect with Last-Event-ID, so a phone returning from the
+background resumes where it left off); interrupt and everything else = plain POSTs.
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+from pathlib import Path
+
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import FileResponse, JSONResponse, StreamingResponse
+from starlette.routing import Mount, Route
+from starlette.staticfiles import StaticFiles
+
+from .game import Busy, Game
+
+STATIC = Path(__file__).parent / "static"
+KEEPALIVE = 15.0
+
+
+def create_app(game: Game) -> Starlette:
+    async def index(_: Request) -> FileResponse:
+        return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
+
+    async def state(_: Request) -> JSONResponse:
+        return JSONResponse(game.state())
+
+    async def turn(request: Request) -> JSONResponse:
+        body = await request.json()
+        try:
+            game.start_turn(str(body.get("text", "")))
+        except Busy:
+            return JSONResponse({"error": "Хід уже триває."}, status_code=409)
+        except ValueError:
+            return JSONResponse({"error": "Порожній хід."}, status_code=400)
+        return JSONResponse({"ok": True}, status_code=202)
+
+    async def interrupt(_: Request) -> JSONResponse:
+        return JSONResponse({"interrupted": game.interrupt()})
+
+    async def presence(request: Request) -> JSONResponse:
+        body = await request.json()
+        game.set_visible(bool(body.get("visible", True)))
+        return JSONResponse({"ok": True})
+
+    async def new_campaign(_: Request) -> JSONResponse:
+        try:
+            game.reset()
+        except Busy:
+            return JSONResponse({"error": "Хід триває."}, status_code=409)
+        return JSONResponse(game.state())
+
+    async def panel(_: Request) -> JSONResponse:
+        return JSONResponse(game.panel())
+
+    async def debug(_: Request) -> JSONResponse:
+        return JSONResponse(game.debug)
+
+    async def events(request: Request) -> StreamingResponse:
+        after = int(request.headers.get("last-event-id") or request.query_params.get("after") or 0)
+        until_idle = request.query_params.get("until_idle") == "1"  # curl/tests: end when quiet
+
+        async def gen():  # type: ignore[no-untyped-def]
+            nonlocal after
+            quiet = 0.0
+            yield "retry: 1000\n\n"
+            while not await request.is_disconnected():
+                batch = game.events_after(after)
+                for ev in batch:
+                    after = ev["seq"]
+                    yield f"id: {ev['seq']}\nevent: {ev['type']}\ndata: {json.dumps(ev, ensure_ascii=False)}\n\n"
+                if batch:
+                    quiet = 0.0
+                    continue
+                if until_idle and not game.running:
+                    return
+                await asyncio.sleep(0.03)
+                quiet += 0.03
+                if quiet >= KEEPALIVE:
+                    quiet = 0.0
+                    yield ": keepalive\n\n"
+
+        return StreamingResponse(gen(), media_type="text/event-stream", headers={
+            "Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    return Starlette(routes=[
+        Route("/", index),
+        Route("/api/state", state),
+        Route("/api/turn", turn, methods=["POST"]),
+        Route("/api/interrupt", interrupt, methods=["POST"]),
+        Route("/api/presence", presence, methods=["POST"]),
+        Route("/api/campaign/new", new_campaign, methods=["POST"]),
+        Route("/api/panel", panel),
+        Route("/api/debug", debug),
+        Route("/api/events", events),
+        Mount("/static", StaticFiles(directory=STATIC), name="static"),
+    ])

@@ -12,7 +12,7 @@ Method notes:
   locked nixpkgs ships python 3.14.7 and uv 0.13.0), so it was not used for version claims. Whether nixpkgs already
   packages Python 3.15 was not verified (the `nix search` check timed out).
 - Page summaries were produced by a fetch tool; where it returned an inconsistent date the entry says so.
-- Open roles: no choice is made here, only candidates.
+- Open roles: no choice is made here, only candidates. (Web framework, transport and frontend were decided in task 11.)
 
 ## Runtime and environment
 
@@ -126,7 +126,7 @@ Method notes:
 ### Playwright (UI test)
 - Role: drive the static phone prototype at 390x844 and take screenshots (`prototype/ui/test_ui.py`). Chosen: **playwright 1.64.0** (Python package) with `playwright-driver.browsers` from the same nixpkgs lock, run via `nix-shell prototype/ui/shell.nix`. PyPI latest is 1.64.0 (bundles Chromium 156, WebKit 27.2, Firefox 157). Python in that shell: 3.14.7.
 - Alternatives: Cypress, Selenium, Puppeteer (no WebKit). Playwright has WebKit, useful because the player's phone is likely WebKit or Chromium mobile.
-- Reason: keep; versions match PyPI because both come from the lock. `PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS` is set to run on NixOS. The UI test is outside `tests/` and not part of `pytest`.
+- Reason: keep; versions match PyPI because both come from the lock. `PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS` is set to run on NixOS. The UI test is outside `tests/` and not part of `pytest`. Since task 11 the flake dev shell also carries `playwright` and the browsers (`app/tests/ui_check.py`), so `nix develop` suffices for the app's UI check; the prototype keeps its own `shell.nix`.
 - Sources: https://pypi.org/project/playwright/
 - Checked: 2026-10-19.
 
@@ -136,29 +136,24 @@ Method notes:
 ## Open roles (not chosen)
 
 ### Web framework for the phone app / API server
-- Status: **open**. The engine is synchronous Python; a server must serve the phone page, accept turns, push streamed text and support the interrupt button.
-- Candidates (PyPI, today):
-  - FastAPI 0.147.0 (2026-10-19; releases almost daily and minors carry breaking changes, e.g. 0.146 deprecates `root_path`): Starlette + Pydantic, most documentation.
-  - Starlette 1.9.0 (Python >=3.11): the toolkit under FastAPI; fewer features, WebSockets built in.
-  - Litestar 2.25.0 (2026-10-18; claims Python 3.8 to 3.15): opinionated, OpenAPI, dependency injection.
-  - Quart 0.23.1 (2026-08-29; requires Python >=3.13): async Flask API.
-  - aiohttp 3.14.5: server and client in one library, WebSockets built in.
-- ASGI server for the first four: uvicorn 0.54.0 (also hypercorn, granian).
-- Sources: https://pypi.org/project/fastapi/ ; https://pypi.org/project/starlette/ ; https://pypi.org/project/litestar/ ; https://pypi.org/project/quart/ ; https://pypi.org/project/aiohttp/ ; https://pypi.org/project/uvicorn/ ; https://github.com/fastapi/fastapi/releases
-- Checked: 2026-10-19.
+- Role: serve the phone page, accept turns, push streamed text, take the interrupt. Chosen: **Starlette 1.3.1** (locked nixpkgs; PyPI latest 1.9.0, 2026-10-18) served by **uvicorn 0.51.0** (locked; PyPI 0.54.0, 2026-09-25). Both come from the flake dev shell (`flake.nix`), no new package source.
+- Alternatives: FastAPI 0.147.0 (Starlette + Pydantic; its value is request validation and OpenAPI, and we have five tiny JSON endpoints; releases almost daily with breaking minors), Litestar 2.25.0 (opinionated, more than needed), Quart 0.23.1 (needs Python >=3.13, async Flask), aiohttp 3.14.5 (server and client in one, but no ASGI test client).
+- Reason: least code. The engine is synchronous, so a turn runs in a worker thread and the async layer only reads an in-memory event list; Starlette's `StreamingResponse` is enough for SSE (no extra package), `StaticFiles` serves the page, and `TestClient` tests it. No Pydantic needed.
+- Note: the locked Starlette is eight minor versions behind PyPI; the lock should be bumped with the other pins (recommended change 4). `starlette.testclient` warns that `httpx` support is deprecated in favour of `httpx2` (not in nixpkgs today; the tests work, revisit when the lock moves).
+- Sources: https://pypi.org/project/starlette/ ; https://pypi.org/project/uvicorn/ ; https://pypi.org/project/fastapi/ ; https://pypi.org/project/litestar/ ; https://pypi.org/project/quart/
+- Checked: 2026-10-19 (candidates, task 8); 2026-10-19 (chosen and PyPI versions re-checked live, task 11).
 
 ### Streaming transport to the phone
-- Status: **open**. Needs: server-to-client word stream at speaking pace, client-to-server interrupt with a retroactive cut point, and surviving mobile background/foreground (the world stops in the background, per decisions.md).
-- Candidates:
-  - Server-Sent Events plus ordinary POSTs: simplest, auto-reconnect built into `EventSource`; helper `sse-starlette` 3.5.0 (2026-09-28). One-way, so the interrupt is a separate POST.
-  - WebSocket: two-way in one channel, native in Starlette/FastAPI/aiohttp/Quart; reconnect and resume logic is ours.
-  - HTMX 4.0.0 (stable 2026-08-28, GitHub) with standalone SSE and WebSocket extensions: server-rendered fragments, minimal JS. npm `latest` for `htmx.org` still showed 2.0.11, so v4 may sit under another dist-tag.
-  - Long-polling or chunked fetch streaming: works everywhere, clumsiest.
-- Sources: https://github.com/bigskysoftware/htmx/releases ; https://github.com/sysid/sse-starlette/releases
+- Role: server-to-client word stream at speaking pace, client-to-server interrupt, survive the app going to the background. Chosen: **Server-Sent Events (hand-written, about 25 lines) plus ordinary POSTs**. No `sse-starlette` (3.5.0, 2026-09-28): the format is `id:`, `event:`, `data:` lines, not worth a dependency.
+- How it fits the decisions: every event has a global `seq`; the browser's `EventSource` reconnects by itself and sends `Last-Event-ID`, so a phone returning from the background gets exactly the events it missed. The client also tells the server when the page is hidden (`POST /api/presence`) and the server stops delivering words until it is visible again ("the world stops in the background"). Interrupt is `POST /api/interrupt`; the engine polls its `InterruptHandle` between words.
+- Alternatives: WebSocket (two-way, but reconnect and resume are ours to write and the stream is one-way anyway), HTMX 4.0.0 with SSE/WebSocket extensions (server-rendered fragments; no build step either, but the stream here is data events, not HTML), long polling or chunked fetch (clumsier).
+- Sources: https://developer.mozilla.org/docs/Web/API/Server-sent_events ; https://github.com/sysid/sse-starlette/releases
 - Checked: 2026-10-19.
 
 ### Frontend for the phone app
-- Status: **open**. Candidates: plain JS as in the prototype (no build); htmx 4.0.0; Svelte 5.57.2; Preact 11.0.1. Compared on versions only.
+- Role: the player's screen. Chosen: **plain HTML, CSS and JavaScript, no build step, no framework** (`app/static/`), reusing the palette of `prototype/ui/style.css`.
+- Alternatives: htmx 4.0.0, Svelte 5.57.2, Preact 11.0.1 (all need a CDN or a build step; npm is not in the dev shell, so a build would be a new toolchain).
+- Reason: the screen is a feed, one input and two sheets (about 200 lines of JS). A framework earns its weight when many components share state, which the later features (turn assistant, retroactive cut, tappable names) may bring; revisit then.
 - Sources: https://registry.npmjs.org/svelte/latest ; https://registry.npmjs.org/preact/latest
 - Checked: 2026-10-19.
 
@@ -189,6 +184,6 @@ Chosen by the task 7 bake-off on our own Ukrainian test set (`reports/bakeoff/SU
 2. ~~Bake off Laya against Jev.~~ Done in task 7: Laya zero-shot is at chance; not adopted.
 3. **Try `json_schema` structured output and prompt caching on narrator/extractor calls, per model, measured.** Both are live on OpenRouter; support varies by provider. Could cut retries and input cost. Risk: strict mode differs across providers; gate by model.
 4. **Bump the nixpkgs lock when a fresh rev is available, in `flake.lock` and `prototype/ui/shell.nix` together.** Upstream is one patch ahead on Python (3.14.8), uv (0.13.1), SQLite (3.54.1). Low urgency. Do not move to Python 3.15 yet; re-check in about a month.
-5. **Decide web framework and transport before building the server** (open roles above) after a short spike. FastAPI/Starlette + SSE with a POST for interrupt is the least-code path, but it is a candidate, not a decision.
+5. ~~Decide web framework and transport.~~ Done in task 11: Starlette + uvicorn, SSE plus POST, plain JS (see the roles above).
 6. **Watch httpx** (last release 2024-12-06, no 1.0). No action now; if async serving is adopted, evaluate aiohttp or the official OpenRouter SDK instead of adding custom async code.
 7. **Set WAL and foreign keys when the engine moves to a file database; consider ruff.** Minor.

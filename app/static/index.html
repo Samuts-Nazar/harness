@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Harness</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <div class="title"><b id="sceneTitle">…</b><small id="clock"></small></div>
+    <button class="btn ghost" id="btnDebug" aria-pressed="false">Debug</button>
+    <button class="btn ghost" id="btnChar">Рагнар</button>
+  </header>
+
+  <section id="debugPanel" hidden aria-label="Налагодження (debug)">
+    <div id="debugBody">Ходу ще не було.</div>
+  </section>
+
+  <main id="feed" aria-live="polite"></main>
+
+  <div id="errbar" role="alert" hidden></div>
+
+  <footer id="dock">
+    <div id="dockBusy" hidden>
+      <span id="busyText">Світ думає…</span>
+      <button class="btn danger" id="btnInterrupt" hidden>✋ Перебити</button>
+    </div>
+    <form id="composer" autocomplete="off">
+      <textarea id="input" rows="2" placeholder="Що робить і каже Рагнар…" enterkeyhint="send"></textarea>
+      <button class="btn primary" id="btnSend" type="submit" disabled>Надіслати ➤</button>
+    </form>
+  </footer>
+
+  <aside id="charPanel" class="sheet" hidden aria-label="Персонаж">
+    <header><div><b id="charName">Рагнар</b><small>Як ти відчуваєш себе зараз</small></div>
+      <button class="btn ghost" id="charClose" aria-label="Закрити">✕</button></header>
+    <div class="legend"><i class="dot on"></i> видно іншим <i class="dot"></i> знаєш лише ти</div>
+    <div id="chips"></div>
+    <p id="prose"></p>
+    <button class="btn wide" id="btnNew">Почати гру спочатку</button>
+  </aside>
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>
