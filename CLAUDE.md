@@ -12,3 +12,6 @@
 - Run tests: `nix develop --command pytest`
 - Key check (free endpoints only): `nix develop --command python check_key.py`
 - New git-tracked files must be `git add`ed before `nix develop` can see changes to flake.nix.
+
+## Branches and worktrees
+- Work on a short-lived branch per task; at the end merge into main, push, verify with `git ls-remote origin`, then delete the branch and its worktree. Never leave unmerged branches or worktrees. Report all paths as full absolute paths.
