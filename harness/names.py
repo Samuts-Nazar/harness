@@ -24,7 +24,7 @@ FALLBACK_LABEL = "незнайомець"
 # How a character came to know the name.
 OWN, ACQUAINTED, INTRODUCED, TOLD, OVERHEARD, CANON, PLAYER_SAID = (
     "own", "acquainted", "introduced", "told", "overheard", "canon", "player")
-_END = "(?:" + "|".join(ENDINGS) + ")"
+_END = "(?:" + "|".join((*ENDINGS, "о")) + ")"  # "о": the vocative of names in -а (Ельзо!)
 
 
 def _stem(name: str, glossary: Glossary | None) -> str:

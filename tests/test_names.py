@@ -72,6 +72,7 @@ def test_name_forms_in_any_case_are_found_and_masked():
     assert n.mask("horst", "Рагнара не видно") == f"{ME} не видно"
     assert n.mask("horst", "Ельза мовчить") == "Ельза мовчить"
     assert n.mentions("Горстінг") == [], "not inside a longer word"
+    assert n.mentions("Ельзо, слухай") == ["elza"], "vocative of a name in -а"
 
 
 # -- the contexts ---------------------------------------------------------------------------------
