@@ -1,10 +1,11 @@
 """Engine settings that live in one place.
 
-Languages (task 9): what the player reads is Ukrainian by default. Records and judgment questions
-stay as they are until the language experiment (task 10) decides; `DEFAULT_RECORD_LANGUAGE = None`
-means "no instruction", i.e. whatever the extractor model writes now. Switch records to English
-by setting it to "English" (here, or `Engine(record_language=...)`).
+Languages (task 9, 10): what the player reads is Ukrainian by default. Records are English with
+Ukrainian names (task 10; names via the glossary, task 12). `record_language=None` means "no
+instruction": whatever the extractor model writes.
 """
 DEFAULT_OUTPUT_LANGUAGE: str | None = "Ukrainian"  # narration and NPC speech
-DEFAULT_RECORD_LANGUAGE: str | None = None  # extractor facts and state items
+DEFAULT_RECORD_LANGUAGE: str | None = "English"  # extractor facts and state items (task 10); names stay Ukrainian
+DEFAULT_NARRATION = "prose"  # "prose": free text, speakers/actions from the scene director; "json": task 3 contract
+MAX_SPEAKERS = 2  # the scene director names at most this many speakers per turn
 NPC_REJECT_P = 0.7  # an NPC line is rejected when the check's suspicion reaches this

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from .models import ACTION, Event, NARRATION, PLAYER, UTTERANCE
 
@@ -25,6 +25,13 @@ def _row_to_event(r: sqlite3.Row) -> Event:
 class EventLog:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self.conn = conn
+        self.observers: list[Callable[[Event], None]] = []
+
+    def subscribe(self, fn: Callable[[Event], None]) -> Callable[[], None]:
+        """Call `fn(event)` after every append (the debug view collects a turn's events this
+        way). Returns the function that removes the subscription."""
+        self.observers.append(fn)
+        return lambda: self.observers.remove(fn) if fn in self.observers else None
 
     def append(
         self,
@@ -55,7 +62,10 @@ class EventLog:
                     cause_id,
                 ),
             )
-        return self.get(int(cur.lastrowid))  # type: ignore[arg-type]
+        ev = self.get(int(cur.lastrowid))  # type: ignore[arg-type]
+        for fn in list(self.observers):
+            fn(ev)
+        return ev
 
     def get(self, event_id: int) -> Event:
         r = self.conn.execute("SELECT * FROM events WHERE id=?", (event_id,)).fetchone()

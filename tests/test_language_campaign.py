@@ -47,13 +47,15 @@ def test_records_and_judgment_questions_are_untouched_by_default():
 
 def test_record_language_can_be_switched_in_one_place():
     p = prompts(*make_engine(script(), record_language="English"))
-    assert "content and every item in English" in p["extractor"]
+    assert "content and every state item in English" in p["extractor"]
 
 
 # -- campaigns ---------------------------------------------------------------------------------
 def new_campaign(tmp_path, script, **kw):
     prov = FakeProvider(script=script)
     scene = Scene("Inn", (PLAYER, "innkeeper"), time=18 * 60, outside=("bard",))
+    kw.setdefault("narration", "json")
+    kw.setdefault("record_language", None)
     return Engine.create_campaign("t1", prov, PROFILES, scene, root=tmp_path,
                                   models=ModelConfig(), **kw), prov
 

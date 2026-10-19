@@ -25,6 +25,7 @@ class RoleProvider:
         self.barrier, self.calls, self.lock = barrier, [], threading.Lock()
         self.delay_first = delay_first
         self.threads = set()
+        self.npc_messages = {}
 
     def complete(self, model, messages):
         with self.lock:
@@ -37,6 +38,8 @@ class RoleProvider:
             with self.lock:
                 return self.extractors.pop(0)
         who = messages[0]["content"].split(".")[0].removeprefix("You are ")
+        with self.lock:
+            self.npc_messages.setdefault(who, []).append(messages[1]["content"])
         if self.barrier is not None:
             self.barrier.wait(timeout=5)  # BrokenBarrierError if the other call never starts
         if who == "Innkeeper" and self.delay_first:
@@ -49,6 +52,8 @@ class RoleProvider:
 
 def engine(provider, *, parallel, judge=None, **kw):
     scene = Scene("Inn", (PLAYER, "innkeeper", "bard"), time=0)
+    kw.setdefault("narration", "json")
+    kw.setdefault("record_language", None)
     return Engine(provider, PROFILES, scene, models=ModelConfig(), parallel=parallel,
                   judge=judge, **kw)
 
@@ -66,11 +71,14 @@ def log_dump(eng):
     return [(e.type, e.payload.get("speaker"), e.payload.get("text")) for e in eng.log.active()]
 
 
-def test_npc_chains_really_run_concurrently():
-    barrier = threading.Barrier(2)
-    eng, prov, res = run(True, barrier=barrier)  # would raise BrokenBarrierError if sequential
+def test_a_later_npc_hears_the_earlier_line_of_the_turn():
+    eng, prov, res = run(True)
     assert [u.payload["speaker"] for u in res.utterances] == ["innkeeper", "bard"]
-    assert len({t for t in prov.threads if t.startswith("harness")}) == 2
+    assert "Innkeeper: Welcome, traveller." in prov.npc_messages["Dandelion"][0]
+    assert "Dandelion:" not in prov.npc_messages["Innkeeper"][0]  # the first one hears nothing yet
+    # the checks ran too: the bard's line was judged knowing what the innkeeper said
+    asked = [st for st, qs in eng.judge.inner.asked if any(q.tag == "unknown_claim" for q in qs.values())]
+    assert any("Welcome, traveller." in " ".join(st) for st in asked)
 
 
 def test_lines_are_delivered_in_narrator_order_even_when_the_first_is_slower():
