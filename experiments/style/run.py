@@ -28,7 +28,7 @@ MANNER_MODEL = "openai/gpt-6-luna"
 
 
 def manners() -> dict[str, str]:
-    f = RAW / "manners.json"
+    f = RAW / os.environ.get("MANNERS", "manners.json")
     if f.exists():
         return json.loads(f.read_text())
     out = {}
@@ -48,7 +48,7 @@ def manners() -> dict[str, str]:
 def run(kind: str, models: list[str], samples: int, variants: list[str]) -> None:
     mans = manners()
     ex, plain = Style.load("witcher", exemplars=True), Style.load("witcher", exemplars=False)
-    out = RAW / f"{kind}.jsonl"
+    out = RAW / os.environ.get("OUT", f"{kind}.jsonl")
     done = set()
     if out.exists():
         for r in map(json.loads, out.read_text().splitlines()):

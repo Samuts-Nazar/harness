@@ -437,8 +437,9 @@ def manner_messages(prof: CharacterProfile, style: Style | None = None, language
         "Write 4 to 6 short manner notes (each under 20 words) on how this person talks and behaves while talking: "
         "register and vocabulary, pace, verbal habits (what they repeat, how they stall), what "
         "they do with their hands or eyes, what they dodge, what they do when afraid or when "
-        "bargaining. Concrete and specific to this person, not generic. Notes only, one per line, "
-        f"no numbering, no names of other characters. Write in {language}."
+        "bargaining. Concrete and specific to this person, not generic. Describe habits; never "
+        "quote a catchphrase or an example sentence (a quoted phrase gets repeated in every line). "
+        f"Notes only, one per line, no numbering, no names of other characters. Write in {language}."
         + (f"\n\nHow people of this world talk, by class (for orientation):\n{sheet}" if sheet else ""))
     return [{"role": "system", "content": MANNER_SYSTEM}, {"role": "user", "content": body}]
 
