@@ -258,7 +258,7 @@ class ExemplarIndex:
             s = sum(self.idf.get(w, 0.0) for w in q.stems & want)
             s += 2.5 * sum(1 for w in boost if any(x.startswith(w[:5]) for x in q.stems))
             names = len(re.findall(r"(?<![.!?…—–\n])\s[А-ЯІЇЄҐ][а-яіїєґ']{2,}", q.text))
-            s -= 0.6 * max(0, names - 2)  # canon people in the passage would leak into the scene
+            s -= 2.0 * max(0, names - 1)  # canon people in the passage would leak into the scene
             if kind == "dialogue":
                 s += 0.5 * min(8, q.text.count("\n"))
             scored.append((s, -i, q))
@@ -370,7 +370,7 @@ class Style:
     `exemplars`: add runtime book passages to the prompts (needs the local book file; silently
     off when it is absent)."""
 
-    def __init__(self, sheet: dict[str, str] | None = None, *, exemplars: bool = True,
+    def __init__(self, sheet: dict[str, str] | None = None, *, exemplars: bool = False,
                  books: Path | None = None, npc_examples: int = 2, narrator_examples: int = 1
                  ) -> None:
         self.sheet = sheet or {}
@@ -434,7 +434,7 @@ def manner_messages(prof: CharacterProfile, style: Style | None = None, language
     sheet = style._sec("voices by class") if style else ""
     body = (
         f"Character: {prof.name}. {prof.description}\n\n"
-        "Write 4 to 6 short manner notes on how this person talks and behaves while talking: "
+        "Write 4 to 6 short manner notes (each under 20 words) on how this person talks and behaves while talking: "
         "register and vocabulary, pace, verbal habits (what they repeat, how they stall), what "
         "they do with their hands or eyes, what they dodge, what they do when afraid or when "
         "bargaining. Concrete and specific to this person, not generic. Notes only, one per line, "

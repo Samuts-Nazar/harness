@@ -1,0 +1,82 @@
+[
+ {
+  "situation": "c06",
+  "A": "old",
+  "B": "new",
+  "new_variant": "new",
+  "new_model": "openai/gpt-6-luna",
+  "old_model": "openai/gpt-6-luna"
+ },
+ {
+  "situation": "c05",
+  "A": "new",
+  "B": "old",
+  "new_variant": "new",
+  "new_model": "openai/gpt-6-luna",
+  "old_model": "openai/gpt-6-luna"
+ },
+ {
+  "situation": "i3",
+  "A": "old",
+  "B": "new",
+  "new_variant": "new",
+  "new_model": "openai/gpt-6-luna",
+  "old_model": "xiaomi/mimo-v2.6-pro"
+ },
+ {
+  "situation": "c07",
+  "A": "old",
+  "B": "new",
+  "new_variant": "ex",
+  "new_model": "openai/gpt-6-luna",
+  "old_model": "openai/gpt-6-luna"
+ },
+ {
+  "situation": "c08",
+  "A": "old",
+  "B": "new",
+  "new_variant": "ex",
+  "new_model": "openai/gpt-6-luna",
+  "old_model": "openai/gpt-6-luna"
+ },
+ {
+  "situation": "c03",
+  "A": "new",
+  "B": "old",
+  "new_variant": "new",
+  "new_model": "xiaomi/mimo-v2.6-pro",
+  "old_model": "openai/gpt-6-luna"
+ },
+ {
+  "situation": "c11",
+  "A": "new",
+  "B": "old",
+  "new_variant": "ex",
+  "new_model": "openai/gpt-6-luna",
+  "old_model": "openai/gpt-6-luna"
+ },
+ {
+  "situation": "i2",
+  "A": "new",
+  "B": "old",
+  "new_variant": "ex",
+  "new_model": "xiaomi/mimo-v2.6-pro",
+  "old_model": "openai/gpt-6-luna"
+ },
+ {
+  "situation": "i1",
+  "A": "new",
+  "B": "old",
+  "new_variant": "new",
+  "new_model": "xiaomi/mimo-v2.6-pro",
+  "old_model": "xiaomi/mimo-v2.6-pro"
+ },
+ {
+  "situation": "c10",
+  "A": "new",
+  "B": "old",
+  "new_variant": "ex",
+  "new_model": "z-ai/glm-5.3",
+  "old_model": "openai/gpt-6-luna"
+ }
+]

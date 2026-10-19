@@ -14,7 +14,7 @@ Language of the sheet: English, because the engine's prompts are English. Output
 - Oaths and small curses fit the speaker ("головою клянуся", "хай тебе чума", "на всіх демонів"). Fear shows in behaviour: talking too much, changing the subject, a glance at the dark, a lowered voice, an offer made too fast.
 
 ## Voices by class
-- Villagers: slow, repeating, dialect-touched ("тутки", "тама", "оточки", "ото"), listing every misfortune they have ever heard of, a crowd that adds items one by one; deference with suspicion; they fear the monster less than they fear paying and being cheated.
+- Villagers: slow, repeating, a word or two of local speech per speech, never a pile of dialect particles; listing every misfortune they have ever heard of, a crowd that adds items one by one; deference with suspicion; they fear the monster less than they fear paying and being cheated.
 - Elders, officials, clerks: pompous, digressive, bureaucratic, proud of small authority; they stall; the money is always "for the town treasury".
 - Innkeepers and merchants: practical, wary, money first, then fear for the premises; credit ended, the stick under the counter; hands busy with a cloth or a mug.
 - Soldiers, mercenaries, thugs: coarse, short, mocking, sudden threats delivered casually.
