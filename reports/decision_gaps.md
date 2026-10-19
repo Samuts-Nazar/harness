@@ -30,7 +30,7 @@ No engine code was changed for this list. Items that are "undecided" in decision
 | 16 | App shell | none | No application (phone-first UI, persistence to disk, hosting). Engine is an in-memory library plus a CLI demo (`connect()` defaults to `:memory:`). Decisions require an own app, mainly phone. | L |
 | 17 | Dev/debug view | `demo.py` | Debug info is printed by the demo only; no queryable dev view that separates it from normal play (judgments log and `devlog` exist as data). | S |
 | 18 | Cost safeguards | `providers.py`, `judge.py` | Spend is tracked as a total only; no per-call log of role, model, tokens, cost, latency. Added for the task 6 measurement in `experiments/cost/` (outside the engine). Engine itself still lacks it. | S |
-| 19 | Streaming usage | `providers.OpenRouterProvider.stream` | Streaming requests do not ask for `usage`, so streamed calls would not be counted in `Spend`. The engine currently uses `complete` for NPC lines, so it is latent. | S |
+| 19 | Streaming usage (closed in task 9: usage is read from the final chunk) | `providers.OpenRouterProvider.stream` | Streaming requests do not ask for `usage`, so streamed calls would not be counted in `Spend`. The engine currently uses `complete` for NPC lines, so it is latent. | S |
 
 ## Not gaps (decided as undecided)
 Mechanics (dice, stats), belief model internals, user-facing chronicle, hosting, off-screen update detail, music/voice/images.
