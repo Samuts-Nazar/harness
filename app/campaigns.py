@@ -18,6 +18,7 @@ from harness.models import EQUIPMENT, INJURY, NARRATION, PLAYER, UTTERANCE, Char
 from harness.pipeline import Engine, ModelConfig
 from harness.providers import Messages, Provider
 from harness.state import StateChange
+from harness.style import Style
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_FILE = ROOT / "data" / "Ragnar.md"  # local, never committed
@@ -92,6 +93,8 @@ class Recorder:
             return "extractor"
         if "observable actions" in sys:
             return "director: actions"
+        if "You help write characters" in sys:
+            return "manner notes"
         if "translate" in sys.lower():
             return "translator"
         if sys.startswith("You are "):
@@ -197,14 +200,15 @@ def open_campaign(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = Fal
         name = cur.read_text().strip()
     if name and not new and Engine.campaign_exists(name, root):
         eng = Engine.open_campaign(name, rec, root=root, models=stack.models, judge=stack.judge,
-                                   glossary=glossary)
+                                   glossary=glossary, style=Style.load("witcher"))
     else:
         name = name if (new and name) else time.strftime("inn-%Y%m%d-%H%M%S")
         while Engine.campaign_exists(name, root):
             name += "x"
         eng = Engine.create_campaign(
             name, rec, profiles(), Scene(TITLE, ("horst", "elza"), START_TIME), root=root,
-            models=stack.models, judge=stack.judge, glossary=glossary)
+            models=stack.models, judge=stack.judge, glossary=glossary,
+            style=Style.load("witcher"))
         for text, knowers in SEEDS:
             eng.facts.add_canon(text, knowers=[(k, "told") for k in knowers])
         eng.apply_state_change(StateChange(PLAYER, EQUIPMENT, "add", "steel sword", True))

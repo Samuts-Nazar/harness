@@ -57,6 +57,7 @@ from .settings import (
 )
 from .state import LiveState, StateChange, check_change, payload as change_payload
 from .streaming import InterruptHandle, StreamResult, run_stream
+from .style import Style, beat_as_action, foreign_voice, manner_messages, parse_manner, split_npc_output
 
 ATTITUDE_MIN_NOTABILITY = 0.6  # only notable facts get attitude judgments (cost control)
 FALLBACK_LINE = "I don't know what to tell you."  # no longer shown: the least suspicious candidate is
@@ -181,6 +182,7 @@ class Engine:
         glossary: Glossary | None = None,
         max_speakers: int = MAX_SPEAKERS,
         hear_each_other: bool = True,
+        style: Style | None = None,
     ) -> None:
         """`parallel`: run the independent calls of a turn concurrently. None (default): only if
         the provider says it is thread-safe (`parallel_ok`); fake providers are not, so tests
@@ -193,7 +195,11 @@ class Engine:
         `max_speakers`: the director names at most this many NPCs per turn.
         `hear_each_other`: an NPC speaking after another in the same turn gets the earlier line in
         its context (False: all NPC lines are generated at once, as in task 9; kept to measure the
-        latency cost)."""
+        latency cost).
+        `style`: Sapkowski-style prompts and exemplars (harness/style.py). With it an NPC line may
+        carry the NPC's own beats ("— ..., — озирнувся Горст. — ..."): the line is stored whole, its
+        spoken part in `payload['speech']`, and each beat as an observable action of that NPC; a
+        profile without manner notes gets them from a cheap model once."""
         if narration not in ("prose", "json"):
             raise ValueError(f"narration must be 'prose' or 'json', not {narration!r}")
         self.conn = conn or connect()
@@ -212,6 +218,7 @@ class Engine:
         self.output_language, self.record_language = output_language, record_language
         self.narration, self.glossary, self.max_speakers = narration, glossary, max_speakers
         self.hear_each_other = hear_each_other
+        self.style = style
         self._fixes: list[dict[str, str]] = []  # glossary replacements of the running turn
         self._fixes_lock = threading.Lock()
         self._tl = threading.local()
@@ -231,7 +238,7 @@ class Engine:
         self.ctx = ContextBuilder(self.log, self.facts, self.intents, self.profiles, self.live,
                                   self.deriver, language=output_language,
                                   record_language=record_language, glossary=glossary,
-                                  narration=narration)
+                                  narration=narration, style=style)
         self.memory = (MemoryWriter(self.campaign_dir / "memory", self.deriver, self.log,
                                     self.profiles, self.agents) if self.campaign_dir else None)
         self._save_scene()
@@ -537,8 +544,26 @@ class Engine:
     # -- NPC lines ------------------------------------------------------
     def _prep_npc(self, npc: str) -> _NpcPrep:
         """Read an NPC's context and the judge's state from the database (main thread only)."""
+        self._ensure_manner(npc)
         mem = self.deriver.derive(npc, self.scene.time)
         return _NpcPrep(npc, mem, self.ctx.character_view(npc, self.scene, mem))
+
+    def _ensure_manner(self, npc: str) -> None:
+        """Manner notes for an NPC profile that has none, once, from a cheap model (main thread
+        only). Failure is noted and the NPC simply has no notes; it is not retried every turn."""
+        prof = self.profiles.get(npc)
+        if self.style is None or prof is None or prof.manner or npc == PLAYER:
+            return
+        manner = ""
+        try:
+            manner = parse_manner(self._complete("extractor", manner_messages(prof, self.style)))
+        except Exception as e:  # noqa: BLE001 - a style nicety must never break a turn
+            self._note("manner_failed", npc=npc, error=str(e))
+        self.profiles[npc] = replace(prof, manner=manner or "-")
+        if manner:
+            self._note("manner_generated", npc=npc, manner=manner)
+        if self._owns_conn:
+            self._save_setup()
 
     def _suspicion(self, prep: _NpcPrep, line: str, heard: Sequence[str] = ()) -> float | None:
         """Probability that the line contains a claim the NPC had no channel to learn (network
@@ -561,6 +586,13 @@ class Engine:
         for _ in range(self.check_retries + 1):
             text = self._fix_names(clean_npc_line(self._complete("npc", prep.messages(heard))),
                                    "npc_line")
+            why = (foreign_voice(text, self.ctx.name(prep.npc),
+                                 [p.name for p in self.profiles.values()])
+                   if self.style is not None else None)
+            if why is not None:  # the call wrote for somebody else: not shown, no judge needed
+                tried.append((1.0, text))
+                self._note("npc_line_rejected", npc=prep.npc, text=text, suspicion=1.0, why=why)
+                continue
             p = self._suspicion(prep, text, heard)
             if p is None or p < self.npc_reject_p:
                 return text
@@ -935,9 +967,19 @@ class Engine:
                     turn_events.append(self.notices.mark_shown(notice, sc))
                 cb = (lambda w, n=npc: on_word(n, w)) if on_word else None
                 sr = run_stream(iter([text]), handle, cb, self.pace)
-                ev = self._utterance(npc, sr.spoken_text, interrupted=sr.interrupted)
+                parsed = split_npc_output(sr.spoken_text) if self.style is not None else None
+                extra: dict[str, object] = (
+                    {"speech": parsed.speech} if parsed is not None and parsed.has_dash else {})
+                ev = self._utterance(npc, sr.spoken_text, interrupted=sr.interrupted, **extra)
                 turn_events.append(ev)
                 result.utterances.append(ev)
+                if parsed is not None:  # the NPC's own beats, only the delivered part
+                    for beat in parsed.beats:
+                        act = self._fix_names(beat_as_action(beat, self.ctx.name(npc)), "npc_beat")
+                        if act:
+                            turn_events.append(self._event(
+                                ACTION_EVENT, [npc], {"text": act, "by": npc}, notability=0.3,
+                                cause_id=ev.id))
                 sources[npc] = ev
                 segments.append((npc, sr.spoken_text))
                 if sr.interrupted:
@@ -1046,7 +1088,8 @@ class Engine:
     def _save_setup(self) -> None:
         with self.conn:
             for k, v in {
-                "profiles": [[p.id, p.name, p.description] for p in self.profiles.values()],
+                "profiles": [[p.id, p.name, p.description, p.manner]
+                             for p in self.profiles.values()],
                 "settings": {"output_language": self.output_language,
                              "record_language": self.record_language,
                              "narration": self.narration,
