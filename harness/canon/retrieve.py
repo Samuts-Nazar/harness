@@ -16,7 +16,19 @@ from typing import Any
 _WORD = re.compile(r"[^\W\d_]{3,}", re.U)
 STOP = {"що", "як", "чи", "це", "від", "про", "для", "його", "вона", "вони", "але", "так", "там", "тут", "коли",
         "який", "яка", "які", "чому", "ким", "хто", "кого", "мав", "має", "був", "була", "було", "були", "the",
-        "and", "who", "what", "how", "did", "does"}
+        "and", "who", "what", "how", "did", "does", "знає", "знав", "знаю", "знаєш", "відомо", "робив", "зробив",
+        "зробила", "сказав", "казав", "можна", "треба", "ще", "вже", "тільки", "коли", "десь", "щодо", "чого",
+        "цієї", "цього", "того", "тієї", "цей", "ця", "ці", "ніч", "дні", "відбувалося", "відбувалось", "відбулося",
+        "сталося", "трапилося", "проти", "ночі", "вночі", "сьогодні", "вчора", "хто", "така", "такий", "яку", "якою"}
+
+
+def stems(q: str) -> list[str]:
+    out = []
+    for w in _WORD.findall(q.lower()):
+        if w in STOP:
+            continue
+        out.append(w[:-2] if len(w) > 6 else w[:-1] if len(w) > 4 else w)
+    return list(dict.fromkeys(out))
 
 
 def fts_query(q: str) -> str:
@@ -67,23 +79,38 @@ class Canon:
             return []
 
     def _mentioned(self, q: str) -> list[str]:
-        """Entities whose name or alias appears in the question (prefix match on the stem)."""
-        ql = q.lower()
-        out = []
-        for r in self.con.execute("SELECT entity, alias FROM canon_alias"):
-            a = r["alias"].lower()
-            stem = a[:-2] if len(a) > 5 else a
-            if len(stem) >= 4 and stem in ql and r["entity"] not in out:
-                out.append(r["entity"])
+        """Entities whose name or alias starts a word of the question. Persons are resolved before
+        collectives and places: a collective is added only for words no person explained."""
+        words = _WORD.findall(q.lower())
+        found: dict[str, tuple[int, str]] = {}   # entity -> (rank by type, matched word)
+        order = {"person": 0, "creature": 1, "collective": 2, "place": 3, "item": 4}
+        for r in self.con.execute("SELECT a.entity, a.alias, e.type FROM canon_alias a JOIN entity e ON e.id=a.entity"):
+            al = r["alias"].lower().strip("«»\"' ")
+            if " " in al or len(al) < 4:
+                continue
+            stem = al[:-2] if len(al) > 5 else al
+            for w in words:
+                if w.startswith(stem) or (len(w) >= 4 and al.startswith(w[:-1] if len(w) > 5 else w) and len(w) >= len(stem) - 1):
+                    found.setdefault(r["entity"], (order.get(r["type"], 5), w))
+        explained = {w for (rk, w) in found.values() if rk == 0}
+        out = [e for e, (rk, w) in sorted(found.items(), key=lambda kv: kv[1][0]) if rk == 0 or w not in explained]
         return out
 
     # ---- filtered recall -----------------------------------------------------------------
-    def recall(self, holder: str, query: str, as_of: int, k: int = 6) -> dict[str, Any]:
+    def _event_text(self, eid: int) -> str:
+        r = self.con.execute("SELECT text FROM canon_event_fts WHERE rowid=?", (eid,)).fetchone()
+        return (r[0] if r else "").lower()
+
+    def recall(self, holder: str, query: str, as_of: int, k: int = 6, *, min_cover: float = 0.34) -> dict[str, Any]:
+        """Events the holder knows (by as_of) that answer the query. Relevance cutoff: an event must
+        contain enough of the query's content words (stems) or it is not returned, so an unrelated
+        question gets nothing back rather than the nearest noise."""
         hs = self.holders(holder)
         ph = ",".join("?" * len(hs))
         known = {r["event_id"]: dict(r) for r in self.con.execute(
             f"SELECT event_id, entity, channel, source, learned_t FROM canon_knower "
             f"WHERE entity IN ({ph}) AND COALESCE(learned_t, -999999999) <= ?", (*hs, as_of))}
+        terms = stems(query)
         rank: dict[int, float] = {}
         for i, eid in enumerate(self._fts_ids("canon_event_fts", query)):
             if eid in known:
@@ -92,21 +119,31 @@ class Canon:
             for r in self.con.execute("SELECT record_id FROM canon_evidence WHERE passage_id=?", (pid,)):
                 if r["record_id"] in known:
                     rank[r["record_id"]] = rank.get(r["record_id"], 0) + 0.7 / (1 + i)
-        for ent in self._mentioned(query):
+        ments = self._mentioned(query)
+        # relevance gate on content words: names of mentioned entities count as terms too
+        need = 0 if not terms else max(1, int(len(terms) * min_cover + 0.999))
+        kept: dict[int, float] = {}
+        for eid, sc in rank.items():
+            txt = self._event_text(eid)
+            cover = sum(1 for t in terms if t in txt)
+            if cover >= need:
+                kept[eid] = sc + 0.3 * cover
+        for ent in ments:
             for r in self.con.execute("SELECT event_id FROM canon_participant WHERE entity=?", (ent,)):
-                if r["event_id"] in known:
-                    rank[r["event_id"]] = rank.get(r["event_id"], 0) + 0.25
-        top = sorted(rank, key=lambda e: -rank[e])[:k]
+                if r["event_id"] in kept:
+                    kept[r["event_id"]] += 0.25
+        top = sorted(kept, key=lambda e: -kept[e])[:k]
         events = []
         for eid in top:
             e = self.con.execute(
-                "SELECT r.body, r.place, r.t_from, c.quote, c.lines, c.ekind FROM record r "
+                "SELECT r.body, r.place, r.t_from, c.quote, c.lines, c.ekind, c.gist_uk, c.day, c.part FROM record r "
                 "JOIN canon_event c ON c.id=r.id WHERE r.id=?", (eid,)).fetchone()
             kn = known[eid]
             own = [dict(x) for x in self.con.execute(
                 "SELECT reaction, attitude FROM canon_reaction WHERE event_id=? AND party IN (%s)" % ph, (eid, *hs))]
-            events.append({"id": eid, "what": e["body"], "place": self.name(e["place"]) if e["place"] else None,
-                           "t": e["t_from"], "how_known": kn["channel"],
+            events.append({"id": eid, "what": e["gist_uk"] or e["body"], "what_en": e["body"],
+                           "place": self.name(e["place"]) if e["place"] else None,
+                           "t": e["t_from"], "day": e["day"], "how_known": kn["channel"],
                            "source": self.name(kn["source"]) if kn["source"] else None,
                            "learned_t": kn["learned_t"], "quote": e["quote"], "kind": e["ekind"],
                            "own_reaction": own})
