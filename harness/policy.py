@@ -170,6 +170,13 @@ def check_model(model: str) -> None:
             f"${MAX_INPUT_PER_M:g}/${MAX_OUTPUT_PER_M:g}")
 
 
+def check_decision_model(model: str) -> None:
+    """The decision endpoint serves only the explicit list of decision models."""
+    check_model(model)
+    if model not in DECISION_MODELS:
+        raise ModelNotAllowed(f"{model!r} is not a decision model (see DECISION_MODELS)")
+
+
 class Spend:
     """Running total of what the API reported (`usage.cost`), with a hard cap. Thread-safe."""
 

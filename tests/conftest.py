@@ -36,7 +36,7 @@ def narr(description="N.", actions=(), speakers=()):
 def _wrap(script):
     """Plain-text narrator replies in a script become `{"description": ...}` JSON."""
     out = dict(script)
-    out["narrator"] = [n if n.lstrip().startswith("{") else narr(n) for n in script.get("narrator", [])]
+    out["narrator"] = [n if isinstance(n, Exception) or n.lstrip().startswith("{") else narr(n) for n in script.get("narrator", [])]
     return out
 
 

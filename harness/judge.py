@@ -24,7 +24,7 @@ from typing import Any, Callable, Iterator, Mapping, Sequence
 
 import httpx
 
-from .policy import DEFAULT_JUDGE_FIRST, Spend, check_model
+from .policy import DEFAULT_JUDGE_FIRST, Spend, check_decision_model
 from .providers import Provider, ProviderError
 from .retry import send_with_retry
 
@@ -126,7 +126,7 @@ class DecisionJudge(Judge):
                  client: httpx.Client | None = None, url: str = DECISION_URL,
                  timeout: float = 60.0, spend: Spend | None = None, retries: int = 4,
                  backoff: float = 1.0, sleep: Callable[[float], None] = time.sleep) -> None:
-        check_model(model)
+        check_decision_model(model)
         self.model, self.url = model, url
         self.spend = spend or Spend()
         self._headers = {"Authorization": f"Bearer {api_key}"}
