@@ -1,0 +1,49 @@
+# third variant (English context, Ukrainian proper nouns); same columns as grades_npc.txt
+c01 A 5 4 0
+c01 B 5 5 0
+c01 C 5 4 1
+c01 D 5 4 1
+c02 A 5 3 1
+c02 B 2 3 1 en
+c02 C 5 4 1
+c02 D 5 3 1
+c03 A 5 5 0
+c03 B 4 4 0
+c03 C 4 4 0 ru
+c03 D 5 5 0
+c04 A 5 5 0
+c04 B 5 5 0
+c04 C 5 5 0
+c04 D 5 5 0
+c05 A 5 5 1
+c05 B 3 4 1 ru
+c05 C 5 5 1
+c05 D 4 4 1 ru
+c06 A 4 5 0
+c06 B 4 4 0
+c06 C 5 5 0
+c06 D 5 5 0
+c07 A 5 5 0
+c07 B 5 5 0
+c07 C 4 3 0
+c07 D 4 3 1
+c08 A 5 5 0
+c08 B 5 5 0
+c08 C 3 4 0
+c08 D 5 5 0
+c09 A 5 4 1
+c09 B 5 4 0
+c09 C 5 4 0
+c09 D 4 5 0
+c10 A 5 5 0
+c10 B 5 5 0
+c10 C 5 5 0
+c10 D 3 4 0 en
+c11 A 5 5 0
+c11 B 5 5 0
+c11 C 5 5 0
+c11 D 5 4 0
+c12 A 5 5 1
+c12 B 5 5 1
+c12 C 5 5 1
+c12 D 5 5 1

@@ -1,0 +1,1562 @@
+{
+"narrator/n01/A": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"narrator/n01/B": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"narrator/n01/C": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 1
+},
+"narrator/n01/D": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 2
+},
+"narrator/n01/E": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 2
+},
+"narrator/n01/F": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 0
+},
+"narrator/n01/G": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 1
+},
+"narrator/n01/H": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"narrator/n01/I": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"narrator/n01/J": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"narrator/n01/K": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 0
+},
+"narrator/n01/L": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"narrator/n02/A": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 1
+},
+"narrator/n02/B": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 0
+},
+"narrator/n02/C": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"narrator/n02/D": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"narrator/n02/E": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 2
+},
+"narrator/n02/F": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"narrator/n02/G": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"narrator/n02/H": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 1
+},
+"narrator/n02/I": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 2
+},
+"narrator/n02/J": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"narrator/n02/K": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"narrator/n02/L": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 0
+},
+"narrator/n03/A": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"narrator/n03/B": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 1
+},
+"narrator/n03/C": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 0
+},
+"narrator/n03/D": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 0
+},
+"narrator/n03/E": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 2
+},
+"narrator/n03/F": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"narrator/n03/G": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"narrator/n03/H": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 1
+},
+"narrator/n03/I": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"narrator/n03/J": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"narrator/n03/K": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 2
+},
+"narrator/n03/L": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"narrator/n04/A": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 1
+},
+"narrator/n04/B": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"narrator/n04/C": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"narrator/n04/D": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 0
+},
+"narrator/n04/E": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"narrator/n04/F": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 1
+},
+"narrator/n04/G": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"narrator/n04/H": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 0
+},
+"narrator/n04/I": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"narrator/n04/J": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 2
+},
+"narrator/n04/K": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 2
+},
+"narrator/n04/L": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"narrator/n05/A": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 0
+},
+"narrator/n05/B": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"narrator/n05/C": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"narrator/n05/D": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"narrator/n05/E": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"narrator/n05/F": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 1
+},
+"narrator/n05/G": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"narrator/n05/H": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 2
+},
+"narrator/n05/I": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 1
+},
+"narrator/n05/J": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"narrator/n05/K": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 2
+},
+"narrator/n05/L": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 0
+},
+"narrator/n06/A": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 1
+},
+"narrator/n06/B": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"narrator/n06/C": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 0
+},
+"narrator/n06/D": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"narrator/n06/E": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 0
+},
+"narrator/n06/F": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"narrator/n06/G": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"narrator/n06/H": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 2
+},
+"narrator/n06/I": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 2
+},
+"narrator/n06/J": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"narrator/n06/K": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"narrator/n06/L": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 1
+},
+"narrator/n07/A": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"narrator/n07/B": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 0
+},
+"narrator/n07/C": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 2
+},
+"narrator/n07/D": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 2
+},
+"narrator/n07/E": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"narrator/n07/F": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 0
+},
+"narrator/n07/G": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"narrator/n07/H": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"narrator/n07/I": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 1
+},
+"narrator/n07/J": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"narrator/n07/K": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 1
+},
+"narrator/n07/L": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"narrator/n08/A": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"narrator/n08/B": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"narrator/n08/C": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 0
+},
+"narrator/n08/D": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 1
+},
+"narrator/n08/E": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 2
+},
+"narrator/n08/F": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"narrator/n08/G": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"narrator/n08/H": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 0
+},
+"narrator/n08/I": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 2
+},
+"narrator/n08/J": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"narrator/n08/K": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"narrator/n08/L": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 1
+},
+"narrator/n09/A": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 2
+},
+"narrator/n09/B": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 0
+},
+"narrator/n09/C": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 1
+},
+"narrator/n09/D": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"narrator/n09/E": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"narrator/n09/F": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 0
+},
+"narrator/n09/G": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"narrator/n09/H": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 1
+},
+"narrator/n09/I": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"narrator/n09/J": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"narrator/n09/K": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"narrator/n09/L": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 2
+},
+"npc/c01/A": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 0
+},
+"npc/c01/B": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"npc/c01/C": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"npc/c01/D": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"npc/c01/E": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 1
+},
+"npc/c01/F": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 0
+},
+"npc/c01/G": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 1
+},
+"npc/c01/H": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"npc/c01/I": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"npc/c01/J": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 2
+},
+"npc/c01/K": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"npc/c01/L": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 2
+},
+"npc/c02/A": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 2
+},
+"npc/c02/B": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 0
+},
+"npc/c02/C": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 2
+},
+"npc/c02/D": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"npc/c02/E": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"npc/c02/F": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"npc/c02/G": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"npc/c02/H": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"npc/c02/I": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"npc/c02/J": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 1
+},
+"npc/c02/K": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 1
+},
+"npc/c02/L": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 0
+},
+"npc/c03/A": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"npc/c03/B": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 2
+},
+"npc/c03/C": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 2
+},
+"npc/c03/D": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 1
+},
+"npc/c03/E": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 0
+},
+"npc/c03/F": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 0
+},
+"npc/c03/G": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"npc/c03/H": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"npc/c03/I": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"npc/c03/J": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 1
+},
+"npc/c03/K": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"npc/c03/L": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"npc/c04/A": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 0
+},
+"npc/c04/B": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"npc/c04/C": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"npc/c04/D": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 1
+},
+"npc/c04/E": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"npc/c04/F": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 0
+},
+"npc/c04/G": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 1
+},
+"npc/c04/H": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 2
+},
+"npc/c04/I": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"npc/c04/J": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"npc/c04/K": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 2
+},
+"npc/c04/L": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"npc/c05/A": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"npc/c05/B": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 0
+},
+"npc/c05/C": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"npc/c05/D": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 2
+},
+"npc/c05/E": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 2
+},
+"npc/c05/F": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"npc/c05/G": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 1
+},
+"npc/c05/H": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"npc/c05/I": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"npc/c05/J": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 0
+},
+"npc/c05/K": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"npc/c05/L": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 1
+},
+"npc/c06/A": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 0
+},
+"npc/c06/B": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"npc/c06/C": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"npc/c06/D": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 2
+},
+"npc/c06/E": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 1
+},
+"npc/c06/F": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"npc/c06/G": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 0
+},
+"npc/c06/H": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 2
+},
+"npc/c06/I": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"npc/c06/J": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"npc/c06/K": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"npc/c06/L": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 1
+},
+"npc/c07/A": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"npc/c07/B": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 0
+},
+"npc/c07/C": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 1
+},
+"npc/c07/D": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 0
+},
+"npc/c07/E": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"npc/c07/F": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 1
+},
+"npc/c07/G": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"npc/c07/H": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 2
+},
+"npc/c07/I": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 2
+},
+"npc/c07/J": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"npc/c07/K": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"npc/c07/L": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"npc/c08/A": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 1
+},
+"npc/c08/B": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 1
+},
+"npc/c08/C": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 2
+},
+"npc/c08/D": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 0
+},
+"npc/c08/E": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 2
+},
+"npc/c08/F": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"npc/c08/G": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"npc/c08/H": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 0
+},
+"npc/c08/I": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"npc/c08/J": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"npc/c08/K": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"npc/c08/L": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"npc/c09/A": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 2
+},
+"npc/c09/B": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 1
+},
+"npc/c09/C": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"npc/c09/D": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 0
+},
+"npc/c09/E": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"npc/c09/F": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 2
+},
+"npc/c09/G": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"npc/c09/H": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"npc/c09/I": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"npc/c09/J": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"npc/c09/K": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 0
+},
+"npc/c09/L": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 1
+},
+"npc/c10/A": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"npc/c10/B": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"npc/c10/C": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"npc/c10/D": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"npc/c10/E": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 1
+},
+"npc/c10/F": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 1
+},
+"npc/c10/G": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 0
+},
+"npc/c10/H": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 2
+},
+"npc/c10/I": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 2
+},
+"npc/c10/J": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 0
+},
+"npc/c10/K": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"npc/c10/L": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"npc/c11/A": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 0
+},
+"npc/c11/B": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 2
+},
+"npc/c11/C": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"npc/c11/D": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 1
+},
+"npc/c11/E": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"npc/c11/F": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 2
+},
+"npc/c11/G": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 0
+},
+"npc/c11/H": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"npc/c11/I": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"npc/c11/J": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"npc/c11/K": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 1
+},
+"npc/c11/L": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"npc/c12/A": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 2
+},
+"npc/c12/B": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"npc/c12/C": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"npc/c12/D": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"npc/c12/E": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 2
+},
+"npc/c12/F": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"npc/c12/G": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 1
+},
+"npc/c12/H": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"npc/c12/I": {
+"model": "openai/gpt-6-luna",
+"variant": "en",
+"sample": 0
+},
+"npc/c12/J": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 0
+},
+"npc/c12/K": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"npc/c12/L": {
+"model": "openai/gpt-6-luna",
+"variant": "uk",
+"sample": 1
+},
+"extract/e01/A": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"extract/e01/B": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"extract/e01/C": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"extract/e01/D": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"extract/e01/E": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"extract/e01/F": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"extract/e02/A": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"extract/e02/B": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"extract/e02/C": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"extract/e02/D": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"extract/e02/E": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"extract/e02/F": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"extract/e03/A": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"extract/e03/B": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"extract/e03/C": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"extract/e03/D": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"extract/e03/E": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"extract/e03/F": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"extract/e04/A": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"extract/e04/B": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"extract/e04/C": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"extract/e04/D": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"extract/e04/E": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"extract/e04/F": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"extract/e05/A": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"extract/e05/B": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"extract/e05/C": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"extract/e05/D": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"extract/e05/E": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"extract/e05/F": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"extract/e06/A": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"extract/e06/B": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"extract/e06/C": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"extract/e06/D": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"extract/e06/E": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"extract/e06/F": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"extract/e07/A": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"extract/e07/B": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"extract/e07/C": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"extract/e07/D": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"extract/e07/E": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"extract/e07/F": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"extract/e08/A": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"extract/e08/B": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"extract/e08/C": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"extract/e08/D": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"extract/e08/E": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"extract/e08/F": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"extract/e09/A": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"extract/e09/B": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"extract/e09/C": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+},
+"extract/e09/D": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"extract/e09/E": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"extract/e09/F": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"extract/e10/A": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 1
+},
+"extract/e10/B": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 0
+},
+"extract/e10/C": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 0
+},
+"extract/e10/D": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 2
+},
+"extract/e10/E": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "uk",
+"sample": 2
+},
+"extract/e10/F": {
+"model": "deepseek/deepseek-v4.1-flash-1017",
+"variant": "en",
+"sample": 1
+}
+}
