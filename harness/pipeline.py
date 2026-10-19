@@ -209,8 +209,10 @@ class Engine:
         max_speakers: int = MAX_SPEAKERS,
         hear_each_other: bool = True,
         style: Style | None = None,
+        player_unlimited: bool = False,
     ) -> None:
-        """`parallel`: run the independent calls of a turn concurrently. None (default): only if
+        """`player_unlimited` (task 17): the player's declared acts happen as declared; the
+        narrator and the extractor must not soften them. `parallel`: run the independent calls of a turn concurrently. None (default): only if
         the provider says it is thread-safe (`parallel_ok`); fake providers are not, so tests
         stay deterministic. `npc_reject_p`: an NPC line is rejected at suspicion >= this.
         `output_language`: language of narration and NPC speech (player-facing).
@@ -265,7 +267,8 @@ class Engine:
         self.ctx = ContextBuilder(self.log, self.facts, self.intents, self.profiles, self.live,
                                   self.deriver, language=output_language,
                                   record_language=record_language, glossary=glossary,
-                                  narration=narration, names=self.names, style=style)
+                                  narration=narration, names=self.names, style=style,
+                                  player_unlimited=player_unlimited)
         self.memory = (MemoryWriter(self.campaign_dir / "memory", self.deriver, self.log,
                                     self.profiles, self.agents) if self.campaign_dir else None)
         self._save_scene()
@@ -1353,7 +1356,8 @@ class Engine:
                 "settings": {"output_language": self.output_language,
                              "record_language": self.record_language,
                              "narration": self.narration,
-                             "minutes_per_turn": self.minutes_per_turn},
+                             "minutes_per_turn": self.minutes_per_turn,
+                             "player_unlimited": self.ctx.player_unlimited},
             }.items():
                 self.conn.execute("INSERT OR REPLACE INTO campaign_meta (key, value) VALUES (?,?)",
                                   (k, json.dumps(v)))

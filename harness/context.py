@@ -24,6 +24,15 @@ from .providers import Messages
 from .state import LiveState
 from .style import Style
 
+UNLIMITED_NARRATOR = (
+    "The player character is a being without limits: whatever the player declares the character "
+    "does, happens exactly as declared. Never refuse it, soften it, let it fail or turn it into "
+    "an attempt; narrate the world's reaction to it, not whether it works.")
+UNLIMITED_EXTRACTOR = (
+    "What the player character does, as the player wrote it, has happened: record it as a fact at "
+    "full strength, exactly as stated (never 'tries to', 'claims', 'seems to', no hedging, no "
+    "smaller scale), and give such an act the notability its scale in the world deserves (a "
+    "miracle in front of a crowd is high).")
 SAID_LIMIT = 8  # own lines shown as "already said in this scene"
 SAID_CHARS = 220  # each shortened to this
 CORRECTIONS_SHOWN = 5
@@ -83,8 +92,10 @@ class ContextBuilder:
         narration: str = "json",
         names: Names | None = None,
         style: Style | None = None,
+        player_unlimited: bool = False,
     ) -> None:
-        """`language`: what the player reads (narration, NPC speech). `record_language`: what
+        """`player_unlimited` (task 17): what the player declares the character does, happens; the
+        narrator and the extractor must not soften it. `language`: what the player reads (narration, NPC speech). `record_language`: what
         the extractor writes facts in. None: no instruction (the model's own choice).
         `glossary`: every rendered context goes through it (one form of each name) and each prompt
         lists the names it mentions. `narration`: "prose" (free text) or "json" (task 3).
@@ -92,6 +103,7 @@ class ContextBuilder:
         `style`: the Sapkowski-style wording and exemplars (harness/style.py); None keeps the
         task 12 prompts."""
         self.style = style
+        self.player_unlimited = player_unlimited
         self.language, self.record_language = language, record_language
         self.glossary, self.narration = glossary, narration
         self.names = names
@@ -327,7 +339,8 @@ class ContextBuilder:
                 "separately, so no quotation marks and no dialogue dashes; show what a "
                 "character does, not what they say. Do not decide what the player character says, does or feels beyond "
                 "what the player gave."
-                + (f"\nWrite in {self.language}." if self.language else ""))
+                + (f"\nWrite in {self.language}." if self.language else "")
+                + (f"\n{UNLIMITED_NARRATOR}" if self.player_unlimited else ""))
             system = "You are the narrator of a role-playing game. Write vivid prose."
             if self.style is not None:
                 system = self.style.narrator_system()
@@ -409,6 +422,7 @@ class ContextBuilder:
             + (f"Write every fact's content and every state item in {self.record_language}"
                + ("; names, places and titles stay in Ukrainian as they are written. "
                   if self.glossary else ". ") if self.record_language else "")
+            + (UNLIMITED_EXTRACTOR + "\n" if self.player_unlimited else "")
             + "Current state:\n" + ("\n".join(cur) if cur else "- (none)")
         )
         return self.finish([
