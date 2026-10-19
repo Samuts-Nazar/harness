@@ -1,0 +1,216 @@
+[
+ {
+  "kind": "narrator_speech_rejected",
+  "attempt": 0,
+  "text": "The innkeeper sighs heavily, shaking his head as he pours himself a small measure of ale from a pitcher. He takes a long drink before setting the cup down. \"Three nights now, it's been. First night, a ewe and her lamb found torn clean apart just beyond the east field—not eaten, just shredded. Second night, the shepherd's old dog—a good, fierce beast—got the same. And last night, nothing but silence from the flock, but this morning the miller's boy found a trail of blood leading from the village up toward the old mill. The miller's daughter, you see. She was a pretty thing, always singing as she walked the lane. No one's seen her since dusk two days ago. She'd been carrying a lantern to light her way, but we've found no trace of her—not the lantern, not a scrap of clothing.\" He wipes his brow with the back of his hand and adds, \"I'd go look myself, but I've a wife and a bairn to feed, and I'm no fighter.\""
+ },
+ {
+  "kind": "narrator_speech_rejected",
+  "attempt": 1,
+  "text": "The innkeeper sighs heavily and pours himself a small ale before answering. He leans forward, forearms on the scarred oak, voice low. 'Three nights now, east of the village. Sheep first—torn apart, not eaten proper. Then the miller's hound, same way. And two days ago, the miller's girl. She'd walk out to the old mill at dusk with a lantern, but she never came home. They found her lantern smashed, her shawl snagged on a thorn, and blood. Lots of blood, but no body. The elders say it's a beast, but I've never known a wolf or a bear to take a lantern. The old mill's sat empty since she vanished.' He takes a pull from his cup and adds, 'Folks are scared. They lock their doors at sundown and pray. If you're looking for work, there's coin to be had from the village elders, but not from me.'"
+ },
+ {
+  "kind": "narrator_speech_rejected",
+  "attempt": 2,
+  "text": "The innkeeper lets out a heavy sigh, his flour-dusted hands braced against the counter. He glances toward the rain-streaked window, then back at you. 'Three nights now, something's been tearing through the flocks east of the village. Sheep, mostly—ripped clean apart, not a meal left behind. And old Dobromir's dog, the one that never let anything past his kennel, found in the same state. But that's not the worst of it. The miller's daughter, sweet lass named Ania, vanished four nights ago. Last saw her walking toward the old mill with a lantern at dusk, just when the mist starts to crawl up from the stream. The mill's been empty since she disappeared—no one'll go near it now.' He shakes his head, wiping a tankard with a rag. 'You ask me, that thing out there's got a taste for more than mutton now.'"
+ },
+ {
+  "kind": "narrator_speech_stripped",
+  "before": "The innkeeper lets out a heavy sigh, his flour-dusted hands braced against the counter. He glances toward the rain-streaked window, then back at you. 'Three nights now, something's been tearing through the flocks east of the village. Sheep, mostly—ripped clean apart, not a meal left behind. And old Dobromir's dog, the one that never let anything past his kennel, found in the same state. But that's not the worst of it. The miller's daughter, sweet lass named Ania, vanished four nights ago. Last saw her walking toward the old mill with a lantern at dusk, just when the mist starts to crawl up from the stream. The mill's been empty since she disappeared—no one'll go near it now.' He shakes his head, wiping a tankard with a rag. 'You ask me, that thing out there's got a taste for more than mutton now.'",
+  "after": "The innkeeper lets out a heavy sigh, his flour-dusted hands braced against the counter. He glances toward the rain-streaked window, then back at you. He shakes his head, wiping a tankard with a rag."
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "innkeeper",
+  "text": "Kept to yourself, have you? Three nights now—sheep torn apart like wet hay, and the old miller’s girl gone. She walked out with a lantern at dusk, never came back. They found her shawl near the millpond, but nothing else. What’s out there took her, same as it took the livestock, and it’s not done yet. I tell you, I hear it scratching at the shutters some nights. So if you’re asking, it’s this: stay clear of the old mill east of here, and whatever you do, don’t go out after dark unless you’ve got more than a sword and a prayer."
+ },
+ {
+  "kind": "narrator_bad_speakers",
+  "proposed": [
+   "bard (Dandelion)"
+  ],
+  "kept": [
+   "bard"
+  ]
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "innkeeper",
+  "text": "Gone, she is. Elsbeth was her name—miller’s only child, sweet as summer ale and twice as bright. Her da passed last winter, and she kept that mill running on her own, stubborn as a mule with a sore tooth. Last I saw her, she was carrying a lantern, humming some old tune, heading east along the path. The blacksmith’s lad claims he saw her from his forge, just as dusk settled, but he’s a fool with a wandering eye—swore she was headed straight for the mill, not a lurch in her step. No one’s owned up to speaking with her after that. The mill’s been empty since her da died, and she’d have no reason to go back there, not unless she was meeting someone or something. But if I hear one more soul whisper it was a rival or a jilted suitor, I’ll box their ears. That girl had no enemies—just a lantern, a shawl, and a path that ends in rushes."
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "innkeeper",
+  "text": "Aye, now you’re askin’ the right questions, witcher. Her name was Margrit—the miller’s daughter, and a sweet lass, always had a smile for the folk who came to grind their grain. Her da died last winter, heart gave out, right there in the mill. She kept the place goin’ alone, stubborn as he was. Last to see her was old Widow Haskett, who lives on the lane east of here. She saw Margrit pass by just as the sun was sinkin’, lantern lit, headin’ toward the mill. Said the lass looked pale, like she’d seen somethin’ already, but she waved and walked on. That’s all anyone knows—she walked into that dusk and the mill swallowed her up. Now, if you’re thinkin’ of goin’ there, be sharp. That thing ain’t shy, and it ain’t full yet. I’ll have stew ready when you come back—if you come back."
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "innkeeper",
+  "text": "Who saw her last? I did. Saw her from that window, lantern swinging, walking the path to the mill like she was going to meet a sweetheart. But there’s no sweetheart out there, not anymore. Her name was Marta, and she was the miller’s only child. Her da died two winters back, and she stayed on, tending the place alone. Folks said she was cheerful, always humming. But that night she looked… set. Determined. Like she had a purpose. I told her it was late, warned her about the dogs and sheep, but she just smiled and waved and kept walking. And that was the last any of us saw her alive. Does that answer your question, witcher? Because I’ve got stew on the fire and no more patience for riddles."
+ },
+ {
+  "kind": "npc_fallback",
+  "npc": "innkeeper",
+  "rejected": [
+   "Gone, she is. Elsbeth was her name—miller’s only child, sweet as summer ale and twice as bright. Her da passed last winter, and she kept that mill running on her own, stubborn as a mule with a sore tooth. Last I saw her, she was carrying a lantern, humming some old tune, heading east along the path. The blacksmith’s lad claims he saw her from his forge, just as dusk settled, but he’s a fool with a wandering eye—swore she was headed straight for the mill, not a lurch in her step. No one’s owned up to speaking with her after that. The mill’s been empty since her da died, and she’d have no reason to go back there, not unless she was meeting someone or something. But if I hear one more soul whisper it was a rival or a jilted suitor, I’ll box their ears. That girl had no enemies—just a lantern, a shawl, and a path that ends in rushes.",
+   "Aye, now you’re askin’ the right questions, witcher. Her name was Margrit—the miller’s daughter, and a sweet lass, always had a smile for the folk who came to grind their grain. Her da died last winter, heart gave out, right there in the mill. She kept the place goin’ alone, stubborn as he was. Last to see her was old Widow Haskett, who lives on the lane east of here. She saw Margrit pass by just as the sun was sinkin’, lantern lit, headin’ toward the mill. Said the lass looked pale, like she’d seen somethin’ already, but she waved and walked on. That’s all anyone knows—she walked into that dusk and the mill swallowed her up. Now, if you’re thinkin’ of goin’ there, be sharp. That thing ain’t shy, and it ain’t full yet. I’ll have stew ready when you come back—if you come back.",
+   "Who saw her last? I did. Saw her from that window, lantern swinging, walking the path to the mill like she was going to meet a sweetheart. But there’s no sweetheart out there, not anymore. Her name was Marta, and she was the miller’s only child. Her da died two winters back, and she stayed on, tending the place alone. Folks said she was cheerful, always humming. But that night she looked… set. Determined. Like she had a purpose. I told her it was late, warned her about the dogs and sheep, but she just smiled and waved and kept walking. And that was the last any of us saw her alive. Does that answer your question, witcher? Because I’ve got stew on the fire and no more patience for riddles."
+  ]
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "bard",
+  "text": "Well, Geralt, my friend, it seems our dear innkeeper is a man of few words—or perhaps he's simply saving his breath for the ale. But I can fill the gaps! The miller's daughter? Her name was Marta, if I recall. A pretty thing with hair like spun gold, always humming while she worked. The last person to see her was old Ben the shepherd, who swore he saw her heading toward the mill with that lantern swinging, just as dusk was settling. He said she looked nervous, kept glancing over her shoulder. But Ben's half-blind these days, so who knows what he truly saw. As for who saw her last—well, the mill itself, I'd wager. And whatever else is lurking in those shadows."
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "bard",
+  "text": "Oh, well, my dear Geralt, you've gone and asked the question that gets a bard's heart racing! The miller's daughter—her name was Aniela, a pretty thing with hair like spun copper and a laugh that could charm the sourness out of a winter apple. She was the miller's only child, you see, and after he passed—old age, they say, though I've heard whispers of a bad heart and a heavier flask—she kept the mill running as best she could. But that place, it's been cursed since before her father's time, I'd wager. As for who saw her last? Old Marta, the shepherd's widow, claims she saw Aniela walking past her cottage at dusk, lantern swinging, heading straight for the mill. Said the girl looked pale as milk and walked like a woman with something on her mind, not a soul's company but her own shadow. Marta called out to her, but Aniela didn't turn, didn't stop, just kept walking till the dark swallowed her whole. And then, of course, the lantern and shawl turned up in the rushes this morning, clean as a whistle. No blood, no tracks, no nothing. It's like the mill just... took her. So tell me, my friend, are you going to give that old ruin a visit, or shall I start composing a ballad for poor Aniela's memory?"
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "bard",
+  "text": "Ah, Geralt, always the practical one! But allow me, your humble chronicler, to fill in the gaps. The miller's daughter—her name was Anielka, sweet as a summer peach and twice as pretty. She was the miller's only child, kept house for him after her mother passed, and she had a smile that could make even the grumpiest goat dance. As for who saw her last—old Mikolaj the shepherd spotted her from his paddock, lantern bobbing like a firefly in the dusk, heading for the mill. He said she looked... determined, almost like she had a purpose beyond fetching flour or checking the wheel. He called out to her, but she didn't answer, just kept walking. And then—poof!—she's gone, like a note lost between verses. No tracks, no blood, no struggle. Just that smashed lantern and shawl in the rushes. If you ask me, and you should, there's more to this than a hungry beast. A beast leaves teeth marks; this leaves questions. And questions, my friend, are what I do best—even before the ale arrives!"
+ },
+ {
+  "kind": "npc_fallback",
+  "npc": "bard",
+  "rejected": [
+   "Well, Geralt, my friend, it seems our dear innkeeper is a man of few words—or perhaps he's simply saving his breath for the ale. But I can fill the gaps! The miller's daughter? Her name was Marta, if I recall. A pretty thing with hair like spun gold, always humming while she worked. The last person to see her was old Ben the shepherd, who swore he saw her heading toward the mill with that lantern swinging, just as dusk was settling. He said she looked nervous, kept glancing over her shoulder. But Ben's half-blind these days, so who knows what he truly saw. As for who saw her last—well, the mill itself, I'd wager. And whatever else is lurking in those shadows.",
+   "Oh, well, my dear Geralt, you've gone and asked the question that gets a bard's heart racing! The miller's daughter—her name was Aniela, a pretty thing with hair like spun copper and a laugh that could charm the sourness out of a winter apple. She was the miller's only child, you see, and after he passed—old age, they say, though I've heard whispers of a bad heart and a heavier flask—she kept the mill running as best she could. But that place, it's been cursed since before her father's time, I'd wager. As for who saw her last? Old Marta, the shepherd's widow, claims she saw Aniela walking past her cottage at dusk, lantern swinging, heading straight for the mill. Said the girl looked pale as milk and walked like a woman with something on her mind, not a soul's company but her own shadow. Marta called out to her, but Aniela didn't turn, didn't stop, just kept walking till the dark swallowed her whole. And then, of course, the lantern and shawl turned up in the rushes this morning, clean as a whistle. No blood, no tracks, no nothing. It's like the mill just... took her. So tell me, my friend, are you going to give that old ruin a visit, or shall I start composing a ballad for poor Aniela's memory?",
+   "Ah, Geralt, always the practical one! But allow me, your humble chronicler, to fill in the gaps. The miller's daughter—her name was Anielka, sweet as a summer peach and twice as pretty. She was the miller's only child, kept house for him after her mother passed, and she had a smile that could make even the grumpiest goat dance. As for who saw her last—old Mikolaj the shepherd spotted her from his paddock, lantern bobbing like a firefly in the dusk, heading for the mill. He said she looked... determined, almost like she had a purpose beyond fetching flour or checking the wheel. He called out to her, but she didn't answer, just kept walking. And then—poof!—she's gone, like a note lost between verses. No tracks, no blood, no struggle. Just that smashed lantern and shawl in the rushes. If you ask me, and you should, there's more to this than a hungry beast. A beast leaves teeth marks; this leaves questions. And questions, my friend, are what I do best—even before the ale arrives!"
+  ]
+ },
+ {
+  "kind": "narrator_bad_speakers",
+  "proposed": [
+   "Innkeeper",
+   "Dandelion"
+  ],
+  "kept": [
+   "innkeeper",
+   "bard"
+  ]
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "bard",
+  "text": "Well, Geralt, it seems our good host here has a tongue as loose as a rusty hinge—which is to say, not loose at all. He's clammed up tighter than a miser's purse, and I suspect he's more frightened than he lets on. Between you and me, that kind of silence usually means someone's either guilty or terrified—or both. And his fingers were drumming on that counter like a nervous little drummer boy. So, either he knows more about that mill than he's saying, or he's just scared out of his wits that the next thing that gets torn apart will be his own roof. For my part, I'd say we ought to take a stroll out to that old mill before the sun fully sets. If the creature is bold enough to kill without warning, it's bold enough to appreciate an audience. But bring that lovely sword of yours, my friend—I'd hate to have to compose a eulogy in verse, though I confess I've already thought of a few rhymes for \"lament.\""
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "bard",
+  "text": "Ah, what more can I say, Geralt? The poor innkeeper's as rattled as a plucked string—he's not one for ghost stories, but he knows when something's got the village's teeth chattering. I've heard tell of the old mill since I was knee-high to a lute, of course, but this business with the girl... well, it's got a melody that won't leave my head, and not a cheerful one, mind you. They say the miller's daughter was as sweet as spring honey, and her lantern burning in the dusk was like a tiny star wandering off to its doom. Now, I've seen plenty of strange things on the road, but a lass vanishing without a trace—no blood, no tracks, just a smashed lamp and a shawl—that's the sort of tale that makes a bard's fingers itch and his throat go dry. If I were you, I'd follow that lantern light to the mill, and I'd wager that's where you'll find your beast, whether it's got claws or a human face. But do be careful, my friend—this creature's not shy, and it's not finished. The innkeeper's right about that much."
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "bard",
+  "text": "Ah, the howling! Yes, that. The innkeeper—bless his practical heart—said the creature isn't shy and isn't full yet. Which, I must say, is precisely the sort of cheerful reassurance one hopes to hear over a warm ale. But between you and me, Geralt, I've heard enough tavern tales to know that when a man of his sort starts polishing the same spot on the counter for the tenth time, he's telling you more with his silence than with his words. The sheep, the dog, the poor girl—none of it makes sense, and that's what's got him spooked. He's not one for fancy theories, our host; he just knows that something's out there with a taste for blood and a steady appetite. And if I were you, I'd take that as a hint to ask him where exactly that old mill sits on the map—before the sun finishes its descent and the howling starts up again."
+ },
+ {
+  "kind": "npc_fallback",
+  "npc": "bard",
+  "rejected": [
+   "Well, Geralt, it seems our good host here has a tongue as loose as a rusty hinge—which is to say, not loose at all. He's clammed up tighter than a miser's purse, and I suspect he's more frightened than he lets on. Between you and me, that kind of silence usually means someone's either guilty or terrified—or both. And his fingers were drumming on that counter like a nervous little drummer boy. So, either he knows more about that mill than he's saying, or he's just scared out of his wits that the next thing that gets torn apart will be his own roof. For my part, I'd say we ought to take a stroll out to that old mill before the sun fully sets. If the creature is bold enough to kill without warning, it's bold enough to appreciate an audience. But bring that lovely sword of yours, my friend—I'd hate to have to compose a eulogy in verse, though I confess I've already thought of a few rhymes for \"lament.\"",
+   "Ah, what more can I say, Geralt? The poor innkeeper's as rattled as a plucked string—he's not one for ghost stories, but he knows when something's got the village's teeth chattering. I've heard tell of the old mill since I was knee-high to a lute, of course, but this business with the girl... well, it's got a melody that won't leave my head, and not a cheerful one, mind you. They say the miller's daughter was as sweet as spring honey, and her lantern burning in the dusk was like a tiny star wandering off to its doom. Now, I've seen plenty of strange things on the road, but a lass vanishing without a trace—no blood, no tracks, just a smashed lamp and a shawl—that's the sort of tale that makes a bard's fingers itch and his throat go dry. If I were you, I'd follow that lantern light to the mill, and I'd wager that's where you'll find your beast, whether it's got claws or a human face. But do be careful, my friend—this creature's not shy, and it's not finished. The innkeeper's right about that much.",
+   "Ah, the howling! Yes, that. The innkeeper—bless his practical heart—said the creature isn't shy and isn't full yet. Which, I must say, is precisely the sort of cheerful reassurance one hopes to hear over a warm ale. But between you and me, Geralt, I've heard enough tavern tales to know that when a man of his sort starts polishing the same spot on the counter for the tenth time, he's telling you more with his silence than with his words. The sheep, the dog, the poor girl—none of it makes sense, and that's what's got him spooked. He's not one for fancy theories, our host; he just knows that something's out there with a taste for blood and a steady appetite. And if I were you, I'd take that as a hint to ask him where exactly that old mill sits on the map—before the sun finishes its descent and the howling starts up again."
+  ]
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "bard",
+  "text": "Ah, but Geralt, my friend, you do have a flair for the dramatic, don't you? A drowner's claw on the counter—why, that's the kind of tale that'll have the bards singing for a week! But our dear innkeeper makes a fair point, and a grim one at that. A drowner's a creature of habit, all splash and slobber, but this—this thing that's been tearing through sheep and dogs without so much as a whimper, and snatching a lass clean out of her shoes without a trace—that's a different kettle of fish entirely. Or, shall I say, a different breed of beast. Still, you've got a lead, haven't you? That mill's been whispering secrets ever since the miller passed, and now his daughter's gone the same way. If I were you—and thank the gods I'm not, with all that sword-swinging and monster-wrestling—I'd take a lantern and a steady nerve and poke around those rushes before the sun sets. The creature's bold, but even bold things fear the light, and you, my friend, are rather good at being someone else's bad dream. Just... try to keep the blood off my lute case, won't you? It's a masterpiece, and I'd hate to see it stained by some grubby monster's innards."
+ },
+ {
+  "kind": "narrator_speech_rejected",
+  "attempt": 0,
+  "text": "Dandelion sets down his mug and leans forward, a flicker of surprise crossing his face. The hearth fire pops, casting a warm glow on his lute case propped against the bar. He twirls a strand of hair between his fingers, thinking, then shakes his head slowly. 'Vesemir? Old Vesemir? He was your tutor, wasn't he? I've heard ballads mention him—the last of the old wolf school masters, they say. But nothing lately. The roads don't carry much news from Kaer Morhen these days. Why? Expecting him to turn up with a silver sword and a scowl?' He shrugs, resuming his ale."
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "bard",
+  "text": "Vesemir? Old Vesemir! Now there's a name I haven't heard in a good long while. I remember him from my younger days, when I was still wet behind the ears and trying to charm my way into every tavern from here to Novigrad. He's a witcher, of course, one of the oldest—some say he taught half the wolf school boys how to hold a sword without cutting off their own toes. I crossed paths with him once, near Kaer Morhen, though he was less than thrilled to have a bard sniffing around his mountain keep. Called me a \"noisy little finch\" and threatened to tie my tongue to my lute strings if I didn't stop humming his family secrets. But he's a shrewd old wolf, that one. If you're looking for him, my guess is he's holed up somewhere cold and remote, grumbling about the state of the world and sharpening his silver blade. Why do you ask?"
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "bard",
+  "text": "Vesemir! Now there's a name that brings back a tune or two—though I can't say I've ever heard him hum along. Old wolf of Kaer Morhen, isn't he? The one who taught you the trade, if the stories are true. I've never had the pleasure of meeting the man myself, but I've heard enough from travelers and minstrels to know he's not one for grand inns or lute strings. More of a mountain and keep sort, I'd wager. You looking for him, Geralt? Or just feeling a bit nostalgic while we wait for something with teeth and claws to show up at that mill? Either way, I hope he's well. The world could use a few more old wolves who know how to keep their swords sharp and their secrets sharper."
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "bard",
+  "text": "Vesemir? Ah, now there's a name that carries weight in the right circles! I've heard it whispered in taverns from here to the Pontar—a witcher of the old school, they say, with a beard like a snowdrift and eyes that have seen more winters than a mountain. But if you're asking whether I've crossed paths with him, well, I can't say I've had the pleasure. Though I did hear a tale once, in a smoke-filled hall near Novigrad, about a witcher who taught the young ones their craft at some forgotten keep in the mountains. That might be your man. Or it might be just another bard's fancy—you know how we love to embellish! But if you're hoping I can point you to him, I'm afraid I'm as useful as a lute with no strings. Now, about that mill..."
+ },
+ {
+  "kind": "npc_fallback",
+  "npc": "bard",
+  "rejected": [
+   "Vesemir? Old Vesemir! Now there's a name I haven't heard in a good long while. I remember him from my younger days, when I was still wet behind the ears and trying to charm my way into every tavern from here to Novigrad. He's a witcher, of course, one of the oldest—some say he taught half the wolf school boys how to hold a sword without cutting off their own toes. I crossed paths with him once, near Kaer Morhen, though he was less than thrilled to have a bard sniffing around his mountain keep. Called me a \"noisy little finch\" and threatened to tie my tongue to my lute strings if I didn't stop humming his family secrets. But he's a shrewd old wolf, that one. If you're looking for him, my guess is he's holed up somewhere cold and remote, grumbling about the state of the world and sharpening his silver blade. Why do you ask?",
+   "Vesemir! Now there's a name that brings back a tune or two—though I can't say I've ever heard him hum along. Old wolf of Kaer Morhen, isn't he? The one who taught you the trade, if the stories are true. I've never had the pleasure of meeting the man myself, but I've heard enough from travelers and minstrels to know he's not one for grand inns or lute strings. More of a mountain and keep sort, I'd wager. You looking for him, Geralt? Or just feeling a bit nostalgic while we wait for something with teeth and claws to show up at that mill? Either way, I hope he's well. The world could use a few more old wolves who know how to keep their swords sharp and their secrets sharper.",
+   "Vesemir? Ah, now there's a name that carries weight in the right circles! I've heard it whispered in taverns from here to the Pontar—a witcher of the old school, they say, with a beard like a snowdrift and eyes that have seen more winters than a mountain. But if you're asking whether I've crossed paths with him, well, I can't say I've had the pleasure. Though I did hear a tale once, in a smoke-filled hall near Novigrad, about a witcher who taught the young ones their craft at some forgotten keep in the mountains. That might be your man. Or it might be just another bard's fancy—you know how we love to embellish! But if you're hoping I can point you to him, I'm afraid I'm as useful as a lute with no strings. Now, about that mill..."
+  ]
+ },
+ {
+  "kind": "narrator_speech_rejected",
+  "attempt": 0,
+  "text": "The coins clink softly as they land on the scarred oak counter, catching the warm candlelight. The innkeeper's hand pauses mid-wipe on the clay tankard, his weary eyes flicking down to the silver before meeting your gaze. He lets out a slow breath through his nose, then nods once, tucking the rag into his apron string. He scoops up the coins with a thick-fingered hand, pocketing them without ceremony. 'I'll send my boy at first light—if that thing lets him run the road. He's quick, and he knows the ditches.' He glances toward the door, where darkness presses against the warped wood frame, then back to you. 'Elder Petric's got a stone house with a red door, north of the square. He'll want to know a witcher's on the job.' From the hearth, Dandelion swirls the last of his ale, watching the firelight break on the liquid's surface. The common room holds its warmth, but the shadows between the beams seem to lean a little closer, as if listening for what moves beyond the walls."
+ },
+ {
+  "kind": "narrator_speech_rejected",
+  "attempt": 1,
+  "text": "Geralt slides three copper coins across the scarred oak counter, the metal clinking softly against the wood. The innkeeper's weary eyes fix on the coins, then drift up to the witcher's face. He sets down the clay tankard he was wiping, his flour-dusted apron catching the firelight. The common room is warm, filled with the smell of ale, wet wool, and roasting meat, but the tension in the air is sharp as a blade. The innkeeper nods slowly, pocketing the coins with a grimy hand, and mutters, 'I'll send my boy to the elder's house at first light, if the beast hasn't gotten him first.' He glances toward the shuttered windows, where the night presses dark and heavy, and adds, 'But you'd best be gone from this hearth before the last ember dies. That thing out there—it don't wait for dawn.' Dandelion, still staring into the fire, finally turns his head, his lute bumping against the stool as he shifts. He raises an eyebrow at Geralt, a silent question hanging between them, before reaching for his mug again and taking a long, slow drink."
+ },
+ {
+  "kind": "narrator_speech_rejected",
+  "attempt": 2,
+  "text": "You slide a few copper coins across the scarred oak counter, the metal ringing softly against the wood. The innkeeper pauses his rag-wiping, eyeing the coins with a weary flicker of interest. He sets down the tankard and scoops the coins into a leather pouch at his belt with a grunt, nodding once. 'Word to the elder, eh? I'll send my boy at first light, if the thing out there doesn't get him first. But I'll do it—no charge for the message beyond what you've given. You heading to the mill now, then? Night's already settled in, and that creature's been bold enough to come closer each night.' He glances toward the shuttered windows, where the wind rattles the boards, then back at you, his expression grim but not unkind. The hearth fire pops, casting a brief orange glow across the room, and the smell of roasting meat and wet wool hangs heavy in the air."
+ },
+ {
+  "kind": "narrator_speech_stripped",
+  "before": "You slide a few copper coins across the scarred oak counter, the metal ringing softly against the wood. The innkeeper pauses his rag-wiping, eyeing the coins with a weary flicker of interest. He sets down the tankard and scoops the coins into a leather pouch at his belt with a grunt, nodding once. 'Word to the elder, eh? I'll send my boy at first light, if the thing out there doesn't get him first. But I'll do it—no charge for the message beyond what you've given. You heading to the mill now, then? Night's already settled in, and that creature's been bold enough to come closer each night.' He glances toward the shuttered windows, where the wind rattles the boards, then back at you, his expression grim but not unkind. The hearth fire pops, casting a brief orange glow across the room, and the smell of roasting meat and wet wool hangs heavy in the air.",
+  "after": "You slide a few copper coins across the scarred oak counter, the metal ringing softly against the wood. The innkeeper pauses his rag-wiping, eyeing the coins with a weary flicker of interest. He sets down the tankard and scoops the coins into a leather pouch at his belt with a grunt, nodding once. He glances toward the shuttered windows, where the wind rattles the boards, then back at you, his expression grim but not unkind. The hearth fire pops, casting a brief orange glow across the room, and the smell of roasting meat and wet wool hangs heavy in the air."
+ },
+ {
+  "kind": "narrator_bad_speakers",
+  "proposed": [
+   "Innkeeper"
+  ],
+  "kept": [
+   "innkeeper"
+  ]
+ },
+ {
+  "kind": "narrator_speech_rejected",
+  "attempt": 0,
+  "text": "The innkeeper pauses his wiping, setting the clay tankard down with a dull thud on the scarred oak. He squints at you through the smoky haze, a hand brushing flour from his apron. The firelight flickers across his weary face as he leans a hip against the counter and speaks low, so the bard's tune doesn't carry his words too far. 'This week? Few folk. A peddler came through two days back, heading west. A pair of tinkers stayed one night, gone before dawn yesterday. And a hermit from the hills—quiet sort, bought bread and ale, said nothing of note. That's all.' He glances toward the window, where the last grey of dusk is bleeding into night. 'No one else. Place has been empty as a skull since the girl vanished. Folk are staying home with their doors barred.' His eyes meet yours, grim and knowing."
+ },
+ {
+  "kind": "narrator_speech_rejected",
+  "attempt": 1,
+  "text": "The innkeeper pauses his polishing, setting the clay tankard down with a soft thud on the scarred oak counter. He wipes his flour-dusted hands on his apron, letting out a low grunt. The firelight flickers across his weary face as he squints at the ceiling in thought. 'You're the first stranger in three days what with the killings,' he says, his voice rough. 'Before that, a traveling merchant—Gilbert, name was—stayed one night, heading west. A courier, too, but he only stopped for a drink and a feed for his horse, didn't bed down. That's all. No one else since the girl vanished.' He picks up another tankard and begins drying it with a rag, his gaze heavy on Geralt."
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "innkeeper",
+  "text": "You want a list of guests? Ha! Traveling merchants, mostly—drummers and peddlers on the road to the next market town. A pair of pilgrims, two nights back, on their way to the shrine at White Orchard. None of 'em stayed more than a night, and none of 'em looked twice at the mill or the sheep. They were too busy minding their own coin purses to worry about our troubles. The only folks who've lingered are you, that bard strumming over there, and the village elder's nephew who came by to warn me about the beast—but he rode out again before sundown. So unless you think a traveling button-seller or a pilgrim with a bad knee is your monster, you're wasting breath. That thing in the mill ain't human, and it didn't check in at my door."
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "innkeeper",
+  "text": "You want names? Fine. There was a peddler two nights back—slept one night, left at first light, didn’t say a word about the mill or the sheep. Before him, a cooper from the next town over, here to deliver a cask of nails. He stayed one night, drank half my ale, and left grumbling about the price. No one else. I keep a quiet house, and quiet’s been broken by teeth and silence, not by strangers. So if you’re asking because you think one of them had a hand in this, you’re barking up the wrong tree. This is beast work, not man’s. Now finish your sharpening, witcher. That mill’s waiting."
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "innkeeper",
+  "text": "Travelers, mostly. Peddlers, a tinker bound for the next town, and a merchant who kept to his room. None of them lingered more than a night. You're the first witcher to pass through in a year, and the only one fool enough to ask about that mill after dark. So if you're looking for someone who might've seen something, you'll have better luck asking the rushes out east. They've seen more than my guests, I'd wager."
+ },
+ {
+  "kind": "npc_fallback",
+  "npc": "innkeeper",
+  "rejected": [
+   "You want a list of guests? Ha! Traveling merchants, mostly—drummers and peddlers on the road to the next market town. A pair of pilgrims, two nights back, on their way to the shrine at White Orchard. None of 'em stayed more than a night, and none of 'em looked twice at the mill or the sheep. They were too busy minding their own coin purses to worry about our troubles. The only folks who've lingered are you, that bard strumming over there, and the village elder's nephew who came by to warn me about the beast—but he rode out again before sundown. So unless you think a traveling button-seller or a pilgrim with a bad knee is your monster, you're wasting breath. That thing in the mill ain't human, and it didn't check in at my door.",
+   "You want names? Fine. There was a peddler two nights back—slept one night, left at first light, didn’t say a word about the mill or the sheep. Before him, a cooper from the next town over, here to deliver a cask of nails. He stayed one night, drank half my ale, and left grumbling about the price. No one else. I keep a quiet house, and quiet’s been broken by teeth and silence, not by strangers. So if you’re asking because you think one of them had a hand in this, you’re barking up the wrong tree. This is beast work, not man’s. Now finish your sharpening, witcher. That mill’s waiting.",
+   "Travelers, mostly. Peddlers, a tinker bound for the next town, and a merchant who kept to his room. None of them lingered more than a night. You're the first witcher to pass through in a year, and the only one fool enough to ask about that mill after dark. So if you're looking for someone who might've seen something, you'll have better luck asking the rushes out east. They've seen more than my guests, I'd wager."
+  ]
+ }
+]

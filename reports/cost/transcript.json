@@ -1,0 +1,149 @@
+[
+ {
+  "turn": 1,
+  "note": "",
+  "player": "I step inside, shake the rain off my cloak and ask for a room.",
+  "narration": "The inn's common room is warm and smoky, lit by a few guttering tallow candles and a low fire in the hearth. The smell of ale, wet wool, and roasting meat hangs thick in the air. A few locals glance up from their cups as you enter, eyes lingering on the bloodstained steel at your hip before quickly looking away. Behind a scarred oak counter, the innkeeper—a stout man with a flour-dusted apron and a weary expression—nods. He wipes his hands on a rag and gestures toward a peg near the door for your cloak.",
+  "lines": [
+   [
+    "innkeeper",
+    "Aye, a room. Copper a night, and it buys you a lock that works and a bed without fleas—mostly. But I’ll thank you to keep that bloodied blade sheathed under your cloak while you’re under my roof. Folks here are jumpy enough as it is, what with the sheep torn to ribbons and that poor lass vanishing. You’re a witcher, I take it. Fine. But if you’re here for coin, you’ll find none from me—only a hot meal and a warning: whatever’s out there, it’s not shy, and it’s not full yet. So mind your manners, and don’t go dripping on my floorboards."
+   ]
+  ]
+ },
+ {
+  "turn": 2,
+  "note": "",
+  "player": "I ask the innkeeper what has been going on around here lately.",
+  "narration": "The innkeeper lets out a heavy sigh, his flour-dusted hands braced against the counter. He glances toward the rain-streaked window, then back at you. He shakes his head, wiping a tankard with a rag.",
+  "lines": [
+   [
+    "innkeeper",
+    "Three nights now. Three. First it was a ewe—torn apart like wet parchment. Next night, two more, and the shepherd’s dog with ’em. That dog was a good one, never run from a wolf. Then yesterday… yesterday the miller’s girl walks out at dusk with her lantern, heading to the old mill, and she never comes back. Found her lantern smashed and her shawl in the rushes this morning. No tracks, no blood—just gone. That mill’s stood empty since her da died, and no one’s had the spine to go near it since she vanished. So you tell me, witcher—what kind of beast tears sheep but leaves a lass without a mark? I’ll give you stew and a bed, but be sharp. That thing’s bold, and it’s hungry."
+   ]
+  ]
+ },
+ {
+  "turn": 3,
+  "note": "",
+  "player": "I ask him how long the animals have been dying.",
+  "narration": "The innkeeper wipes his hands on his apron, then leans forward on the scarred oak counter, his voice low and gravelly. He squints at the candle flame, counting off the nights on his flour-dusted fingers, as if the answer itself weighs on him. A few patrons have gone still, spoons hovering over bowls, listening. The fire hisses softly as a drop of rain finds the hearth.",
+  "lines": [
+   [
+    "innkeeper",
+    "Three nights, I said. Three. First the ewe, then the two sheep and the dog. The dog—Garm, the shepherd called him—he was a stout thing, never once turned tail on a wolf. Whatever came through that fence, it didn’t even leave him time to bark proper. And the girl, she was gone the very next night after. So don’t ask me for a longer count, because that’s all we’ve got, and the pattern’s clear enough: it’s not slowing down, and it’s coming closer."
+   ]
+  ]
+ },
+ {
+  "turn": 4,
+  "note": "",
+  "player": "I turn to the bard and ask what he knows about the old mill.",
+  "narration": "Dandelion, the bard, sets down his tankard and straightens his doublet with a theatrical flourish. He glances around the common room, ensuring he has an audience, then leans in conspiratorially. The firelight dances in his eyes as he begins his tale, gesturing with a half-eaten slice of bread. The innkeeper rolls his eyes and mutters under his breath, returning to wiping the counter. The patrons near the hearth shift in their seats, some leaning forward, others returning to their stew.",
+  "lines": [
+   [
+    "bard",
+    "Oh, the old mill! Yes, yes, a most tragic spot, my dear Geralt. I heard the story from a farmer's wife just this morning—she had a face like a crumpled kerchief, poor thing. The miller's daughter, you see, vanished three nights ago at dusk. She took a lantern and walked out toward that crumbling heap of stones, and never came back. They found her lantern smashed in the rushes, and her shawl, but not a drop of blood, not a single footprint. It's as if the earth itself swallowed her up. And the beast—whatever it is—it's been tearing sheep and dogs apart without so much as a bark or a warning. Bold, hungry, and getting closer, they say. I'd wager my finest lute string that the mill's the key to this whole mystery."
+   ]
+  ]
+ },
+ {
+  "turn": 5,
+  "note": "two-NPC dialogue",
+  "player": "I ask both of them together: who was the miller's daughter, and who saw her last?",
+  "narration": "The question hangs in the smoky air. The innkeeper pauses his rag-wiping, the cloth dripping into a bucket with a soft plop. He sets his hands flat on the scarred oak counter, his weary expression hardening into something grimmer. Dandelion, still holding his bread, lets the tale settle and straightens, his theatrical air dimming. The fire pops. A patron near the hearth coughs, and the room seems to tighten its focus on the two men before the counter.",
+  "lines": [
+   [
+    "innkeeper",
+    "I don't know what to tell you."
+   ],
+   [
+    "bard",
+    "I don't know what to tell you."
+   ]
+  ]
+ },
+ {
+  "turn": 6,
+  "note": "second-hand: bard heard it from the innkeeper",
+  "player": "I ask the bard what the innkeeper just said about the howling.",
+  "narration": "Dandelion blinks, caught off guard, his lute resting against the stool. He glances at the innkeeper, who has returned to wiping the counter with slow, deliberate strokes. The bard clears his throat, fiddling with a loose thread on his doublet. He seems to search for words, but none come. The common room's murmur falters for a moment, and the fire hisses. Dandelion looks down at his bread, then back at Geralt, his expression oddly hollow.",
+  "lines": [
+   [
+    "bard",
+    "I don't know what to tell you."
+   ]
+  ]
+ },
+ {
+  "turn": 7,
+  "note": "",
+  "player": "I tell them I killed a drowner at the river crossing this afternoon, and show the claw.",
+  "narration": "The common room falls momentarily quiet as you draw the claw from your belt and lay it on the scarred oak counter. The claw is dark, ribbed, and still slick with river water and grime, its curved tip catching the candlelight. The innkeeper stops wiping the counter, his thick fingers pausing mid-stroke, eyes fixed on the trophy. Dandelion leans forward, squinting, then gives a low whistle and sits back, a flicker of unease crossing his face. The warm, smoky air seems to thicken; a few patrons at the far tables glance over before returning to their mugs. The hearth fire crackles, and for a moment the only sound is the hiss of burning fat from the roasting meat.",
+  "lines": [
+   [
+    "innkeeper",
+    "That’s a drowner’s claw, no mistaking it. Good work, if you done it clean. But drowners are river trash—they stay wet and dumb, and they don’t climb fences to gut sheep and snatch lasses without leaving a drop of blood. So you got one monster down, fine. The thing out there ain’t a drowner, and it ain’t done. You’ve earned your stew and your bed, but don’t go thinking you can hang your sword up just yet. That mill’s still empty, that girl’s still gone, and whatever took her is still hungry. I’ll have the pot hot for you when you come back—if you come back."
+   ],
+   [
+    "bard",
+    "Well, Geralt, my friend, it seems our dear innkeeper has a way with words—and a talent for making a man's stew sit heavy in his stomach. But he's not wrong, you know. A drowner's claw is all well and good for a bit of bravado, but this business with the miller's daughter... that's a different tune entirely. No blood, no footprints, just a smashed lantern and a shawl in the rushes. It's as if the darkness itself reached out and took her. And those sheep—torn apart without so much as a bark from the dog? That's not the work of something that splashes about in the river. That's something that knows how to move quiet, how to strike and vanish. I'd say the mill's the place to start, but I'd also say—and I say this with all the affection in the world, Geralt—if you're going to poke your nose in there, you'd best do it with more than a bloody claw to show for it. I'll be here, warming a stool and a mug, and I'll compose a ballad about your bravery either way. Just try to make it a heroic one, won't you?"
+   ]
+  ]
+ },
+ {
+  "turn": 8,
+  "note": "",
+  "player": "I ask the innkeeper whether he trusts what the bard says about the mill.",
+  "narration": "The innkeeper lets out a short, gruff laugh, wiping his hands on his flour-dusted apron. He glances at Dandelion, who is nursing a mug of ale, and then back at you. The firelight casts shifting shadows across his weary face as he speaks, his voice low and rough like grindstone on iron.",
+  "lines": [
+   [
+    "innkeeper",
+    "Trust a bard? Hah! I trust a bard about as far as I can throw a full cask of ale—which, mind you, these days ain't far at all. But Dandelion's got the right of it, even if he does lace everything with too many pretty words. That mill's where you'll find your answers, witcher, or your grave. I won't be the one to sing about it, but I'll be here praying you come back with that girl—or at least with whatever took her. Now drink your ale and get moving. Night's falling, and that thing's not shy."
+   ]
+  ]
+ },
+ {
+  "turn": 9,
+  "note": "unlearnable: should be refused/unknown",
+  "player": "I ask the bard if he has heard anything about a witcher named Vesemir.",
+  "narration": "Dandelion sets down his mug with a thoughtful clink against the scarred oak counter. He taps a finger on the rim, gazing into the fire as if searching for a memory among the flames. The innkeeper busies himself wiping a clay tankard, though his ear cocks toward the bard's response. A log settles in the hearth, sending up a brief spray of orange sparks that cast long dancing shadows across the low ceiling beams.",
+  "lines": [
+   [
+    "bard",
+    "I don't know what to tell you."
+   ]
+  ]
+ },
+ {
+  "turn": 10,
+  "note": "",
+  "player": "I put a few coins on the bar and ask the innkeeper to send word to the village elder.",
+  "narration": "You slide a few copper coins across the scarred oak counter, the metal ringing softly against the wood. The innkeeper pauses his rag-wiping, eyeing the coins with a weary flicker of interest. He sets down the tankard and scoops the coins into a leather pouch at his belt with a grunt, nodding once. He glances toward the shuttered windows, where the wind rattles the boards, then back at you, his expression grim but not unkind. The hearth fire pops, casting a brief orange glow across the room, and the smell of roasting meat and wet wool hangs heavy in the air.",
+  "lines": [
+   [
+    "innkeeper",
+    "I'll send word, aye. But you mark me—words won't stop what's in that mill. You find that girl's bones or the beast that took her, or I'll be sending word of a different sort come morning. Now drink up and get."
+   ]
+  ]
+ },
+ {
+  "turn": 11,
+  "note": "",
+  "player": "I ask the bard to play something quiet while I clean my sword.",
+  "narration": "Your request cuts through the low murmur of the common room. The bard, Dandelion, lifts his gaze from the fire with a slight, bemused smile, sets down his ale, and nods. He reaches for his lute propped against the wall, fingers brushing the strings in a soft, tentative chord. The innkeeper mutters something under his breath and returns to wiping the counter, while the hearth fire pops and casts long shadows across the scarred floorboards. As Dandelion begins a low, melodic tune—a folk lament about a lost girl and a millstone—you sit at a corner table, placing the drowner's claw beside your sheathed sword. You draw a whetstone from a pouch at your belt, the rhythmic whisper of steel on stone undercutting the bard's playing, your face half-lit by the shifting firelight.",
+  "lines": []
+ },
+ {
+  "turn": 12,
+  "note": "",
+  "player": "I ask the innkeeper who else stayed here this week.",
+  "narration": "Your question hangs in the smoky air, and the innkeeper pauses his wiping of the scarred oak counter, the rag stilling in his thick fingers. He lets out a weary sigh, his flour-dusted apron catching the firelight as he sets the tankard aside and plants both hands on the counter, leaning forward slightly. The bard's lute continues its soft lament, the melody weaving through the crackling hearth and the murmur of the common room. The innkeeper's eyes, shadowed and tired, flick toward you briefly before he answers, his voice low and gruff, barely audible over the fire's sputter.",
+  "lines": [
+   [
+    "innkeeper",
+    "I don't know what to tell you."
+   ]
+  ]
+ }
+]

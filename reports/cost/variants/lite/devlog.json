@@ -1,0 +1,174 @@
+[
+ {
+  "kind": "narrator_bad_speakers",
+  "proposed": [
+   "Innkeeper",
+   "Dandelion"
+  ],
+  "kept": [
+   "innkeeper",
+   "bard"
+  ]
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "bard",
+  "text": "Now, now, good innkeeper, let’s not be hasty with our hospitality, for surely you see that my dear friend here has been doing the very work you’re so desperately in need of! Look at that steel—or rather, look at the unfortunate evidence upon it—and tell me, does that not suggest he’s already been ridding your pastures of those very horrors that have been keeping you and your patrons awake, trembling in your beds? A bit of blood on the floorboards is a small price to pay for a night’s sleep without the fear of being ripped to shreds by some nameless beast, wouldn't you agree? Geralt, old friend, do be a lamb and stow that gore-splattered toothpick before our host here faints dead away; we’ve a much more compelling mystery to solve regarding that poor, vanished girl at the mill, and I daresay a warm hearth and a mug of your finest ale would be the perfect fuel for a discussion on how to bring her home, or at the very least, how to ensure no more lanterns are extinguished by the creatures lurking in your shadows."
+ },
+ {
+  "kind": "narrator_bad_speakers",
+  "proposed": [
+   "Innkeeper"
+  ],
+  "kept": [
+   "innkeeper"
+  ]
+ },
+ {
+  "kind": "narrator_bad_speakers",
+  "proposed": [
+   "Dandelion"
+  ],
+  "kept": [
+   "bard"
+  ]
+ },
+ {
+  "kind": "narrator_bad_speakers",
+  "proposed": [
+   "Innkeeper"
+  ],
+  "kept": [
+   "innkeeper"
+  ]
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "innkeeper",
+  "text": "Elara? She was a sweet girl, a wildflower growing in the shadow of that cursed mill—always helping her father with the grain, always a smile for anyone passing by. It was the miller himself who last saw her, though he’s been a broken man since the night he sent her off with that lantern to fetch a bag of flour he’d forgotten. He told us she never made it back, that the path turned to nothing but heavy silence. Some say they saw the glow of her light dancing near the mill doors long after she should have been home, but nobody dared go out to check. Fear keeps a man’s door bolted tight, Witcher, and in this village, we all know better than to chase after lanterns in the dark. Now ask no more, the sun is nearly gone and I’ll not have you talking of her as if the spirits are listening!"
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "innkeeper",
+  "text": "Elara was just a girl, simple and kind, the sort who didn't know the world had teeth hidden in the dark. She was the miller's only joy, a bright spark in a village that's been dimming for years, and now she's just another shadow in that godforsaken mill. It was the baker's lad who saw her last, shivering behind a hedge near the crossroads; he said she was walking toward the mill, humming to herself, with that lantern bobbing like a ghost-fire in the dusk. He didn't call out, didn't stop her, claimed the air felt like iron and his tongue went numb in his mouth—a coward's excuse, maybe, but I don't blame him, not when the very woods seem to hold their breath whenever that place is mentioned. She never reached the door, or if she did, she didn't come back, and now the village is dying by degrees, bit by bloody bit, and I’m telling you, Witcher, if you’re looking for a name to pin on the monster, start with the silence that took her and pray it doesn’t decide to feast on us next."
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "innkeeper",
+  "text": "Elara wasn't some stranger, she was the life of this village, always humming a tune and helping her father haul grain until the mill went cold and rot took the soul out of the place. She was last seen by the blacksmith, old Tomas, who watched her walking toward that cursed structure just as the sun was bleeding out over the horizon, lantern swaying in her grip like she was invited by something waiting in the dark. Nobody saw her go inside, and nobody saw her come out, but mark my words, that mill didn't just swallow her whole—it kept her, or what's left of her, and I don't want to hear another word about it while the sun is still struggling to hold back the night. If you’re looking for answers, go talk to the blacksmith if you have the stomach for it, but leave me out of your heroics, for there’s a cold dread in my bones that says once you step onto those grounds, you aren't walking back out, and I’d prefer not to be here to see it happen."
+ },
+ {
+  "kind": "npc_fallback",
+  "npc": "innkeeper",
+  "rejected": [
+   "Elara? She was a sweet girl, a wildflower growing in the shadow of that cursed mill—always helping her father with the grain, always a smile for anyone passing by. It was the miller himself who last saw her, though he’s been a broken man since the night he sent her off with that lantern to fetch a bag of flour he’d forgotten. He told us she never made it back, that the path turned to nothing but heavy silence. Some say they saw the glow of her light dancing near the mill doors long after she should have been home, but nobody dared go out to check. Fear keeps a man’s door bolted tight, Witcher, and in this village, we all know better than to chase after lanterns in the dark. Now ask no more, the sun is nearly gone and I’ll not have you talking of her as if the spirits are listening!",
+   "Elara was just a girl, simple and kind, the sort who didn't know the world had teeth hidden in the dark. She was the miller's only joy, a bright spark in a village that's been dimming for years, and now she's just another shadow in that godforsaken mill. It was the baker's lad who saw her last, shivering behind a hedge near the crossroads; he said she was walking toward the mill, humming to herself, with that lantern bobbing like a ghost-fire in the dusk. He didn't call out, didn't stop her, claimed the air felt like iron and his tongue went numb in his mouth—a coward's excuse, maybe, but I don't blame him, not when the very woods seem to hold their breath whenever that place is mentioned. She never reached the door, or if she did, she didn't come back, and now the village is dying by degrees, bit by bloody bit, and I’m telling you, Witcher, if you’re looking for a name to pin on the monster, start with the silence that took her and pray it doesn’t decide to feast on us next.",
+   "Elara wasn't some stranger, she was the life of this village, always humming a tune and helping her father haul grain until the mill went cold and rot took the soul out of the place. She was last seen by the blacksmith, old Tomas, who watched her walking toward that cursed structure just as the sun was bleeding out over the horizon, lantern swaying in her grip like she was invited by something waiting in the dark. Nobody saw her go inside, and nobody saw her come out, but mark my words, that mill didn't just swallow her whole—it kept her, or what's left of her, and I don't want to hear another word about it while the sun is still struggling to hold back the night. If you’re looking for answers, go talk to the blacksmith if you have the stomach for it, but leave me out of your heroics, for there’s a cold dread in my bones that says once you step onto those grounds, you aren't walking back out, and I’d prefer not to be here to see it happen."
+  ]
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "bard",
+  "text": "Geralt, my friend, the poor man is quite beyond words at the moment, paralyzed by the sheer terror of it all. He told me, in that frantic, hushed whisper of his, that the howling doesn't sound like any wolf that ever prowled these woods; he said it’s a sound that bites—a long, agonizing, discordant wail that seems to scrape against the very soul before it’s abruptly silenced, leaving the night feeling emptier than a tomb. He believes the creature doesn't just kill, it gathers, and ever since the village dogs stopped barking and the sheep were left in pieces, the only thing he hears when the wind shifts toward that godforsaken mill is a sound that makes even the toughest woodsman weep. It’s as if the darkness itself has found its voice, and trust me, Geralt, if he’s right about the timing, we don't have much of this sunset left before the chorus begins again."
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "bard",
+  "text": "Geralt, my friend, the poor man is paralyzed by a terror that goes far deeper than mere superstition, and he’s practically shivering with the weight of it. He told me, in that frantic, hushed whisper of his, that the howling—if you can even call it that—isn't the frantic baying of a wolf or the screech of a harpy. It’s a rhythmic, wet sound that starts just as the last of the light dies behind the hills, a sort of low, gurgling vibration that makes the very foundations of this inn rattle in their sockets. He claims the village dogs don't even bark back anymore; they just go silent, whimpering and tucking their tails as if they recognize a predator that belongs to a far darker world than ours. He’s convinced that when the wind blows from the east, it carries a stench of old rot and carrion that settles over the village like a shroud, and that the howling is the beast calling out to the shadows of the mill. It’s not just a hunt, Geralt; it’s an invitation, and I fear if we stay here much longer, the silence of those poor, butchered creatures will be the only answer we ever get."
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "bard",
+  "text": "Geralt, my friend, the poor man is terrified to his very marrow—he hasn't said it aloud, but the way he stares at that hearth tells me the silence is louder than the screams ever were. He believes the howling doesn't come from any beast of the woods, but from the mill itself, a mournful, wretched sound that began the very night Elara vanished, as if the shadows are crying out with her own voice. He’s convinced that what prowls out there isn't just killing for sport, but feeding on the village's fear, drawing closer with every animal it dismembers until it finally decides to finish what it started at that lantern-lit trap. It’s a chilling thought, isn't it? That we aren't just hunting a predator, but perhaps a ghost or something far worse that has turned that old mill into a beacon for every nightmare in the valley."
+ },
+ {
+  "kind": "npc_fallback",
+  "npc": "bard",
+  "rejected": [
+   "Geralt, my friend, the poor man is quite beyond words at the moment, paralyzed by the sheer terror of it all. He told me, in that frantic, hushed whisper of his, that the howling doesn't sound like any wolf that ever prowled these woods; he said it’s a sound that bites—a long, agonizing, discordant wail that seems to scrape against the very soul before it’s abruptly silenced, leaving the night feeling emptier than a tomb. He believes the creature doesn't just kill, it gathers, and ever since the village dogs stopped barking and the sheep were left in pieces, the only thing he hears when the wind shifts toward that godforsaken mill is a sound that makes even the toughest woodsman weep. It’s as if the darkness itself has found its voice, and trust me, Geralt, if he’s right about the timing, we don't have much of this sunset left before the chorus begins again.",
+   "Geralt, my friend, the poor man is paralyzed by a terror that goes far deeper than mere superstition, and he’s practically shivering with the weight of it. He told me, in that frantic, hushed whisper of his, that the howling—if you can even call it that—isn't the frantic baying of a wolf or the screech of a harpy. It’s a rhythmic, wet sound that starts just as the last of the light dies behind the hills, a sort of low, gurgling vibration that makes the very foundations of this inn rattle in their sockets. He claims the village dogs don't even bark back anymore; they just go silent, whimpering and tucking their tails as if they recognize a predator that belongs to a far darker world than ours. He’s convinced that when the wind blows from the east, it carries a stench of old rot and carrion that settles over the village like a shroud, and that the howling is the beast calling out to the shadows of the mill. It’s not just a hunt, Geralt; it’s an invitation, and I fear if we stay here much longer, the silence of those poor, butchered creatures will be the only answer we ever get.",
+   "Geralt, my friend, the poor man is terrified to his very marrow—he hasn't said it aloud, but the way he stares at that hearth tells me the silence is louder than the screams ever were. He believes the howling doesn't come from any beast of the woods, but from the mill itself, a mournful, wretched sound that began the very night Elara vanished, as if the shadows are crying out with her own voice. He’s convinced that what prowls out there isn't just killing for sport, but feeding on the village's fear, drawing closer with every animal it dismembers until it finally decides to finish what it started at that lantern-lit trap. It’s a chilling thought, isn't it? That we aren't just hunting a predator, but perhaps a ghost or something far worse that has turned that old mill into a beacon for every nightmare in the valley."
+  ]
+ },
+ {
+  "kind": "narrator_bad_speakers",
+  "proposed": [
+   "Innkeeper",
+   "Dandelion"
+  ],
+  "kept": [
+   "innkeeper",
+   "bard"
+  ]
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "innkeeper",
+  "text": "Get that filthy, rotting scrap off my table, you madman! Do you want to bring a plague into my inn? I told you, keep your butchery and your cursed trophies outside! That’s exactly the kind of stench that invites the real monsters to our doorstep, the ones that don't just swim in the river but tear the life out of everything that breathes. You think showing me a piece of that swamp-spawn makes you a hero? It just proves you've been wallowing in the same rot that’s been stalking this village! Look at it—still dripping! You’re just like the rest of them, dragging the darkness in with you and expecting a warm hearth for your trouble. Take it, take your blade, and take your bard, and get out of my sight before I burn this table to keep the stink of that creature from settling into the wood!"
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "innkeeper",
+  "text": "Get that filth off my table! Are you trying to bring the curse down on my roof by dabbing that rot onto the wood where honest folk eat their bread? You think that proves you’re a hero? All it proves is that the river is as foul as the woods, and you’re just carrying the pestilence closer to my door! I don't care if you've killed a dozen of those water-walking corpses, there's a shadow out there that doesn't care for your silver or your claws, something that didn't just tear the hounds to pieces but unmade them! Take your grisly trophy and get out of my sight before I take a torch to that table myself and burn the stink of your swamp-water and death right out of my inn!"
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "innkeeper",
+  "text": "Get that cursed thing away from me! Do you think I want that rot on my table, right where folks break their bread? You dump a piece of a corpse in front of me like it’s some common trinket, but I know what follows your kind—more death, more blood, and more of whatever is tearing the life out of these woods. You killed a drowner? Fine, let the river take it back, but don’t bring the stench of the swamp and the filth of those creatures into my inn! You’re just like the rest of them, drawing the monsters in with your steel and your foul trophies, and I won't have my place cursed because you can't keep your butcher's scraps in the mud where they belong. Take it, get out of my sight, and keep your business away from my hearth before I decide this village would be safer if you never showed your face here at all!"
+ },
+ {
+  "kind": "npc_fallback",
+  "npc": "innkeeper",
+  "rejected": [
+   "Get that filthy, rotting scrap off my table, you madman! Do you want to bring a plague into my inn? I told you, keep your butchery and your cursed trophies outside! That’s exactly the kind of stench that invites the real monsters to our doorstep, the ones that don't just swim in the river but tear the life out of everything that breathes. You think showing me a piece of that swamp-spawn makes you a hero? It just proves you've been wallowing in the same rot that’s been stalking this village! Look at it—still dripping! You’re just like the rest of them, dragging the darkness in with you and expecting a warm hearth for your trouble. Take it, take your blade, and take your bard, and get out of my sight before I burn this table to keep the stink of that creature from settling into the wood!",
+   "Get that filth off my table! Are you trying to bring the curse down on my roof by dabbing that rot onto the wood where honest folk eat their bread? You think that proves you’re a hero? All it proves is that the river is as foul as the woods, and you’re just carrying the pestilence closer to my door! I don't care if you've killed a dozen of those water-walking corpses, there's a shadow out there that doesn't care for your silver or your claws, something that didn't just tear the hounds to pieces but unmade them! Take your grisly trophy and get out of my sight before I take a torch to that table myself and burn the stink of your swamp-water and death right out of my inn!",
+   "Get that cursed thing away from me! Do you think I want that rot on my table, right where folks break their bread? You dump a piece of a corpse in front of me like it’s some common trinket, but I know what follows your kind—more death, more blood, and more of whatever is tearing the life out of these woods. You killed a drowner? Fine, let the river take it back, but don’t bring the stench of the swamp and the filth of those creatures into my inn! You’re just like the rest of them, drawing the monsters in with your steel and your foul trophies, and I won't have my place cursed because you can't keep your butcher's scraps in the mud where they belong. Take it, get out of my sight, and keep your business away from my hearth before I decide this village would be safer if you never showed your face here at all!"
+  ]
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "bard",
+  "text": "Good heavens, man, pull yourself together! A severed claw on the table is hardly the most horrifying thing to grace this room—not when you consider that whatever lurks by that mill has likely shredded things far more tender than a common river-drowner! Look at the poor innkeeper, Geralt, he’s trembling like a leaf in a gale, and frankly, I’m not entirely composed myself. You bring us a trophy of a swamp-creature while a girl is missing and the very woods around us are turning into a graveyard, yet you stand there as if you’ve simply picked up a particularly nasty splinter! If this is your way of warming up the local hospitality, I’m afraid the only thing you’ve successfully chilled is the air in this tavern. Now, since our host seems intent on communing with the wallboards, tell me true: is this drowner a symptom of the same rot infesting that mill, or have we stumbled into a nest of monsters that would make even a veteran like yourself look twice before drawing steel? Because I, for one, would very much like to survive the night to write something other than a tragic, unfinished lament!"
+ },
+ {
+  "kind": "npc_line_rejected",
+  "npc": "bard",
+  "text": "By the gods, Geralt, must you always be so dramatic with your trophies? That stench is enough to sour the ale right in the barrel! But look at him, innkeeper—the man recoils not because he fears the Witcher, but because he recognizes the brand of the nightmare that's been stalking his flocks! You heard the man, he’s been clearing the river crossing of these soggy, reeking corpses, so surely you can find the courage to tell us what you heard when the moon was high! If you won't speak for the sake of the girl, do it because the silence in those woods is growing teeth, and that claw on your table is proof that the monster in the mill isn't the only horror creeping closer to your doorstep every time the sun dips below the horizon! Out with it, man, before the next thing that goes missing is the inn itself!"
+ },
+ {
+  "kind": "narrator_bad_speakers",
+  "proposed": [
+   "Innkeeper"
+  ],
+  "kept": [
+   "innkeeper"
+  ]
+ },
+ {
+  "kind": "narrator_bad_speakers",
+  "proposed": [
+   "Dandelion"
+  ],
+  "kept": [
+   "bard"
+  ]
+ },
+ {
+  "kind": "narrator_bad_speakers",
+  "proposed": [
+   "Innkeeper"
+  ],
+  "kept": [
+   "innkeeper"
+  ]
+ },
+ {
+  "kind": "narrator_bad_speakers",
+  "proposed": [
+   "Dandelion"
+  ],
+  "kept": [
+   "bard"
+  ]
+ }
+]

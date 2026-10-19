@@ -1,0 +1,175 @@
+{"turn": 0, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 346, "output_tokens": 38, "cost": 1.4532e-05, "latency": 0.54, "n_questions": 2, "usage_raw": {"input_tokens": 346, "output_tokens": 38, "cost": 1.4532e-05}}
+{"turn": 0, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 177, "output_tokens": 28, "cost": 3.17e-05, "latency": 1.37}
+{"turn": 1, "role": "narrator", "model": "deepseek/deepseek-v4-flash", "input_tokens": 321, "output_tokens": 187, "cost": 6.811e-05, "latency": 6.151}
+{"turn": 1, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 490, "output_tokens": 20, "cost": 2.058e-05, "latency": 0.381, "n_questions": 1, "usage_raw": {"input_tokens": 490, "output_tokens": 20, "cost": 2.058e-05}}
+{"turn": 1, "role": "npc", "model": "deepseek/deepseek-v4-flash", "input_tokens": 261, "output_tokens": 152, "cost": 5.1415e-05, "latency": 4.62}
+{"turn": 1, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 641, "output_tokens": 20, "cost": 2.6922e-05, "latency": 0.256, "n_questions": 1, "usage_raw": {"input_tokens": 641, "output_tokens": 20, "cost": 2.6922e-05}}
+{"turn": 1, "role": "extractor", "model": "anthropic/claude-haiku-5.5", "input_tokens": 842, "output_tokens": 510, "cost": 0.0003392, "latency": 2.327}
+{"turn": 1, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 433, "output_tokens": 79, "cost": 1.8186e-05, "latency": 0.252, "n_questions": 2, "usage_raw": {"input_tokens": 433, "output_tokens": 79, "cost": 1.8186e-05}}
+{"turn": 1, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 262, "output_tokens": 38, "cost": 4.52e-05, "latency": 0.92}
+{"turn": 1, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 443, "output_tokens": 79, "cost": 1.8606e-05, "latency": 0.271, "n_questions": 2, "usage_raw": {"input_tokens": 443, "output_tokens": 79, "cost": 1.8606e-05}}
+{"turn": 1, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 360, "output_tokens": 107, "cost": 8.95e-05, "latency": 1.025}
+{"turn": 2, "role": "narrator", "model": "deepseek/deepseek-v4-flash", "input_tokens": 835, "output_tokens": 337, "cost": 0.0001934, "latency": 2.288}
+{"turn": 2, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 618, "output_tokens": 20, "cost": 2.5956e-05, "latency": 0.239, "n_questions": 1, "usage_raw": {"input_tokens": 618, "output_tokens": 20, "cost": 2.5956e-05}}
+{"turn": 2, "role": "narrator", "model": "deepseek/deepseek-v4-flash", "input_tokens": 835, "output_tokens": 263, "cost": 0.0001601, "latency": 2.663}
+{"turn": 2, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 562, "output_tokens": 20, "cost": 2.3604e-05, "latency": 0.254, "n_questions": 1, "usage_raw": {"input_tokens": 562, "output_tokens": 20, "cost": 2.3604e-05}}
+{"turn": 2, "role": "narrator", "model": "deepseek/deepseek-v4-flash", "input_tokens": 835, "output_tokens": 261, "cost": 0.0001592, "latency": 2.963}
+{"turn": 2, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 556, "output_tokens": 20, "cost": 2.3352e-05, "latency": 0.228, "n_questions": 1, "usage_raw": {"input_tokens": 556, "output_tokens": 20, "cost": 2.3352e-05}}
+{"turn": 2, "role": "npc", "model": "deepseek/deepseek-v4-flash", "input_tokens": 787, "output_tokens": 143, "cost": 0.0001037, "latency": 1.739}
+{"turn": 2, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 943, "output_tokens": 20, "cost": 3.9606e-05, "latency": 0.238, "n_questions": 1, "usage_raw": {"input_tokens": 943, "output_tokens": 20, "cost": 3.9606e-05}}
+{"turn": 2, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 1072, "output_tokens": 27, "cost": 0.0001207, "latency": 1.235}
+{"turn": 2, "role": "npc", "model": "deepseek/deepseek-v4-flash", "input_tokens": 787, "output_tokens": 180, "cost": 0.00012035, "latency": 1.712}
+{"turn": 2, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 979, "output_tokens": 20, "cost": 4.1118e-05, "latency": 0.644, "n_questions": 1, "usage_raw": {"input_tokens": 979, "output_tokens": 20, "cost": 4.1118e-05}}
+{"turn": 2, "role": "extractor", "model": "anthropic/claude-haiku-5.5", "input_tokens": 765, "output_tokens": 356, "cost": 0.0002545, "latency": 1.872}
+{"turn": 2, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 445, "output_tokens": 79, "cost": 1.869e-05, "latency": 0.237, "n_questions": 2, "usage_raw": {"input_tokens": 445, "output_tokens": 79, "cost": 1.869e-05}}
+{"turn": 2, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 278, "output_tokens": 38, "cost": 4.68e-05, "latency": 0.948}
+{"turn": 2, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 437, "output_tokens": 79, "cost": 1.8354e-05, "latency": 0.228, "n_questions": 2, "usage_raw": {"input_tokens": 437, "output_tokens": 79, "cost": 1.8354e-05}}
+{"turn": 2, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 265, "output_tokens": 38, "cost": 4.55e-05, "latency": 0.904}
+{"turn": 2, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 444, "output_tokens": 79, "cost": 1.8648e-05, "latency": 0.234, "n_questions": 2, "usage_raw": {"input_tokens": 444, "output_tokens": 79, "cost": 1.8648e-05}}
+{"turn": 2, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 274, "output_tokens": 38, "cost": 4.64e-05, "latency": 0.973}
+{"turn": 2, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 443, "output_tokens": 79, "cost": 1.8606e-05, "latency": 0.266, "n_questions": 2, "usage_raw": {"input_tokens": 443, "output_tokens": 79, "cost": 1.8606e-05}}
+{"turn": 2, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 268, "output_tokens": 38, "cost": 4.58e-05, "latency": 0.924}
+{"turn": 3, "role": "narrator", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1081, "output_tokens": 169, "cost": 0.0001301, "latency": 1.744}
+{"turn": 3, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 464, "output_tokens": 20, "cost": 1.9488e-05, "latency": 0.271, "n_questions": 1, "usage_raw": {"input_tokens": 464, "output_tokens": 20, "cost": 1.9488e-05}}
+{"turn": 3, "role": "npc", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1251, "output_tokens": 121, "cost": 6.3063e-05, "latency": 3.676}
+{"turn": 3, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 1074, "output_tokens": 20, "cost": 4.5108e-05, "latency": 0.249, "n_questions": 1, "usage_raw": {"input_tokens": 1074, "output_tokens": 20, "cost": 4.5108e-05}}
+{"turn": 3, "role": "extractor", "model": "anthropic/claude-haiku-5.5", "input_tokens": 762, "output_tokens": 278, "cost": 0.0002152, "latency": 1.659}
+{"turn": 3, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 445, "output_tokens": 79, "cost": 1.869e-05, "latency": 0.225, "n_questions": 2, "usage_raw": {"input_tokens": 445, "output_tokens": 79, "cost": 1.869e-05}}
+{"turn": 3, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 277, "output_tokens": 38, "cost": 4.67e-05, "latency": 0.891}
+{"turn": 3, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 427, "output_tokens": 79, "cost": 1.7934e-05, "latency": 0.236, "n_questions": 2, "usage_raw": {"input_tokens": 427, "output_tokens": 79, "cost": 1.7934e-05}}
+{"turn": 3, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 252, "output_tokens": 47, "cost": 4.87e-05, "latency": 1.042}
+{"turn": 3, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 433, "output_tokens": 79, "cost": 1.8186e-05, "latency": 0.227, "n_questions": 2, "usage_raw": {"input_tokens": 433, "output_tokens": 79, "cost": 1.8186e-05}}
+{"turn": 3, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 258, "output_tokens": 38, "cost": 4.48e-05, "latency": 0.909}
+{"turn": 4, "role": "narrator", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1176, "output_tokens": 214, "cost": 0.0001551, "latency": 2.299}
+{"turn": 4, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 498, "output_tokens": 20, "cost": 2.0916e-05, "latency": 0.612, "n_questions": 1, "usage_raw": {"input_tokens": 498, "output_tokens": 20, "cost": 2.0916e-05}}
+{"turn": 4, "role": "npc", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1105, "output_tokens": 177, "cost": 0.000142982, "latency": 9.333}
+{"turn": 4, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 1284, "output_tokens": 20, "cost": 5.3928e-05, "latency": 0.291, "n_questions": 1, "usage_raw": {"input_tokens": 1284, "output_tokens": 20, "cost": 5.3928e-05}}
+{"turn": 4, "role": "extractor", "model": "anthropic/claude-haiku-5.5", "input_tokens": 914, "output_tokens": 268, "cost": 0.0002254, "latency": 1.528}
+{"turn": 4, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 439, "output_tokens": 79, "cost": 1.8438e-05, "latency": 0.236, "n_questions": 2, "usage_raw": {"input_tokens": 439, "output_tokens": 79, "cost": 1.8438e-05}}
+{"turn": 4, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 270, "output_tokens": 38, "cost": 4.6e-05, "latency": 0.941}
+{"turn": 4, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 446, "output_tokens": 79, "cost": 1.8732e-05, "latency": 0.236, "n_questions": 2, "usage_raw": {"input_tokens": 446, "output_tokens": 79, "cost": 1.8732e-05}}
+{"turn": 4, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 275, "output_tokens": 42, "cost": 4.85e-05, "latency": 1.0}
+{"turn": 4, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 440, "output_tokens": 79, "cost": 1.848e-05, "latency": 0.224, "n_questions": 2, "usage_raw": {"input_tokens": 440, "output_tokens": 79, "cost": 1.848e-05}}
+{"turn": 4, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 270, "output_tokens": 38, "cost": 4.6e-05, "latency": 0.929}
+{"turn": 5, "role": "narrator", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1299, "output_tokens": 171, "cost": 0.0001584009, "latency": 3.64}
+{"turn": 5, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 476, "output_tokens": 20, "cost": 1.9992e-05, "latency": 0.226, "n_questions": 1, "usage_raw": {"input_tokens": 476, "output_tokens": 20, "cost": 1.9992e-05}}
+{"turn": 5, "role": "npc", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1731, "output_tokens": 221, "cost": 9.32022e-05, "latency": 4.935}
+{"turn": 5, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 1402, "output_tokens": 20, "cost": 5.8884e-05, "latency": 0.245, "n_questions": 1, "usage_raw": {"input_tokens": 1402, "output_tokens": 20, "cost": 5.8884e-05}}
+{"turn": 5, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 1754, "output_tokens": 27, "cost": 0.0001889, "latency": 1.884}
+{"turn": 5, "role": "npc", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1731, "output_tokens": 219, "cost": 8.65046e-05, "latency": 4.676}
+{"turn": 5, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 1398, "output_tokens": 20, "cost": 5.8716e-05, "latency": 0.289, "n_questions": 1, "usage_raw": {"input_tokens": 1398, "output_tokens": 20, "cost": 5.8716e-05}}
+{"turn": 5, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 1755, "output_tokens": 27, "cost": 0.000189, "latency": 0.937}
+{"turn": 5, "role": "npc", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1731, "output_tokens": 170, "cost": 7.8897e-05, "latency": 4.548}
+{"turn": 5, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 1355, "output_tokens": 20, "cost": 5.691e-05, "latency": 0.317, "n_questions": 1, "usage_raw": {"input_tokens": 1355, "output_tokens": 20, "cost": 5.691e-05}}
+{"turn": 5, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 1688, "output_tokens": 27, "cost": 0.0001823, "latency": 0.971}
+{"turn": 5, "role": "npc", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1504, "output_tokens": 158, "cost": 0.00016562, "latency": 3.781}
+{"turn": 5, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 1410, "output_tokens": 20, "cost": 5.922e-05, "latency": 0.288, "n_questions": 1, "usage_raw": {"input_tokens": 1410, "output_tokens": 20, "cost": 5.922e-05}}
+{"turn": 5, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 1793, "output_tokens": 27, "cost": 0.0001928, "latency": 1.228}
+{"turn": 5, "role": "npc", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1504, "output_tokens": 298, "cost": 9.58776e-05, "latency": 5.287}
+{"turn": 5, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 1543, "output_tokens": 20, "cost": 6.4806e-05, "latency": 0.266, "n_questions": 1, "usage_raw": {"input_tokens": 1543, "output_tokens": 20, "cost": 6.4806e-05}}
+{"turn": 5, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 1972, "output_tokens": 27, "cost": 0.0002107, "latency": 0.947}
+{"turn": 5, "role": "npc", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1504, "output_tokens": 243, "cost": 9.13276e-05, "latency": 4.576}
+{"turn": 5, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 1492, "output_tokens": 20, "cost": 6.2664e-05, "latency": 0.288, "n_questions": 1, "usage_raw": {"input_tokens": 1492, "output_tokens": 20, "cost": 6.2664e-05}}
+{"turn": 5, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 1900, "output_tokens": 27, "cost": 0.0002035, "latency": 0.96}
+{"turn": 5, "role": "extractor", "model": "anthropic/claude-haiku-5.5", "input_tokens": 640, "output_tokens": 176, "cost": 0.000152, "latency": 1.224}
+{"turn": 5, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 440, "output_tokens": 79, "cost": 1.848e-05, "latency": 0.264, "n_questions": 2, "usage_raw": {"input_tokens": 440, "output_tokens": 79, "cost": 1.848e-05}}
+{"turn": 5, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 356, "output_tokens": 98, "cost": 8.46e-05, "latency": 1.032}
+{"turn": 6, "role": "narrator", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1228, "output_tokens": 175, "cost": 0.000143598, "latency": 3.644}
+{"turn": 6, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 470, "output_tokens": 20, "cost": 1.974e-05, "latency": 0.254, "n_questions": 1, "usage_raw": {"input_tokens": 470, "output_tokens": 20, "cost": 1.974e-05}}
+{"turn": 6, "role": "npc", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1421, "output_tokens": 216, "cost": 8.48302e-05, "latency": 4.297}
+{"turn": 6, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 1370, "output_tokens": 20, "cost": 5.754e-05, "latency": 0.344, "n_questions": 1, "usage_raw": {"input_tokens": 1370, "output_tokens": 20, "cost": 5.754e-05}}
+{"turn": 6, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 1716, "output_tokens": 27, "cost": 0.0001851, "latency": 0.999}
+{"turn": 6, "role": "npc", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1421, "output_tokens": 254, "cost": 8.4539e-05, "latency": 4.532}
+{"turn": 6, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 1414, "output_tokens": 20, "cost": 5.9388e-05, "latency": 0.428, "n_questions": 1, "usage_raw": {"input_tokens": 1414, "output_tokens": 20, "cost": 5.9388e-05}}
+{"turn": 6, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 1760, "output_tokens": 27, "cost": 0.0001895, "latency": 0.902}
+{"turn": 6, "role": "npc", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1421, "output_tokens": 200, "cost": 7.26726e-05, "latency": 4.418}
+{"turn": 6, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 1363, "output_tokens": 20, "cost": 5.7246e-05, "latency": 0.278, "n_questions": 1, "usage_raw": {"input_tokens": 1363, "output_tokens": 20, "cost": 5.7246e-05}}
+{"turn": 6, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 1691, "output_tokens": 27, "cost": 0.0001826, "latency": 0.907}
+{"turn": 6, "role": "extractor", "model": "anthropic/claude-haiku-5.5", "input_tokens": 610, "output_tokens": 134, "cost": 0.000128, "latency": 1.159}
+{"turn": 6, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 430, "output_tokens": 79, "cost": 1.806e-05, "latency": 0.258, "n_questions": 2, "usage_raw": {"input_tokens": 430, "output_tokens": 79, "cost": 1.806e-05}}
+{"turn": 6, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 438, "output_tokens": 168, "cost": 0.0001278, "latency": 1.234}
+{"turn": 7, "role": "narrator", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1112, "output_tokens": 252, "cost": 8.07352e-05, "latency": 4.481}
+{"turn": 7, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 558, "output_tokens": 20, "cost": 2.3436e-05, "latency": 0.261, "n_questions": 1, "usage_raw": {"input_tokens": 558, "output_tokens": 20, "cost": 2.3436e-05}}
+{"turn": 7, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 508, "output_tokens": 26, "cost": 6.38e-05, "latency": 0.847}
+{"turn": 7, "role": "npc", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1667, "output_tokens": 155, "cost": 7.0707e-05, "latency": 3.74}
+{"turn": 7, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 1257, "output_tokens": 20, "cost": 5.2794e-05, "latency": 0.232, "n_questions": 1, "usage_raw": {"input_tokens": 1257, "output_tokens": 20, "cost": 5.2794e-05}}
+{"turn": 7, "role": "npc", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1587, "output_tokens": 293, "cost": 9.61142e-05, "latency": 5.448}
+{"turn": 7, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 1596, "output_tokens": 20, "cost": 6.7032e-05, "latency": 0.263, "n_questions": 1, "usage_raw": {"input_tokens": 1596, "output_tokens": 20, "cost": 6.7032e-05}}
+{"turn": 7, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 2013, "output_tokens": 27, "cost": 0.0002148, "latency": 0.84}
+{"turn": 7, "role": "npc", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1587, "output_tokens": 257, "cost": 9.88078e-05, "latency": 4.571}
+{"turn": 7, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 1559, "output_tokens": 20, "cost": 6.5478e-05, "latency": 0.273, "n_questions": 1, "usage_raw": {"input_tokens": 1559, "output_tokens": 20, "cost": 6.5478e-05}}
+{"turn": 7, "role": "extractor", "model": "anthropic/claude-haiku-5.5", "input_tokens": 1281, "output_tokens": 542, "cost": 0.0003991, "latency": 2.509}
+{"turn": 7, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 342, "output_tokens": 38, "cost": 1.4364e-05, "latency": 0.249, "n_questions": 2, "usage_raw": {"input_tokens": 342, "output_tokens": 38, "cost": 1.4364e-05}}
+{"turn": 7, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 169, "output_tokens": 28, "cost": 3.09e-05, "latency": 0.944}
+{"turn": 7, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 431, "output_tokens": 79, "cost": 1.8102e-05, "latency": 0.226, "n_questions": 2, "usage_raw": {"input_tokens": 431, "output_tokens": 79, "cost": 1.8102e-05}}
+{"turn": 7, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 443, "output_tokens": 148, "cost": 0.0001183, "latency": 1.194}
+{"turn": 7, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 443, "output_tokens": 79, "cost": 1.8606e-05, "latency": 0.23, "n_questions": 2, "usage_raw": {"input_tokens": 443, "output_tokens": 79, "cost": 1.8606e-05}}
+{"turn": 7, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 457, "output_tokens": 149, "cost": 0.0001202, "latency": 1.192}
+{"turn": 7, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 431, "output_tokens": 79, "cost": 1.8102e-05, "latency": 0.278, "n_questions": 2, "usage_raw": {"input_tokens": 431, "output_tokens": 79, "cost": 1.8102e-05}}
+{"turn": 7, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 254, "output_tokens": 38, "cost": 4.44e-05, "latency": 1.488}
+{"turn": 7, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 437, "output_tokens": 79, "cost": 1.8354e-05, "latency": 0.612, "n_questions": 2, "usage_raw": {"input_tokens": 437, "output_tokens": 79, "cost": 1.8354e-05}}
+{"turn": 7, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 268, "output_tokens": 42, "cost": 4.78e-05, "latency": 0.986}
+{"turn": 7, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 445, "output_tokens": 79, "cost": 1.869e-05, "latency": 0.227, "n_questions": 2, "usage_raw": {"input_tokens": 445, "output_tokens": 79, "cost": 1.869e-05}}
+{"turn": 7, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 277, "output_tokens": 73, "cost": 6.42e-05, "latency": 0.941}
+{"turn": 7, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 298, "output_tokens": 38, "cost": 4.88e-05, "latency": 0.902}
+{"turn": 7, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 436, "output_tokens": 79, "cost": 1.8312e-05, "latency": 0.226, "n_questions": 2, "usage_raw": {"input_tokens": 436, "output_tokens": 79, "cost": 1.8312e-05}}
+{"turn": 7, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 264, "output_tokens": 38, "cost": 4.54e-05, "latency": 0.879}
+{"turn": 8, "role": "narrator", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1741, "output_tokens": 127, "cost": 0.0001442, "latency": 0.891}
+{"turn": 8, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 425, "output_tokens": 20, "cost": 1.785e-05, "latency": 0.238, "n_questions": 1, "usage_raw": {"input_tokens": 425, "output_tokens": 20, "cost": 1.785e-05}}
+{"turn": 8, "role": "npc", "model": "deepseek/deepseek-v4-flash", "input_tokens": 2475, "output_tokens": 130, "cost": 0.00018225, "latency": 1.676}
+{"turn": 8, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 1792, "output_tokens": 20, "cost": 7.5264e-05, "latency": 0.254, "n_questions": 1, "usage_raw": {"input_tokens": 1792, "output_tokens": 20, "cost": 7.5264e-05}}
+{"turn": 8, "role": "extractor", "model": "anthropic/claude-haiku-5.5", "input_tokens": 731, "output_tokens": 295, "cost": 0.0002206, "latency": 1.741}
+{"turn": 8, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 435, "output_tokens": 79, "cost": 1.827e-05, "latency": 0.227, "n_questions": 2, "usage_raw": {"input_tokens": 435, "output_tokens": 79, "cost": 1.827e-05}}
+{"turn": 8, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 349, "output_tokens": 97, "cost": 8.34e-05, "latency": 1.048}
+{"turn": 8, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 440, "output_tokens": 79, "cost": 1.848e-05, "latency": 0.227, "n_questions": 2, "usage_raw": {"input_tokens": 440, "output_tokens": 79, "cost": 1.848e-05}}
+{"turn": 8, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 267, "output_tokens": 38, "cost": 4.57e-05, "latency": 0.946}
+{"turn": 9, "role": "narrator", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1865, "output_tokens": 210, "cost": 0.00018775, "latency": 2.299}
+{"turn": 9, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 505, "output_tokens": 20, "cost": 2.121e-05, "latency": 0.242, "n_questions": 1, "usage_raw": {"input_tokens": 505, "output_tokens": 20, "cost": 2.121e-05}}
+{"turn": 9, "role": "narrator", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1865, "output_tokens": 175, "cost": 0.000172, "latency": 2.098}
+{"turn": 9, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 472, "output_tokens": 20, "cost": 1.9824e-05, "latency": 0.294, "n_questions": 1, "usage_raw": {"input_tokens": 472, "output_tokens": 20, "cost": 1.9824e-05}}
+{"turn": 9, "role": "npc", "model": "deepseek/deepseek-v4-flash", "input_tokens": 2280, "output_tokens": 204, "cost": 0.000259518, "latency": 3.029}
+{"turn": 9, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 1801, "output_tokens": 20, "cost": 7.5642e-05, "latency": 0.249, "n_questions": 1, "usage_raw": {"input_tokens": 1801, "output_tokens": 20, "cost": 7.5642e-05}}
+{"turn": 9, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 2332, "output_tokens": 27, "cost": 0.0002467, "latency": 0.848}
+{"turn": 9, "role": "npc", "model": "deepseek/deepseek-v4-flash", "input_tokens": 2280, "output_tokens": 169, "cost": 9.50845e-05, "latency": 2.522}
+{"turn": 9, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 1758, "output_tokens": 20, "cost": 7.3836e-05, "latency": 0.238, "n_questions": 1, "usage_raw": {"input_tokens": 1758, "output_tokens": 20, "cost": 7.3836e-05}}
+{"turn": 9, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 2282, "output_tokens": 27, "cost": 0.0002417, "latency": 0.943}
+{"turn": 9, "role": "npc", "model": "deepseek/deepseek-v4-flash", "input_tokens": 2280, "output_tokens": 185, "cost": 9.81645e-05, "latency": 3.557}
+{"turn": 9, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 1776, "output_tokens": 20, "cost": 7.4592e-05, "latency": 0.257, "n_questions": 1, "usage_raw": {"input_tokens": 1776, "output_tokens": 20, "cost": 7.4592e-05}}
+{"turn": 9, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 2299, "output_tokens": 27, "cost": 0.0002434, "latency": 0.898}
+{"turn": 9, "role": "extractor", "model": "anthropic/claude-haiku-5.5", "input_tokens": 659, "output_tokens": 277, "cost": 0.0002044, "latency": 1.689}
+{"turn": 9, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 436, "output_tokens": 79, "cost": 1.8312e-05, "latency": 0.251, "n_questions": 2, "usage_raw": {"input_tokens": 436, "output_tokens": 79, "cost": 1.8312e-05}}
+{"turn": 9, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 352, "output_tokens": 92, "cost": 8.12e-05, "latency": 1.015}
+{"turn": 10, "role": "narrator", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1619, "output_tokens": 329, "cost": 0.000102375, "latency": 5.055}
+{"turn": 10, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 637, "output_tokens": 20, "cost": 2.6754e-05, "latency": 0.309, "n_questions": 1, "usage_raw": {"input_tokens": 637, "output_tokens": 20, "cost": 2.6754e-05}}
+{"turn": 10, "role": "narrator", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1619, "output_tokens": 327, "cost": 0.0001031758, "latency": 4.624}
+{"turn": 10, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 626, "output_tokens": 20, "cost": 2.6292e-05, "latency": 0.254, "n_questions": 1, "usage_raw": {"input_tokens": 626, "output_tokens": 20, "cost": 2.6292e-05}}
+{"turn": 10, "role": "narrator", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1619, "output_tokens": 291, "cost": 0.0001013558, "latency": 4.69}
+{"turn": 10, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 598, "output_tokens": 20, "cost": 2.5116e-05, "latency": 0.341, "n_questions": 1, "usage_raw": {"input_tokens": 598, "output_tokens": 20, "cost": 2.5116e-05}}
+{"turn": 10, "role": "npc", "model": "deepseek/deepseek-v4-flash", "input_tokens": 2437, "output_tokens": 56, "cost": 0.00014705, "latency": 1.09}
+{"turn": 10, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 1515, "output_tokens": 20, "cost": 6.363e-05, "latency": 0.254, "n_questions": 1, "usage_raw": {"input_tokens": 1515, "output_tokens": 20, "cost": 6.363e-05}}
+{"turn": 10, "role": "extractor", "model": "anthropic/claude-haiku-5.5", "input_tokens": 784, "output_tokens": 340, "cost": 0.0002484, "latency": 1.908}
+{"turn": 10, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 454, "output_tokens": 79, "cost": 1.9068e-05, "latency": 0.259, "n_questions": 2, "usage_raw": {"input_tokens": 454, "output_tokens": 79, "cost": 1.9068e-05}}
+{"turn": 10, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 285, "output_tokens": 38, "cost": 4.75e-05, "latency": 0.881}
+{"turn": 10, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 434, "output_tokens": 79, "cost": 1.8228e-05, "latency": 0.237, "n_questions": 2, "usage_raw": {"input_tokens": 434, "output_tokens": 79, "cost": 1.8228e-05}}
+{"turn": 10, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 261, "output_tokens": 42, "cost": 4.71e-05, "latency": 0.984}
+{"turn": 11, "role": "narrator", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1689, "output_tokens": 296, "cost": 0.00021765, "latency": 3.005}
+{"turn": 11, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 584, "output_tokens": 20, "cost": 2.4528e-05, "latency": 0.284, "n_questions": 1, "usage_raw": {"input_tokens": 584, "output_tokens": 20, "cost": 2.4528e-05}}
+{"turn": 11, "role": "extractor", "model": "anthropic/claude-haiku-5.5", "input_tokens": 817, "output_tokens": 321, "cost": 0.0002422, "latency": 1.707}
+{"turn": 11, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 340, "output_tokens": 38, "cost": 1.428e-05, "latency": 0.258, "n_questions": 2, "usage_raw": {"input_tokens": 340, "output_tokens": 38, "cost": 1.428e-05}}
+{"turn": 11, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 243, "output_tokens": 56, "cost": 5.23e-05, "latency": 0.925}
+{"turn": 12, "role": "narrator", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1745, "output_tokens": 275, "cost": 0.0002215045, "latency": 7.612}
+{"turn": 12, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 579, "output_tokens": 20, "cost": 2.4318e-05, "latency": 0.279, "n_questions": 1, "usage_raw": {"input_tokens": 579, "output_tokens": 20, "cost": 2.4318e-05}}
+{"turn": 12, "role": "narrator", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1745, "output_tokens": 236, "cost": 9.5725e-05, "latency": 5.062}
+{"turn": 12, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 531, "output_tokens": 20, "cost": 2.2302e-05, "latency": 0.255, "n_questions": 1, "usage_raw": {"input_tokens": 531, "output_tokens": 20, "cost": 2.2302e-05}}
+{"turn": 12, "role": "narrator", "model": "deepseek/deepseek-v4-flash", "input_tokens": 1745, "output_tokens": 197, "cost": 8.82175e-05, "latency": 5.7}
+{"turn": 12, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 506, "output_tokens": 20, "cost": 2.1252e-05, "latency": 0.256, "n_questions": 1, "usage_raw": {"input_tokens": 506, "output_tokens": 20, "cost": 2.1252e-05}}
+{"turn": 12, "role": "npc", "model": "deepseek/deepseek-v4-flash", "input_tokens": 2665, "output_tokens": 179, "cost": 0.0002138, "latency": 1.862}
+{"turn": 12, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 1760, "output_tokens": 20, "cost": 7.392e-05, "latency": 0.231, "n_questions": 1, "usage_raw": {"input_tokens": 1760, "output_tokens": 20, "cost": 7.392e-05}}
+{"turn": 12, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 2252, "output_tokens": 27, "cost": 0.0002387, "latency": 0.86}
+{"turn": 12, "role": "npc", "model": "deepseek/deepseek-v4-flash", "input_tokens": 2665, "output_tokens": 156, "cost": 0.00020345, "latency": 1.449}
+{"turn": 12, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 1729, "output_tokens": 20, "cost": 7.2618e-05, "latency": 0.237, "n_questions": 1, "usage_raw": {"input_tokens": 1729, "output_tokens": 20, "cost": 7.2618e-05}}
+{"turn": 12, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 2210, "output_tokens": 27, "cost": 0.0002345, "latency": 0.851}
+{"turn": 12, "role": "npc", "model": "deepseek/deepseek-v4-flash", "input_tokens": 2665, "output_tokens": 102, "cost": 0.00017915, "latency": 1.179}
+{"turn": 12, "role": "jev", "model": "typesafe/jev-1.14", "input_tokens": 1680, "output_tokens": 20, "cost": 7.056e-05, "latency": 0.237, "n_questions": 1, "usage_raw": {"input_tokens": 1680, "output_tokens": 20, "cost": 7.056e-05}}
+{"turn": 12, "role": "judge_llm", "model": "anthropic/claude-haiku-5.5", "input_tokens": 2142, "output_tokens": 27, "cost": 0.0002277, "latency": 1.225}
+{"turn": 12, "role": "extractor", "model": "anthropic/claude-haiku-5.5", "input_tokens": 701, "output_tokens": 189, "cost": 0.0001646, "latency": 1.283}
