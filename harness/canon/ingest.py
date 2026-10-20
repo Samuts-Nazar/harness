@@ -325,7 +325,7 @@ class Ingestor:
             rid = add_record(con, "canon_event", ev["what"].strip(), t_from=t_from, t_prec=prec, place=place,
                              notability=loud, meta={"flags": flags}, writer_ref=self.model)
             order += 1
-            con.execute("INSERT INTO canon_event VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            con.execute("INSERT INTO canon_event(id, ekind, loudness, order_key, when_prec, confidence, review, day, part, quote, lines, local_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                         (rid, kind, loud, order, prec, conf, "unreviewed", day, part, quote,
                          json.dumps(ev["_lines_ok"]), f"w{ev['_window']}"))
             con.execute("INSERT INTO canon_event_fts(rowid, text) VALUES (?,?)", (rid, ev["what"] + " " + quote))

@@ -182,6 +182,8 @@ class ContextBuilder:
     def _known(self, f: Fact, k: Knower, viewer: str) -> str:
         """A knowledge line; second-hand knowledge carries its source."""
         text = self.mask(viewer, f.content)
+        if k.source == "own life":
+            return f"- {text} (from your own life)"
         if k.source is not None:
             return f"- {text} (heard from {self.ref(viewer, k.source)})"
         return f"- {text}"

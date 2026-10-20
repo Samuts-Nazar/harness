@@ -247,6 +247,7 @@ class Engine:
         self.narration, self.glossary, self.max_speakers = narration, glossary, max_speakers
         self.hear_each_other = hear_each_other
         self.style = style
+        self.canon_guard: Any = None   # harness.canon.play.CanonGuard: narrated output that contradicts canon is regenerated
         self._fixes: list[dict[str, str]] = []  # glossary replacements of the running turn
         self._fixes_lock = threading.Lock()
         self._tl = threading.local()
@@ -481,6 +482,10 @@ class Engine:
             elif (has_speaker_line("\n".join(out.texts()), self._npc_names)
                     or has_dash_speech(out.description)):
                 ok = False
+            elif self.canon_guard is not None and (
+                    why := self.canon_guard.check("\n".join(out.texts()), "narration")) is not None:
+                self._note("canon_drift_rejected", attempt=attempt, why=why, text=out.description)
+                ok = False
             elif on_candidate is not None:
                 ok = on_candidate(self._valid_speakers(out))
             else:
@@ -645,6 +650,12 @@ class Engine:
                 notes = ["You do not know the name of " + ", ".join(
                     self.names.label(c) for c in leaked) + ": do not use it; address "
                     "or refer to them without a name."]
+                continue
+            if self.canon_guard is not None and (
+                    why := self.canon_guard.check(text, "npc_line", prep.npc)) is not None:
+                tried.append((1.0, text))
+                self._note("canon_drift_rejected", npc=prep.npc, text=text, why=why)
+                notes = ["Your line contradicts established canon (" + why[:200] + "). Say something consistent with it."]
                 continue
             p = self._suspicion(prep, text, heard)
             if p is None or p < self.npc_reject_p:
@@ -1080,6 +1091,8 @@ class Engine:
         verdict that rejects the narration throws the started chains away and the narrator is
         called again. Event writes never leave this thread, so the log does not depend on timing."""
         sc = self.scene
+        if self.canon_guard is not None:
+            self.canon_guard.refresh(self)
         for s in speakers or ():
             if s not in sc.present or s == PLAYER:
                 raise ValueError(f"{s!r} cannot speak: not an NPC in the scene")

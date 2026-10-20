@@ -222,3 +222,8 @@ Chosen by the task 7 bake-off on our own Ukrainian test set (`reports/bakeoff/SU
 ### World beyond the scene (task 17, 2026-10-20)
 - Role: the cheap off-screen world (news spread, collectives, agents, authorities). No new library or tool. Judgments use the existing stack (`liquid/d1-ultra` first, escalation `openai/gpt-6-luna`); the rumour writer is the extractor model (`deepseek/deepseek-v4.1-flash-1017`); all inside the price rule. Alternatives not tried: one LLM call per region (ideas A4 D), eager propagation (A1 A). The lazy design costs nothing between meetings (a quiet in-world day: about $0.0001, 2 s).
 - Checked: 2026-10-20.
+## Canon in play (task 16, 2026-10-19/20)
+
+- Role: embeddings for canon retrieval. Chosen `qwen/qwen3-embedding-8b` (live `GET /api/v1/embeddings/models`: 33 models; this one 0.01 USD per M input, 40960 context, multilingual). Compared on the pilot questions: `baai/bge-m3` (same price) ranked names over meaning (the plot question missed its events); qwen3-embedding-8b found them. Not run: `openai/text-embedding-3-large` (0.13), `voyageai/voyage-4`, `perplexity/pplx-embed-v1-4b`. Cost of embedding the 80 events: about 0.0001 USD. Query embedding is one call per question; failure falls back to full text.
+- Role: timeline arbiter and knower/place/gist/reaction passes: `deepseek/deepseek-v4.1-flash-1017` (as ingestion), second timeline reader `openai/gpt-6-luna` (it wrote day 1 for every scene: a weak vote, useful only to flag disagreement), `xiaomi/mimo-v2.6-pro` tried as arbiter and was worse than deepseek with the code hints. Relevance verifier: the existing judge stack.
+- No new library. Checked: 2026-10-20.

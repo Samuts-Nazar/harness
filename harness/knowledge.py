@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from .pipeline import Engine
 
 FACT, NAME, SEEN, BACKGROUND, STATE = "fact", "name", "seen", "background", "state"
+OWN_LIFE = "own life"  # knower source of a fact judged from the character's own life
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,9 @@ def items_for(eng: "Engine", character: str, before: int | None = None) -> list[
         if before is not None and k.event_id is not None and k.event_id >= before:
             continue
         canon = f.store == "canon"  # pre-campaign knowledge has no meaningful "when"
+        if k.source == OWN_LIFE:  # judged lazily from the character's life (canon/play.py)
+            add(BACKGROUND, f.content, "background", None, None, k.event_id, f.id, canon=True)
+            continue
         add(FACT, f.content, k.how, k.source, None if canon else k.learned_at, k.event_id, f.id,
             canon=canon)
     for subj, ev in eng.names.known_map(character, before).items():
