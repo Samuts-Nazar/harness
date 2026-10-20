@@ -139,4 +139,4 @@ def test_nothing_is_written_without_a_campaign_dir(tmp_path, monkeypatch):
 def test_gitignore_covers_campaign_directory():
     import pathlib
     root = pathlib.Path(__file__).resolve().parents[1]
-    assert "campaigns/" in (root / ".gitignore").read_text().split()
+    assert "/campaigns" in (root / ".gitignore").read_text().split()
