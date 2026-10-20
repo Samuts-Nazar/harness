@@ -1,7 +1,7 @@
 # Task 19: Outcome-first fast/slow turn loop, evaluation harness, long-run NPC foundations
 
 Work fully autonomously. Do not ask questions. Record ambiguities in `docs/assumptions.md`.
-Read first: `docs/decisions.md`, `docs/pending_decisions.md` (agreed with the user, not yet in decisions.md; items 2, 4, 14, 15 matter here), `reports/research/18A_infrastructure.md`, `reports/research/18B_design.md`, `docs/tools.md`, the merged task 16/17 code (`harness/canon/`, `harness/world/`).
+Read first: `docs/decisions.md` (sections Outcomes, Player character, Canon), `reports/research/18A_infrastructure.md`, `reports/research/18B_design.md`, `docs/tools.md`, the merged task 16/17 code (`harness/canon/`, `harness/world/`).
 
 ## 1. Outcome before prose (user decision)
 - The player decides what the character does and attempts; the world judges per situation whether it works, before any prose is written. No dice, no stats: one judgment (decider first, LLM escalation per the existing rule) that may say "no" or "partly", with the reason stored as a record. Narration then tells that outcome.
