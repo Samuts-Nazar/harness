@@ -29,6 +29,9 @@ Read first: `docs/decisions.md`, `docs/pending_decisions.md` (agreed with the us
 - Non-canon NPC names, traits and quirks come from code: seeded, period- and region-appropriate tables for the Witcher world (Nordling, Nilfgaardian, elven, dwarven, halfling naming), not from the model. Never reuse a name already in the campaign.
 - Age, birth year and mortality for every NPC the player knows: aging and natural death are computed in code from tables, the LLM only narrates. Hooks only for marriage/children (no feature yet).
 
+## Known flaky test
+`app/tests/test_app_t12.py::test_narration_streams_before_the_first_npc_word_and_second_npc_hears_the_first` failed once in about five full-suite runs on 2026-10-20 (passes alone). Find the race (parallel turn, thread order) and make it deterministic.
+
 ## Tests and budget
 All tests pass (report the count); tests per item with fake providers. Live checks under 0.50 USD.
 
