@@ -217,3 +217,9 @@ Chosen by the task 7 bake-off on our own Ukrainian test set (`reports/bakeoff/SU
 ### Character looks from the local file (task 14, 2026-10-19)
 - Role: derive the player character's observable and hidden traits from `data/Ragnar.md` (about 100 KB) once per file. Chosen: the existing extractor model `deepseek/deepseek-v4.1-flash-1017` (live catalog: context 1,048,576 tokens, $0.15/$0.60, weekday surcharge tier $0.30/$1.20, inside the price rule). One real call cost $0.0022. Alternatives not run: `openai/gpt-6-luna`, `qwen/qwen3.8-omni-flash` (same band; no need to compare for a one-off). No new library.
 - Checked: 2026-10-19.
+
+## Canon in play (task 16, 2026-10-19/20)
+
+- Role: embeddings for canon retrieval. Chosen `qwen/qwen3-embedding-8b` (live `GET /api/v1/embeddings/models`: 33 models; this one 0.01 USD per M input, 40960 context, multilingual). Compared on the pilot questions: `baai/bge-m3` (same price) ranked names over meaning (the plot question missed its events); qwen3-embedding-8b found them. Not run: `openai/text-embedding-3-large` (0.13), `voyageai/voyage-4`, `perplexity/pplx-embed-v1-4b`. Cost of embedding the 80 events: about 0.0001 USD. Query embedding is one call per question; failure falls back to full text.
+- Role: timeline arbiter and knower/place/gist/reaction passes: `deepseek/deepseek-v4.1-flash-1017` (as ingestion), second timeline reader `openai/gpt-6-luna` (it wrote day 1 for every scene: a weak vote, useful only to flag disagreement), `xiaomi/mimo-v2.6-pro` tried as arbiter and was worse than deepseek with the code hints. Relevance verifier: the existing judge stack.
+- No new library. Checked: 2026-10-20.
