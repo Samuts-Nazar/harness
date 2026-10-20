@@ -52,6 +52,7 @@ from .narrator import (
     parse_narration,
     strip_speech,
 )
+from .npcgen import NpcSpec, VitalsBook, generate_npc, taken_names, with_core
 from .outcome import (
     CHARACTER_DEATH, FAILS, CampaignEnded, Outcome, OutcomeJudge, record_death, record_outcome,
 )
@@ -232,6 +233,7 @@ class Engine:
         style: Style | None = None,
         player_unlimited: bool = False,
         outcomes: bool = False,
+        seed: int | str = 0,
     ) -> None:
         """`player_unlimited` (task 17): the player's declared acts happen as declared; the
         narrator and the extractor must not soften them. `parallel`: run the independent calls of a turn concurrently. None (default): only if
@@ -273,6 +275,8 @@ class Engine:
         self.hear_each_other = hear_each_other
         self.style = style
         self.outcomes_on = outcomes
+        self.seed = seed  # makes non-canon NPCs reproducible (harness/npcgen.py)
+        self.vitals = VitalsBook()
         self.outcome_judge = OutcomeJudge(self)
         self.canon_guard: Any = None   # harness.canon.play.CanonGuard: narrated output that contradicts canon is regenerated
         self._fixes: list[dict[str, str]] = []  # glossary replacements of the running turn
@@ -1303,6 +1307,7 @@ class Engine:
                     self.agents.promote(u.payload["speaker"], sc)
                 self._prefetch()
                 sc.time = real_time
+                self.process_natural_deaths()
                 self.refresh_memory()
                 for hook in list(self.after_settle):
                     hook()
@@ -1530,6 +1535,66 @@ class Engine:
         self.refresh_memory()
         res.regenerated, res.text, res.new_event = True, text, new.id
 
+    # -- long-run NPCs (task 19) -----------------------------------------------------------
+    def add_npc(self, spec: NpcSpec, *, description: str = "", appearance: str = "") -> CharacterProfile:
+        """A generated NPC joins the cast: profile with its immutable core, vitals for aging and
+        natural death. The id and the name must be new."""
+        if spec.id in self.profiles:
+            raise ValueError(f"{spec.id!r} already exists")
+        used = taken_names(self.profiles.values())
+        if spec.name.lower() in used:
+            raise ValueError(f"the name {spec.name!r} is already in the campaign")
+        prof = spec.profile(description, appearance)
+        self.profiles[spec.id] = prof
+        self.vitals.register(spec.vitals)
+        if self._owns_conn:
+            self._save_setup()
+        return prof
+
+    def fresh_npc(self, slot: str | int, culture: str, **kw: Any) -> NpcSpec:
+        """A non-canon NPC from the code tables, seeded by the campaign seed and `slot`; the name
+        is never one already in the campaign (cast, glossary names)."""
+        extra = ([e.canonical for e in self.glossary.entries if e.kind == "person"]
+                 if self.glossary else [])
+        spec = generate_npc(self.seed, slot, culture=culture,
+                            used=[*taken_names(self.profiles.values(), extra)],
+                            now_t=self.scene.time, **kw)
+        return spec
+
+    def set_core(self, npc: str, core: str) -> None:
+        """Set an NPC's immutable core once (a second, different core is refused)."""
+        self.profiles[npc] = with_core(self.profiles[npc], core)
+        if self._owns_conn:
+            self._save_setup()
+
+    def dead(self) -> set[str]:
+        return {e.payload["character"] for e in self.log.active(["npc_death"])}
+
+    def process_natural_deaths(self, now_t: int | None = None) -> list[Event]:
+        """Natural deaths due by `now_t` (code, from the vitals tables): the person leaves the
+        scene, a fact records it for those who were with them, the model only narrates it later."""
+        now = self.scene.time if now_t is None else now_t
+        out: list[Event] = []
+        for v in self.vitals.due(now, self.dead()):
+            who = self.profiles.get(v.character)
+            if who is None:
+                continue
+            ev = self.log.append(
+                "npc_death", game_time=v.death_t if v.death_t <= now else now,
+                location=self.scene.location, participants=[v.character], witnesses=[],
+                notability=0.4, payload={"character": v.character, "age": v.age(v.death_t),
+                                         "cause": "natural", "text": f"{who.name} died of old age"})
+            knowers = [(c, WITNESSED, None) for c in self.scene.present
+                       if v.character in self.scene.present and c != v.character]
+            self.facts.add_campaign(f"{who.name} died of natural causes at the age of "
+                                    f"{v.age(v.death_t)}", source_event_id=ev.id,
+                                    game_time=ev.game_time, location=self.scene.location,
+                                    notability=0.4, knowers=knowers)
+            if v.character in self.scene.present:
+                self.leave_scene(v.character, stay_nearby=False)
+            out.append(ev)
+        return out
+
     # -- off-screen -----------------------------------------------------
     def advance_offscreen(self, minutes: int) -> None:
         start = self.scene.time
@@ -1561,7 +1626,8 @@ class Engine:
                              "narration": self.narration,
                              "minutes_per_turn": self.minutes_per_turn,
                              "player_unlimited": self.ctx.player_unlimited,
-                             "outcomes": self.outcomes_on},
+                             "outcomes": self.outcomes_on, "seed": self.seed},
+                "vitals": self.vitals.to_json(),
             }.items():
                 self.conn.execute("INSERT OR REPLACE INTO campaign_meta (key, value) VALUES (?,?)",
                                   (k, json.dumps(v)))
@@ -1608,6 +1674,7 @@ class Engine:
         for k, v in meta.get("settings", {}).items():
             kw.setdefault(k, v)
         eng = cls(provider, kw.pop("profiles", profiles), scene, conn=conn, campaign_dir=d, **kw)
+        eng.vitals = VitalsBook.from_json(meta.get("vitals", []))
         eng._owns_conn = True
         eng.refresh_memory()
         return eng
