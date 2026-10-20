@@ -96,6 +96,8 @@ class Recorder:
     @staticmethod
     def role(messages: Messages) -> str:
         sys = messages[0]["content"] if messages else ""
+        if "Rumour writer" in sys:
+            return "world: rumour"
         if "narrator" in sys:
             return "narrator"
         if "fact extractor" in sys:

@@ -217,3 +217,8 @@ Chosen by the task 7 bake-off on our own Ukrainian test set (`reports/bakeoff/SU
 ### Character looks from the local file (task 14, 2026-10-19)
 - Role: derive the player character's observable and hidden traits from `data/Ragnar.md` (about 100 KB) once per file. Chosen: the existing extractor model `deepseek/deepseek-v4.1-flash-1017` (live catalog: context 1,048,576 tokens, $0.15/$0.60, weekday surcharge tier $0.30/$1.20, inside the price rule). One real call cost $0.0022. Alternatives not run: `openai/gpt-6-luna`, `qwen/qwen3.8-omni-flash` (same band; no need to compare for a one-off). No new library.
 - Checked: 2026-10-19.
+
+
+### World beyond the scene (task 17, 2026-10-20)
+- Role: the cheap off-screen world (news spread, collectives, agents, authorities). No new library or tool. Judgments use the existing stack (`liquid/d1-ultra` first, escalation `openai/gpt-6-luna`); the rumour writer is the extractor model (`deepseek/deepseek-v4.1-flash-1017`); all inside the price rule. Alternatives not tried: one LLM call per region (ideas A4 D), eager propagation (A1 A). The lazy design costs nothing between meetings (a quiet in-world day: about $0.0001, 2 s).
+- Checked: 2026-10-20.
