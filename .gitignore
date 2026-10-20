@@ -1,4 +1,4 @@
-data/
+/data
 .env
 .env.*
 !.env.example
@@ -13,6 +13,5 @@ __pycache__/
 .direnv/
 experiments/results/
 experiments/*/results/
-campaigns/
-campaigns/
+/campaigns
 .claude/worktrees/
