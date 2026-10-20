@@ -93,6 +93,8 @@ function setBusy(on, phase) {
 }
 function setPanel(p) {
   $("charName").textContent = p.name;
+  $("btnChar").textContent = p.name;
+  $("input").placeholder = "Що робить і каже " + p.name + "…";
   const chips = $("chips"); chips.textContent = "";
   if (!p.chips.length) chips.appendChild(el("span", "legend", "Нічого особливого."));
   for (const c of p.chips) {

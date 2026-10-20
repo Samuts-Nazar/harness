@@ -42,6 +42,7 @@ LINES = {
         "скільки йому заплатили за твою голову, відьмаку.",
     ],
 }
+GENERIC_LINES = ["Гм. Чого тобі, чужинцю?", "Я вже все сказав. Іди своєю дорогою."]
 LOOKS = {  # what the offline stack "reads" from a character file when there is one
     "label": "юнак із золотими очима та мечем",
     "observable": [{"category": "appearance", "item": "golden eyes"},
@@ -100,9 +101,10 @@ class FakeUk:
                         "state_changes": [CHANGES[i]] if i < len(CHANGES) else []}
                 return json.dumps(diff, ensure_ascii=False)
             name = sys[8:].split(".")[0]
+            lines = LINES.get(name, GENERIC_LINES)  # any other cast (the Vizima campaign)
             i = self.lines.get(name, 0)
             self.lines[name] = i + 1
-            return LINES[name][i % len(LINES[name])]
+            return lines[i % len(lines)]
 
     def stream(self, model, messages):  # type: ignore[no-untyped-def]
         yield self.complete(model, messages)

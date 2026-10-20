@@ -56,3 +56,114 @@ def build(provider: Provider, judge: Judge, models: ModelConfig, *, canon: Canon
     world = World(eng, wmap, collectives=pilot_collectives(wmap), cast=HOME, goals=GOALS,
                   canon=canon)
     return eng, world
+
+
+# -- the pilot on the real canon (task 19) -----------------------------------------------------
+# Situation A of the Vizima arc: the tavern «Під Лисом», day 3 evening. The campaign clock is the
+# story clock (offset 0), so "день 3, 20:00" is the same in the book's calendar and on screen.
+CANON_PLACES = {
+    "place:pid-lysom": "tavern", "place:old-palace": "palace", "place:new-palace": "palace",
+    "place:crypt": "palace", "place:guardroom": "guardhouse", "place:lynvar-gate": "gate",
+    "place:vizim": "market", "place:old-narakort": "market",
+}
+CANON_GROUPS = {"coll:vizim-guards": "vizim_guards", "coll:vizim-townsfolk": "vizim_townsfolk",
+                "coll:vizim-officials": "vizim_guards"}
+# non-canon people of the scene: names, traits, voice and age come from the code tables
+EXTRA_CAST = (  # (slot, occupation, home place, appearance, goal)
+    ("guard", "міський вартовий", "tavern", "вартовий без шолома, з кухлем",
+     "do his duty to the city guard and report anything dangerous to the sergeant"),
+    ("drunk", "візник", "tavern", "п'яний візник у кутку",
+     "drink in peace and not be thrown out"),
+    ("trader", "торговка тканиною", "market", "жінка з ринку, що продає тканину",
+     "sell cloth at the market and hear every piece of news first"),
+    ("sergeant", "сержант варти", "guardhouse", "кремезний сержант із кордегардії",
+     "keep order in Vizima and answer to Velerad"),
+)
+CANON_PLAYER = CharacterProfile(
+    PLAYER, "Демон", "A demon in human shape, a being without limits.",
+    appearance="чорнявий чужинець із золотими очима")
+
+
+def canon_collectives(wmap: Any, canon: Any) -> list[Any]:
+    """The town, the guard, Velerad and the king: task 16's canon characters (names from the store)."""
+    from .world import Collective
+
+    def nm(ent: str, default: str) -> str:
+        try:
+            got = canon.name(ent)
+            return got if got and got != ent else default
+        except Exception:  # noqa: BLE001 - a store without this entity
+            return default
+
+    return [
+        Collective("vizim_townsfolk", nm("coll:vizim-townsfolk", "мешканці Визіма"), "market",
+                   "town", tuple(wmap.places),
+                   role="the townsfolk of Vizima: traders, craftsmen, drinkers, gossips"),
+        Collective("vizim_guards", nm("coll:vizim-guards", "стражники"), "guardhouse",
+                   "authority", ("gate",), up="velerad",
+                   role="the city guard, practical and wary of trouble"),
+        Collective("velerad", nm("char:velerad", "Велерад"), "palace", "authority", up="foltest",
+                   role="Velerad, the king's chief officer for order, cautious and well informed"),
+        Collective("foltest", nm("char:foltest", "Фольтест"), "palace", "authority",
+                   role="Foltest, the king of Temeria, in his palace"),
+    ]
+
+
+def canon_extra_ids() -> dict[str, str]:
+    return {slot: f"npc_{slot}" for slot, *_ in EXTRA_CAST}
+
+
+def populate_canon_campaign(eng: Engine, canon: Any) -> Any:
+    """A NEW campaign at situation A: the canon people made with what they knew, the code-made
+    extras, the tavern scene. Returns the CanonPlay."""
+    from ..canon.api import CanonCampaign
+    from ..canon.play import CanonPlay
+
+    play = CanonPlay(canon, CanonCampaign(start_t=START_TIME, place="place:pid-lysom", offset=0))
+    for ent, cid in (("char:innkeeper", "innkeeper"), ("char:velerad", "velerad"),
+                     ("char:foltest", "foltest"), *CANON_GROUPS.items()):
+        try:
+            play.ensure_character(eng, ent, cid=cid)
+        except Exception as e:  # noqa: BLE001 - a store without this person: the scene still runs
+            eng._note("canon_person_missing", entity=ent, error=str(e)[:100])
+    for slot, occ, _home, look, _goal in EXTRA_CAST:
+        eng.add_npc(eng.fresh_npc(slot, "northern", occupation=occ), appearance=look)
+    ids = canon_extra_ids()
+    keeper = "innkeeper" in eng.profiles
+    pairs = [(ids["guard"], ids["drunk"])] + ([("innkeeper", ids["guard"]),
+                                               ("innkeeper", ids["drunk"])] if keeper else [])
+    for a, b in pairs:
+        eng.acquaint(a, b)
+    for c in (*(["innkeeper"] if keeper else []), ids["guard"], ids["drunk"], PLAYER):
+        eng.enter_scene(c)
+    return play
+
+
+def make_canon_world(eng: Engine, canon: Any, judge: Judge, *, play: Any = None) -> World:
+    """The world around an engine that was populated by `populate_canon_campaign` (also after a
+    reopen: everything the world knows is derived from the log)."""
+    from ..canon.api import CanonCampaign
+    from ..canon.play import CanonPlay, cid_of
+    from .canon_adapter import PlayCanon
+
+    if play is None:
+        play = CanonPlay(canon, CanonCampaign(start_t=START_TIME, place="place:pid-lysom", offset=0))
+        for ent in ("char:innkeeper", "char:velerad", "char:foltest", *CANON_GROUPS):
+            cid = CANON_GROUPS.get(ent) or cid_of(ent)
+            if cid in eng.profiles:
+                play.made[ent] = cid
+    wmap = vizima()
+    ids = canon_extra_ids()
+    cast = {"innkeeper": "tavern", **{ids[s]: home for s, _o, home, _l, _g in EXTRA_CAST}}
+    goals = {ids[s]: g for s, _o, _h, _l, g in EXTRA_CAST}
+    goals["innkeeper"] = "keep the tavern open and stay out of trouble with the guard"
+    pc = PlayCanon(play, judge, places=CANON_PLACES, groups=CANON_GROUPS,
+                   text_call=lambda prompt: eng._complete(
+                       "judge", [{"role": "user", "content": prompt}]))
+    world = World(eng, wmap, collectives=canon_collectives(wmap, canon), cast=cast, goals=goals,
+                  canon=pc)
+    try:
+        eng.canon_guard = play.guard(judge)
+    except Exception:  # noqa: BLE001
+        eng.canon_guard = None
+    return world
