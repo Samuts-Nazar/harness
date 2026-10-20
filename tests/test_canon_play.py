@@ -121,10 +121,12 @@ def test_background_no_is_remembered_too(canon):
 
 
 def test_canon_secrets_never_come_through_background(canon):
-    judge = FakeJudge({"background_knowledge": True})
+    judge = FakeJudge({"background_knowledge": True, "canon_relevance": True})
     assert canon.secrets_about("char:bart", "Ярош підкупив капітана", START)        # a secret Bart does not know
     assert api.background(canon, "char:bart", "Ярош підкупив капітана", judge=judge, as_of=START) is None
-    assert judge.asked == [], "refused without asking: a model never sees a chance to leak it"
+    assert all(q.tag != "background_knowledge" for _, qs in judge.asked for q in qs.values()), "never asked whether he knows it"
+    # a near-but-different record does not block an ordinary question
+    assert api.background(canon, "char:bart", "Ярош підкупив капітана", judge=FakeJudge({"background_knowledge": True}), as_of=START) is not None
     assert api.background(canon, "char:bart", "ціни на ель", judge=judge, as_of=START) is not None
 
 

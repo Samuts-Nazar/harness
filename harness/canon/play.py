@@ -113,8 +113,20 @@ def background(canon: Canon, character: str, topic: str, *, judge: Judge, as_of:
             return b
     if any(tt & _tokens(d) for d in denied):
         return None
-    if canon.secrets_about(character, topic, as_of):
-        return None
+    secrets = canon.secrets_about(character, topic, as_of)
+    if secrets:   # embedding-near is not enough to block: keep only those a typed check says are the same matter
+        from ..judge import yes_no_q
+        qs = {}
+        for x in secrets[:4]:
+            r = canon.con.execute("SELECT r.body FROM record r WHERE r.id=?", (x["id"],)).fetchone()
+            qs[str(x["id"])] = yes_no_q(f"Topic: {topic}\nRecord: {r['body']}\nDoes this record concern the same matter as the topic "
+                                        "(so that answering the topic would reveal it)?", tag="canon_relevance")
+        try:
+            got = judge.ask([], qs)
+        except JudgeError:
+            return None   # cannot check: safe side
+        if any(j.answer for j in got.values()):
+            return None
     ctx = _life_context(canon, character) + f"\nTopic: {topic}"
     try:
         j = judge.yes_no(BACKGROUND_Q, ctx, tag="background_knowledge")
