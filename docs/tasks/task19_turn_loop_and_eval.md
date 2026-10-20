@@ -29,6 +29,12 @@ Read first: `docs/decisions.md`, `docs/pending_decisions.md` (agreed with the us
 - Non-canon NPC names, traits and quirks come from code: seeded, period- and region-appropriate tables for the Witcher world (Nordling, Nilfgaardian, elven, dwarven, halfling naming), not from the model. Never reuse a name already in the campaign.
 - Age, birth year and mortality for every NPC the player knows: aging and natural death are computed in code from tables, the LLM only narrates. Hooks only for marriage/children (no feature yet).
 
+## 6. Integration of tasks 16 and 17
+- The narrator currently sees collectives' rumour versions and authority reactions as plain campaign facts (task 17 report) and invents guards at places they have not reached. Filter the narrator's context by what the player character could perceive or has been told, exactly like NPC contexts.
+- Wire `harness/world/canon_adapter.py` to the real `harness/canon/api.py` from task 16 (task 17 guessed the function names and assumed `ScheduledEvent.t` in campaign minutes); replace placeholder collective ids and the Velerad/king chain with task 16's canon characters.
+- The app campaign gets the Vizima map and starts at situation A (tavern «Під Лисом», day 3 evening) with the limitless-demon player flag, ready for the pilot test plan (`docs/pilot_vizima_test_plan.md`).
+- "Seek the person" orders go to the incident place; when the men find nobody, they ask around and follow the trail per situation (judged), so authorities can actually reach the player.
+
 ## Known flaky test
 `app/tests/test_app_t12.py::test_narration_streams_before_the_first_npc_word_and_second_npc_hears_the_first` failed once in about five full-suite runs on 2026-10-20 (passes alone). Find the race (parallel turn, thread order) and make it deterministic.
 
