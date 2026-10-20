@@ -216,6 +216,7 @@ def chronicle(eng: "Engine") -> list[dict[str, Any]]:
     """The final chronicle: what the player character knew and did, in order, to the death."""
     from .models import NARRATION, UTTERANCE
     lines: list[dict[str, Any]] = []
+    death: dict[str, Any] | None = None
     for e in eng.log.active([NARRATION, UTTERANCE, OUTCOME, CHARACTER_DEATH]):
         if e.type == NARRATION:
             lines.append({"kind": "narr", "text": e.payload["text"], "t": e.game_time})
@@ -225,6 +226,8 @@ def chronicle(eng: "Engine") -> list[dict[str, Any]]:
         elif e.type == OUTCOME and e.payload.get("verdict") != WORKS:
             lines.append({"kind": "outcome", "text": e.payload["text"],
                           "verdict": e.payload["verdict"], "t": e.game_time})
-        elif e.type == CHARACTER_DEATH:
-            lines.append({"kind": "death", "text": e.payload["text"], "t": e.game_time})
+        elif e.type == CHARACTER_DEATH:  # written before the death is narrated: shown last
+            death = {"kind": "death", "text": e.payload["text"], "t": e.game_time}
+    if death:
+        lines.append(death)
     return lines
