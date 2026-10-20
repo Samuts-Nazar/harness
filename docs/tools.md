@@ -227,3 +227,24 @@ Chosen by the task 7 bake-off on our own Ukrainian test set (`reports/bakeoff/SU
 - Role: embeddings for canon retrieval. Chosen `qwen/qwen3-embedding-8b` (live `GET /api/v1/embeddings/models`: 33 models; this one 0.01 USD per M input, 40960 context, multilingual). Compared on the pilot questions: `baai/bge-m3` (same price) ranked names over meaning (the plot question missed its events); qwen3-embedding-8b found them. Not run: `openai/text-embedding-3-large` (0.13), `voyageai/voyage-4`, `perplexity/pplx-embed-v1-4b`. Cost of embedding the 80 events: about 0.0001 USD. Query embedding is one call per question; failure falls back to full text.
 - Role: timeline arbiter and knower/place/gist/reaction passes: `deepseek/deepseek-v4.1-flash-1017` (as ingestion), second timeline reader `openai/gpt-6-luna` (it wrote day 1 for every scene: a weak vote, useful only to flag disagreement), `xiaomi/mimo-v2.6-pro` tried as arbiter and was worse than deepseek with the code hints. Relevance verifier: the existing judge stack.
 - No new library. Checked: 2026-10-20.
+
+
+## Task 19 (2026-10-20)
+
+### Record and replay of model calls
+- Role: re-run a played session offline as a regression test (prompt changes show as misses).
+- Chosen: own code, `harness/evalkit/replay.py` (about 150 lines): records at the `Provider` and `Judge` interfaces, keyed by a hash, prompts not stored.
+- Alternatives checked: vcrpy 8.3.0 (2026-07-04, MIT, records HTTP: it would store the full prompts including any local character file or book exemplars, and the Authorization header needs filtering; our typed judge and the provider are different HTTP endpoints); cendor-cassette (small package, its PyPI page did not load when checked; 18A also says to vet it first); standin, llmvcr (small, not checked further).
+- Reason: smaller than vetting a dependency, hash-only cassettes are safe to keep near the repo, and it covers the typed judgments, which are not provider calls. Re-check vcrpy if a session ever needs HTTP-level replay (embeddings).
+- Checked: 2026-10-20.
+
+### Prompt caching on OpenRouter
+- Role: cheaper and faster long, stable prompts.
+- Chosen: provider-side automatic prefix caching plus `session_id` in the request body (top level; the `x-session-id` header is the alternative; at most 256 characters; sticky routing for about ten idle minutes). Cache numbers from `usage.prompt_tokens_details.cached_tokens` and `cache_write_tokens`; `cache_discount` is also reported.
+- Source: https://openrouter.ai/docs/guides/features/prompt-caching (fetched 2026-10-20).
+- Checked: 2026-10-20.
+
+### Name, trait and lifespan tables
+- Role: non-canon NPC names, traits, quirks, ages, natural death.
+- Chosen: own tables in `harness/npcgen.py`, Ukrainian, seeded (`zlib.crc32`), no library. Alternatives: a names library (not period- or world-appropriate), the model (homogeneity: 11 words in 88.3 percent of stories, 18B), the books' names (would reuse canon people).
+- Checked: 2026-10-20.

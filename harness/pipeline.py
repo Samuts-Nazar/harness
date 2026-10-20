@@ -306,6 +306,7 @@ class Engine:
                                   record_language=record_language, glossary=glossary,
                                   narration=narration, names=self.names, style=style,
                                   player_unlimited=player_unlimited)
+        self.ctx.outcomes = outcomes
         self.memory = (MemoryWriter(self.campaign_dir / "memory", self.deriver, self.log,
                                     self.profiles, self.agents) if self.campaign_dir else None)
         self._save_scene()

@@ -163,7 +163,11 @@ def live_stack(budget: float = 0.25) -> Stack:
     if not key:
         raise SystemExit("--live needs OPENROUTER_API_KEY (env or .env)")
     spend = Spend(budget)
-    provider = OpenRouterProvider(key, spend=spend)
+    import uuid
+
+    # one session id per run: OpenRouter routes the whole session to the same endpoint, so the
+    # prompt cache of the long, stable prompt prefix is hit (task 19)
+    provider = OpenRouterProvider(key, spend=spend, session_id=f"harness-{uuid.uuid4().hex[:16]}")
     models = ModelConfig.live()
     first = FallbackJudge(DecisionJudge(key, DEFAULT_JUDGE_FIRST, spend=spend),
                           DecisionJudge(key, FALLBACKS["judge_first"], spend=spend))

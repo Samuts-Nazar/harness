@@ -104,6 +104,7 @@ class ContextBuilder:
         task 12 prompts."""
         self.style = style
         self.player_unlimited = player_unlimited
+        self.outcomes = False  # set by the engine (harness/outcome.py)
         self.language, self.record_language = language, record_language
         self.glossary, self.narration = glossary, narration
         self.names = names
@@ -362,6 +363,9 @@ class ContextBuilder:
                 "character does, not what they say. Do not decide what the player character says, does or feels beyond "
                 "what the player gave. Never narrate people, guards or events the player character "
                 "could not perceive or has not been told of."
+                + (" When someone else attacks, robs, restrains or arrests the player character, "
+                   "narrate only the attempt and stop there: the world decides separately whether "
+                   "it succeeds." if self.outcomes else "")
                 + (f" Write in {self.language}." if self.language else "")
                 + (f"\n{UNLIMITED_NARRATOR}" if self.player_unlimited else ""))
             system = "You are the narrator of a role-playing game. Write vivid prose."
