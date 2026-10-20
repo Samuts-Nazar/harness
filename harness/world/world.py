@@ -130,6 +130,8 @@ class World:
         self.cast = dict(cast or {})
         self.goals = dict(goals or {})
         self.canon: CanonSource = canon or NullCanon()
+        if hasattr(self.canon, 'bind'):
+            self.canon.bind(engine)  # type: ignore[attr-defined]
         self.language = language or engine.record_language
         for c in self.collectives.values():
             engine.profiles.setdefault(c.id, CharacterProfile(c.id, c.name, c.role))
@@ -653,8 +655,11 @@ class World:
                 continue
             place = self._place_id(ce.place)
             touched = self._touched(ce, place)
-            outcome = "as_written"
-            if touched:
+            outcome, reason, new_summary = "as_written", "", None
+            if touched and hasattr(self.canon, "verdict"):
+                v = self.canon.verdict(ce, [t.payload["text"] for t in touched[:5]])  # type: ignore[attr-defined]
+                outcome, reason, new_summary = v.outcome, v.reason, v.new_summary
+            elif touched:
                 got = self._ask(
                     [f"Canon event (planned): {ce.summary}", f"Place: {self.map.name(place)}",
                      "What the player has done since that bears on it: "
@@ -666,14 +671,14 @@ class World:
                          "not_happen": "it does not happen any more"}, tag="canon_event")})
                 outcome = str(got["c"].answer) if got else "as_written"
             ev = self._log(nw.CANON_EXECUTED, ce.t, {
-                "canon_id": ce.id, "outcome": outcome, "summary": ce.summary,
+                "canon_id": ce.id, "outcome": outcome, "summary": ce.summary, "reason": reason,
                 "touched": [t.id for t in touched]}, place=place, notability=ce.notability)
             out.append(ev)
             done.add(ce.id)
             if outcome == "not_happen":
                 continue
-            text = ce.summary + (" (this went differently than first planned)"
-                                 if outcome == "differently" else "")
+            text = (new_summary or ce.summary) + (
+                " (this went differently than first planned)" if outcome == "differently" else "")
             knowers = [(k, WITNESSED) for k in ce.participants]
             knowers += [(k, HEARD, None) for k in ce.knowers if k not in ce.participants]
             fid = self.eng.facts.add_campaign(
@@ -704,6 +709,7 @@ class World:
                 self._agent_apply(meta, got)
             self.resolve(end, kinds=("authority",))  # deliveries made above may already be due
             self._log(nw.WORLD_TICK, end, {"to": end})
+            eng.process_natural_deaths(end)  # aging and mortality come from the vitals tables
             hit = self._arrivals(t, end)
             t = end
             if hit and interruptible:
@@ -720,10 +726,10 @@ class World:
         if here is None:
             return None
         seen = {e.payload["reaction"] for e in self.eng.log.active([nw.WORLD_ARRIVAL])}
-        hit = None
+        hit = self._pursue(start, end, here, seen)
         for rev in self.eng.log.active([nw.WORLD_REACTION]):
             p = rev.payload
-            if (p["kind"] in (R_ASK, R_PATROL, R_SEEK) and p["target"] == here
+            if (p["kind"] in (R_ASK, R_PATROL) and p["target"] == here
                     and start < p["eta"] <= end and rev.id not in seen):
                 text = f"{self._name(p['authority'])} men arrive at {self.map.name(here)}: " \
                        + REACTION_PHRASE[p["kind"]].format(place="this place")
@@ -737,6 +743,96 @@ class World:
                     knowers=[(c, WITNESSED) for c in present])
                 hit = text
         return hit
+
+    MAX_TRAIL_HOPS = 5
+
+    def _pursuit(self, rev: Event) -> dict[str, Any] | None:
+        """Where the men of a "seek the person" order are heading next, or None if the hunt is over
+        (the person was found, or the trail went cold). Derived from the log."""
+        trail = [e for e in self.eng.log.active([nw.WORLD_TRAIL]) if e.payload["reaction"] == rev.id]
+        if any(e.payload.get("over") for e in trail):
+            return None
+        if trail:
+            last = trail[-1].payload
+            return {"place": last["next"], "eta": last["eta"], "hop": last["hop"] + 1}
+        return {"place": rev.payload["target"], "eta": rev.payload["eta"], "hop": 0}
+
+    def _visited_since(self, t: int) -> list[str]:
+        """Places the player went to after time `t` (the trail the men could follow)."""
+        out: list[str] = []
+        for e in self.eng.log.active([nw.WORLD_MOVE]):
+            if e.game_time >= t and e.payload.get("kind") == "travel" and e.payload.get("to"):
+                out.append(e.payload["to"])
+        return list(dict.fromkeys(out))
+
+    def _pursue(self, start: int, end: int, here: str, seen: set[int]) -> str | None:
+        """"Seek the person" orders go to the incident place. If the men find nobody there they ask
+        around and follow the trail, place by place; whether anyone there knows where the person
+        went is a judgment per situation. The hunt ends when they find the person or the trail goes
+        cold."""
+        hit = None
+        for rev in self.eng.log.active([nw.WORLD_REACTION]):
+            p = rev.payload
+            if p["kind"] != R_SEEK or rev.id in seen:
+                continue
+            for _ in range(self.MAX_TRAIL_HOPS + 1):
+                cur = self._pursuit(rev)
+                if cur is None or not (start < cur["eta"] <= end):
+                    break
+                auth = self.collectives.get(p["authority"])
+                aname = self._name(p["authority"])
+                at, place = cur["eta"], cur["place"]
+                if place == here:  # found
+                    text = f"{aname} men arrive at {self.map.name(here)}: " + \
+                           REACTION_PHRASE[R_SEEK].format(place="this place")
+                    ev = self._log(nw.WORLD_ARRIVAL, at, {"reaction": rev.id, "text": text},
+                                   place=here, cause=rev.id, notability=0.6)
+                    self._log(nw.WORLD_TRAIL, at, {"reaction": rev.id, "place": place, "hop": cur["hop"],
+                                                   "over": "found", "next": None, "eta": at},
+                              place=place, cause=ev.id)
+                    self.eng.facts.add_campaign(
+                        text, source_event_id=ev.id, game_time=at, location=self.map.name(here),
+                        notability=0.6, knowers=[(c, WITNESSED) for c in self.eng.scene.present])
+                    hit = text
+                    break
+                incident = self.eng.log.get(p["news"])
+                cands = [v for v in self._visited_since(incident.game_time if incident else 0)
+                         if v != place]
+                nxt: str | None = None
+                if cands and cur["hop"] < self.MAX_TRAIL_HOPS:
+                    locals_ = [self._name(c) for c in self.cast if self.where(c, at) == place]
+                    opts = {"none": "nobody here knows where the stranger went; the trail ends",
+                            **{c: f"someone here saw the stranger go toward {self.map.name(c)}"
+                               for c in cands}}
+                    got = self._ask(
+                        [f"Armed men of {aname} came to {self.map.name(place)} to find the person "
+                         f"behind: {p['text']}",
+                         "They found nobody and ask the people around.",
+                         "People who live or work here: " + (", ".join(locals_) or "unknown"),
+                         f"Notability of the incident (0..1): "
+                         f"{self._news_notability(p['news']):.2f}"],
+                        {"trail": choice_q("Do the people here know where the person went and "
+                                           "tell the men? Judge by who they are and how the "
+                                           "person was seen.", opts, tag="trail_follow")})
+                    pick = str(got["trail"].answer) if got else "none"
+                    nxt = pick if pick in cands else None
+                eta = at + MUSTER + self.map.minutes(place, nxt) if nxt else at
+                text = (f"{aname} men reached {self.map.name(place)}, found nobody and asked around"
+                        + (f"; they were told the stranger went toward {self.map.name(nxt)}"
+                           if nxt else "; nobody could tell them anything"))
+                tev = self._log(nw.WORLD_TRAIL, at, {
+                    "reaction": rev.id, "place": place, "hop": cur["hop"], "next": nxt, "eta": eta,
+                    "over": None if nxt else "cold", "text": text}, place=place, cause=rev.id)
+                if auth:
+                    self.eng.facts.add_campaign(
+                        text, source_event_id=tev.id, game_time=at,
+                        location=self.map.name(place), notability=0.4,
+                        knowers=[(auth.id, WITNESSED, None)])
+        return hit
+
+    def _news_notability(self, news_id: int) -> float:
+        ne = self.eng.log.get(news_id)
+        return float(ne.payload["notability"]) if ne else 0.0
 
     # -- the player moves, waits, plays ------------------------------------------------------------
     def go_to(self, dest: str) -> int:

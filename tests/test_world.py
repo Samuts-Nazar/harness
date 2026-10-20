@@ -9,7 +9,7 @@ from harness.pipeline import Engine, ModelConfig
 from harness.providers import FakeProvider
 from harness.world import clock as clk
 from harness.world import news as nw
-from harness.world.canon_adapter import ApiCanon, ListCanon, NullCanon, ScheduledEvent
+from harness.world.canon_adapter import ListCanon, NullCanon, ScheduledEvent
 from harness.world.places import Place, WorldMap, vizima
 from harness.world.world import (
     A_REPORT, R_PATROL, World, pilot_collectives,
@@ -299,24 +299,11 @@ def test_canon_event_untouched_needs_no_judgment():
     assert not [1 for _, qs in eng.judge.inner.asked for q in qs.values() if q.tag == "canon_event"]  # type: ignore[attr-defined]
 
 
-def test_adapter_defaults_and_api_wrapper():
+def test_adapter_defaults():
     assert NullCanon().scheduled(0, 10**9) == () and NullCanon().background("a", "b") is None
-
-    class Api:
-        @staticmethod
-        def scheduled_events(a, b):
-            class E:
-                id, t, place, summary, notability = "x", 5, "market", "S", 0.4
-                participants, knowers = ("a",), ()
-            return [E()] if a < 5 <= b else []
-
-        @staticmethod
-        def background(c, t):
-            return "knows it" if c == "a" else None
-
-    ac = ApiCanon(Api)
-    assert ac.scheduled(0, 9)[0].id == "x" and ac.scheduled(5, 9) == []
-    assert ac.background("a", "t") == "knows it" and ac.background("b", "t") is None
+    lc = ListCanon([ScheduledEvent("x", 5, "market", ("a",), "S", (), 0.4)], {("a", "t"): "knows it"})
+    assert lc.scheduled(0, 9)[0].id == "x" and lc.scheduled(5, 9) == []
+    assert lc.background("a", "t") == "knows it" and lc.background("b", "t") is None
 
 
 # -- moving, waiting, playing -----------------------------------------------------------------
