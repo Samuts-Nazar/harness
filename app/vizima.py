@@ -38,6 +38,8 @@ DEFAULT_CANON = "campaigns/canon/pilot_v3.db"
 def canon_path(explicit: str | os.PathLike[str] | None = None) -> Path | None:
     """The canon store to use: the argument, $HARNESS_CANON_DB, or the local default; None if the
     file is not there."""
+    if explicit is False:  # type: ignore[comparison-overlap]
+        return None  # a scenario that must run without canon (the offline regression sessions)
     for c in (explicit, os.environ.get("HARNESS_CANON_DB"), DEFAULT_CANON):
         if c and Path(c).is_file():
             return Path(c)
@@ -45,7 +47,7 @@ def canon_path(explicit: str | os.PathLike[str] | None = None) -> Path | None:
 
 
 def open_vizima(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = False,
-                name: str | None = None, canon_db: str | os.PathLike[str] | None = None,
+                name: str | None = None, canon_db: str | os.PathLike[str] | bool | None = None,
                 seed: int | str | None = None) -> Campaign:
     """Continue the current Vizima campaign, or start a new one at situation A."""
     root = Path(root)

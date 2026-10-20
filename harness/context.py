@@ -445,7 +445,8 @@ class ContextBuilder:
             '"observable": true|false, "source": <segment>}]}\n'
             f"Characters: {who}. Do not say who knows or saw a fact; that is decided elsewhere. "
             '"remove" only works on an item the character currently has; "reveal"/"hide" change '
-            "whether an existing item is observable. Do not emit any other keys.\n"
+            "whether an existing item is observable. Do not emit any other keys. Figures of speech and "
+            "gestures are not state (\'took his hand\' adds no hand to anyone's inventory).\n"
             + (f"Names (a passage may describe a person without naming them; in facts, use the "
                f"name): {'; '.join(names)}.\n" if hidden else "")
             + (f"Write every fact's content and every state item in {self.record_language}"

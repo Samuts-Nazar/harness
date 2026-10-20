@@ -13,6 +13,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Collection
 
+from .metaphor import literal_reading
 from .state import State, StateChange, StateError, apply, check_change
 
 
@@ -74,6 +75,7 @@ def validate_diff(
     sources: Collection[str],
     state: State | None = None,
     characters: Collection[str] | None = None,
+    texts: dict[str, str] | None = None,
 ) -> Diff:
     """Accept only `new_facts` and `state_changes`.
 
@@ -128,6 +130,10 @@ def validate_diff(
         try:
             change = _parse_change(c, where, who, sources)
             check_change(sim, change)
+            why = literal_reading(change.category, change.op, change.item,
+                                  (texts or {}).get(change.source, ""))
+            if why:  # "took his hand" must not add a hand to the inventory (task 19)
+                raise DiffValidationError(f"{where}: metaphor read literally: {why}")
         except (DiffValidationError, StateError) as e:
             # one bad change (revealing an item that is in another category, removing what is not
             # there, an unknown character) is dropped and reported; the rest of the turn stands

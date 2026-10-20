@@ -761,7 +761,8 @@ class Engine:
             try:
                 diff = validate_diff(self._ids_for_names(self._fix_tree(parse_diff(raw))),
                                      present=sc.present, sources=sources,
-                                     state=self.live.snapshot(), characters=everyone)
+                                     state=self.live.snapshot(), characters=everyone,
+                                     texts=dict(segments))
                 for d in diff.dropped:
                     self._note("state_change_dropped", **d)
                 return diff
