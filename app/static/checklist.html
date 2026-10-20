@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Пілот у Визимі</title>
+<style>
+  :root {
+    --bg: #1e1e2e; --surface: #313244; --surface2: #45475a; --text: #cdd6f4;
+    --muted: #a6adc8; --accent: #cba6f7; --ok: #a6e3a1; --bad: #f38ba8; --warn: #f9e2af;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 16px 16px 96px; }
+  h1 { font-size: 1.4rem; margin: 8px 0 4px; }
+  .lead { color: var(--muted); margin: 0 0 12px; font-size: .95rem; }
+  .progress { position: sticky; top: 0; z-index: 2; background: var(--bg); padding: 8px 0; }
+  .bar { height: 6px; background: var(--surface); border-radius: 3px; overflow: hidden; }
+  .bar > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  .count { font-size: .85rem; color: var(--muted); margin-top: 4px; }
+  h2 { font-size: 1.05rem; color: var(--accent); margin: 24px 0 8px; }
+  .item { background: var(--surface); border-radius: 10px; padding: 12px; margin: 8px 0; }
+  .item.done { opacity: .75; }
+  .head { display: flex; gap: 10px; align-items: flex-start; }
+  .num { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 1.6em; }
+  .title { font-weight: 600; }
+  .desc { color: var(--muted); font-size: .92rem; margin-top: 2px; }
+  .verdict { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .verdict button { flex: 1 1 0; min-width: 90px; padding: 8px; border-radius: 8px; border: 1px solid var(--surface2);
+                    background: transparent; color: var(--text); font: inherit; font-size: .9rem; }
+  .verdict button[aria-pressed="true"][data-v="ok"] { background: var(--ok); color: var(--bg); border-color: var(--ok); }
+  .verdict button[aria-pressed="true"][data-v="bad"] { background: var(--bad); color: var(--bg); border-color: var(--bad); }
+  .verdict button[aria-pressed="true"][data-v="part"] { background: var(--warn); color: var(--bg); border-color: var(--warn); }
+  textarea { width: 100%; margin-top: 8px; min-height: 2.6em; resize: vertical; border-radius: 8px;
+             border: 1px solid var(--surface2); background: var(--bg); color: var(--text); font: inherit; font-size: .9rem; padding: 8px; }
+  .footer { position: fixed; left: 0; right: 0; bottom: 0; background: var(--bg); border-top: 1px solid var(--surface2); }
+  .footer .in { max-width: 760px; margin: 0 auto; padding: 10px 16px; display: flex; gap: 8px; }
+  .footer button { flex: 1; padding: 10px; border-radius: 8px; border: 0; font: inherit; font-weight: 600; }
+  #copy { background: var(--accent); color: var(--bg); }
+  #reset { background: var(--surface2); color: var(--text); flex: 0 0 auto; }
+  #toast { color: var(--ok); font-size: .85rem; text-align: center; min-height: 1.2em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Пілот у Визимі — чеклист</h1>
+  <p class="lead">Корчма «Під Лисом», вечір 3-го дня. Ви — демон без меж: що оголосили, те сталося. Перевіряємо лише, як реагує світ.
+    Позначки зберігаються в цьому браузері. Кнопка внизу копіює результати — вставте їх у чат.</p>
+  <div class="progress"><div class="bar"><div id="bar"></div></div><div class="count" id="count"></div></div>
+  <div id="list"></div>
+  <div id="toast"></div>
+</main>
+<div class="footer"><div class="in">
+  <button id="copy">Скопіювати результати</button>
+  <button id="reset" title="Очистити всі позначки">Скинути</button>
+</div></div>
+<script>
+const GROUPS = [
+  ["Сприйняття і реакція на місці", [
+    ["Неможливе на очах у людей", "Перетворити пиво на кров, підняти стіл у повітря. Хто бачив, а хто ні; кожен реагує по-своєму (корчмар боїться за заклад, п'яний не вірить, стражник думає, кому доповісти)."],
+    ["Прихована дія", "Зробити щось непомітно. Ніхто не має про це знати."],
+    ["Зовнішність", "Прийти в людській подобі, потім показати справжню. Реакція змінюється."],
+  ]],
+  ["Наслідки поза сценою", [
+    ["Чутки", "Після дива в корчмі піти й наступного дня прийти на ринок. Чи знають там? Чи спотворена версія? Скільки версій ходить?"],
+    ["Влада", "Чи дійде до Велерада, до варти, до короля? Чи прийдуть по демона? Масштаб реакції залежить від масштабу події."],
+    ["Час і відстань", "Тиха подія лишається зі свідками; гучна розходиться з часом."],
+    ["Настрій міста", "Чи змінюється, як місто загалом ставиться до чужинців, відьмаків, магії."],
+  ]],
+  ["Знання та ізоляція", [
+    ["Таємниця наодинці", "Сказати щось одному NPC; інші не знають. Потім він сам комусь переказує — чи доходить і як."],
+    ["Брехня", "Збрехати переконливо. Чи пошириться як правда? Що буде, коли брехня зіткнеться з фактами?"],
+    ["Чуже ім'я", "Назватися вигаданим ім'ям. Люди мають користуватися ним."],
+    ["«Звідки він це знає?»", "Кнопка під реплікою на будь-якій підозрілій фразі."],
+  ]],
+  ["Канон", [
+    ["Дрібні дії не міняють великого", "Купити хліб, поговорити — Ґеральт усе одно у Визимі, бій зі стригою на 7-й день."],
+    ["Події без гравця", "Пропустити день-два: канонічні події відбуваються за кадром, і вісті про них доходять."],
+    ["Зустріч із Ґеральтом", "Чи він як у книжці? Чи знає тільки те, що мав би знати на цей день?"],
+    ["Велике втручання", "Самому розібратися зі стригою раніше, розповісти Ґеральту про Острита, вбити Острита. Світ має змінитися логічно, а не повернутися до книжки силою."],
+  ]],
+  ["Пам'ять і стан", [
+    ["NPC пам'ятає", "Повернутися до корчмаря через кілька днів: він пам'ятає демона, його ставлення змінилося."],
+    ["Стан тримається", "Поранити когось, зламати двері — через день рана й двері ті самі."],
+    ["Внутрішній стан гравця", "Оповідач ніколи не пише, що демон відчуває."],
+  ]],
+  ["Інтерфейс", [
+    ["Перебивання", "Перервати NPC посеред фрази; чи повернеться він до недомовленого."],
+    ["«Помилка моделі»", "Кнопка з поясненням; переписується лише остання відповідь світу."],
+    ["Збереження", "Зупинити й знову запустити сервер — історія продовжується."],
+    ["Повтори", "15+ ходів: чи не повторюються звороти, поради, зачини."],
+    ["Час і вартість ходу", "Режим налагодження: скільки секунд і центів коштує хід."],
+  ]],
+];
+const KEY = "pilot-vizima-checklist-v1";
+let state = {};
+try { state = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { state = {}; }
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
+const LABEL = { ok: "Працює", part: "Частково", bad: "Не працює" };
+const list = document.getElementById("list");
+let n = 0, total = 0;
+const items = [];
+for (const [group, rows] of GROUPS) {
+  const h = document.createElement("h2"); h.textContent = group; list.appendChild(h);
+  for (const [title, desc] of rows) {
+    const id = ++n; total++;
+    items.push({ id, group, title });
+    const s = state[id] || {};
+    const el = document.createElement("div"); el.className = "item";
+    el.innerHTML = `<div class="head"><span class="num">${id}.</span><div><div class="title"></div><div class="desc"></div></div></div>
+      <div class="verdict">${["ok","part","bad"].map(v => `<button type="button" data-v="${v}" aria-pressed="false">${LABEL[v]}</button>`).join("")}</div>
+      <textarea placeholder="Що помітили (необов'язково)"></textarea>`;
+    el.querySelector(".title").textContent = title;
+    el.querySelector(".desc").textContent = desc;
+    const ta = el.querySelector("textarea"); ta.value = s.note || "";
+    const btns = el.querySelectorAll(".verdict button");
+    const paint = () => {
+      const cur = (state[id] || {}).v;
+      btns.forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === cur)));
+      el.classList.toggle("done", !!cur);
+    };
+    btns.forEach(b => b.addEventListener("click", () => {
+      const cur = state[id] || {};
+      cur.v = cur.v === b.dataset.v ? undefined : b.dataset.v;
+      state[id] = cur; save(); paint(); progress();
+    }));
+    ta.addEventListener("input", () => { state[id] = { ...(state[id] || {}), note: ta.value }; save(); });
+    paint(); list.appendChild(el);
+  }
+}
+function progress() {
+  const done = items.filter(i => (state[i.id] || {}).v).length;
+  document.getElementById("bar").style.width = (100 * done / total) + "%";
+  document.getElementById("count").textContent = `Перевірено ${done} з ${total}`;
+}
+progress();
+function toast(t) { const el = document.getElementById("toast"); el.textContent = t; setTimeout(() => el.textContent = "", 2500); }
+document.getElementById("copy").addEventListener("click", async () => {
+  const lines = ["Пілот у Визимі — результати"];
+  let g = "";
+  for (const i of items) {
+    const s = state[i.id] || {};
+    if (!s.v && !s.note) continue;
+    if (i.group !== g) { g = i.group; lines.push("", g); }
+    lines.push(`${i.id}. ${i.title}: ${s.v ? LABEL[s.v] : "—"}${s.note ? " — " + s.note.trim() : ""}`);
+  }
+  const text = lines.join("\n");
+  try { await navigator.clipboard.writeText(text); toast("Скопійовано"); }
+  catch (e) {
+    const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta);
+    ta.select(); try { document.execCommand("copy"); toast("Скопійовано"); } catch (e2) { toast("Не вдалося скопіювати"); }
+    ta.remove();
+  }
+});
+document.getElementById("reset").addEventListener("click", () => {
+  if (!confirm("Очистити всі позначки й нотатки?")) return;
+  state = {}; save(); location.reload();
+});
+</script>
+</body>
+</html>
