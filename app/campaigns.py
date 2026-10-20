@@ -96,6 +96,8 @@ class Recorder:
     @staticmethod
     def role(messages: Messages) -> str:
         sys = messages[0]["content"] if messages else ""
+        if "Rumour writer" in sys:
+            return "world: rumour"
         if "narrator" in sys:
             return "narrator"
         if "fact extractor" in sys:
@@ -175,6 +177,7 @@ class Campaign:
     translate: Translator | None = None
     title: str = TITLE
     intro: str = INTRO
+    world: Any = None  # harness.world.World when the campaign has a world beyond the scene (task 17)
 
     def transcript(self) -> list[dict[str, Any]]:
         """What the player has seen so far, rebuilt from the event log (a reopened campaign)."""

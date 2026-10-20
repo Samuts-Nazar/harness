@@ -238,11 +238,17 @@ class Game:
             if self.pace:
                 time.sleep(self.pace)
 
+        world = getattr(self.camp, "world", None)
+        since = max((e.id for e in eng.log.active()), default=0)
         unsubscribe = eng.log.subscribe(on_event)
         self.handle = InterruptHandle()
         self.skip_narration = False
         try:
-            r = eng.turn(text, handle=self.handle, on_word=on_word, on_narration=on_narration)
+            if world is not None:  # the world interprets the turn (trip, wait) and catches up
+                r = world.play(text, handle=self.handle, on_word=on_word,
+                               on_narration=on_narration).result
+            else:
+                r = eng.turn(text, handle=self.handle, on_word=on_word, on_narration=on_narration)
         except BaseException as e:  # noqa: BLE001 - shown to the player, the input is kept
             self.phase = "idle"
             self._emit("error", message=explain(e), text=text, detail=type(e).__name__)
@@ -262,6 +268,8 @@ class Game:
             self.transcript += entries
             self.phase = "idle"
             self._save_debug(marks, new_events, t0, first_word, report=eng.reports[-1])
+            if world is not None:
+                self.debug = {**self.debug, "world": world.report(since)}
             self._panel = self._compute_panel()
             self._emit("turn_done", interrupted=r.interrupted, clock=self.clock(),
                        panel=self._panel, lines=[u.id for u in r.utterances])

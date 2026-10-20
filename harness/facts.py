@@ -72,6 +72,24 @@ class FactStore:
             CAMPAIGN, content, source_event_id, game_time, location, notability, knowers
         )
 
+    def add_knower(self, fact_id: int, character: str, how: str, *, learned_at: int,
+                   source: str | None = None, event_id: int | None = None) -> None:
+        """Someone learns an existing fact later (a rumour reaches them). Idempotent. The row
+        carries the event that caused it, so rolling that event back removes the knowledge."""
+        if how not in HOW_VALUES:
+            raise ValueError(f"bad knowledge mode: {how!r}")
+        with self.conn:
+            self.conn.execute(
+                "INSERT OR IGNORE INTO fact_knowers"
+                " (fact_id, character, how, learned_at, source, event_id) VALUES (?,?,?,?,?,?)",
+                (fact_id, character, how, learned_at, source, event_id))
+
+    def by_source_event(self, event_id: int) -> list[Fact]:
+        rows = self.conn.execute(
+            f"SELECT f.* FROM facts f WHERE f.source_event_id = ? AND {self._ACTIVE} ORDER BY f.id",
+            (event_id,)).fetchall()
+        return self._hydrate(rows)
+
     # -- reads ----------------------------------------------------------
     _ACTIVE = (
         "(f.source_event_id IS NULL OR f.source_event_id NOT IN (SELECT event_id FROM rollbacks))"
@@ -82,6 +100,7 @@ class FactStore:
         for r in rows:
             ks = self.conn.execute(
                 "SELECT character, how, learned_at, source, event_id FROM fact_knowers WHERE fact_id=?"
+                " AND (event_id IS NULL OR event_id NOT IN (SELECT event_id FROM rollbacks))"
                 " ORDER BY character",
                 (r["id"],),
             ).fetchall()
@@ -107,6 +126,7 @@ class FactStore:
         sql = (
             "SELECT f.* FROM facts f JOIN fact_knowers k ON k.fact_id = f.id"
             f" WHERE k.character = ? AND k.learned_at <= ? AND {self._ACTIVE}"
+            " AND (k.event_id IS NULL OR k.event_id NOT IN (SELECT event_id FROM rollbacks))"
         )
         args: list[object] = [character, at_time]
         if store:

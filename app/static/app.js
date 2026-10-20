@@ -238,6 +238,7 @@ async function loadDebug() {
       ...d.names.fixed.map((f) => [f.where, `${f.form} → ${f.canonical}`]),
     ]));
   }
+  if (d.world) appendWorld(body, d.world);
   body.appendChild(section("Виклики моделей", d.calls.map((c) =>
     [c.role, `${c.model} · ${c.seconds} с · $${c.cost.toFixed(5)} · ${c.chars_in}→${c.chars_out} симв.`])));
   body.appendChild(section("Судження", d.judgments.map((j) =>
@@ -249,6 +250,25 @@ async function loadDebug() {
   if (d.challenge) body.appendChild(section("Остання перевірка «звідки він це знає»", [
     [d.challenge.verdict, JSON.stringify(d.challenge).slice(0, 300)]]));
   await loadKnowledge(body);
+}
+
+// "Світ": what happened beyond the scene, which news reached whom, in which version
+function appendWorld(body, w) {
+  body.appendChild(section("Світ: час і місце", [["зараз", `${w.clock.now} хв · ${w.clock.place}`],
+    ...w.moves.map((m) => [m.kind, `${m.from} → ${m.to} · ${m.minutes} хв`])]));
+  body.appendChild(section("Світ: поза сценою", w.offscreen.map((o) =>
+    [o.character, `${o.what} · ${o.place} · з ${o.arrives} хв`])));
+  body.appendChild(section("Світ: влада", [...w.reactions.map((r) => [r.authority, r.text]),
+    ...w.arrivals.map((a) => ["прибули", a.text])]));
+  body.appendChild(section("Світ: канонічні події", w.canon.map((c) => [c.outcome, c.summary])));
+  for (const n of w.news) {
+    const det = el("details");
+    det.appendChild(el("summary", "", `${n.new ? "● " : ""}${n.text.slice(0, 80)} · гучність ${n.notability}`));
+    det.appendChild(section("версії", n.versions.map((v) =>
+      [v.holder, `${v.text} · ${v.operator} · ${v.hops} пер. · від ${v.source || "—"} · ${v.at} хв${v.stance ? " · " + v.stance : ""}`])));
+    det.appendChild(section("почули", n.heard_by.map((h) => [h.person, `від ${h.via} · ${h.at} хв`])));
+    body.appendChild(det);
+  }
 }
 
 // who knows what and from where (per character), so the user can check knowledge directly
