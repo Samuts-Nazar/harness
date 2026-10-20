@@ -301,7 +301,7 @@ def arbitrate(provider: Provider, model: str, base: list[Scene], other: list[Sce
     earlier decision left it behind. Each call sees the scenes settled so far and the calendar facts
     they fix. Decisions are applied as they come (so later scenes see them)."""
     cache = cache if cache is not None else {}
-    first_todo = set(issues) | set(differing(base, other))
+    first_todo = set(differing(base, other))   # other problems are re-checked live, after earlier decisions
     decided: dict[int, dict[str, Any]] = {}
     for i, s in enumerate(base):
         again = check(base[: i + 1], paras).get(i)
