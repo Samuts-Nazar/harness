@@ -160,8 +160,8 @@ class ContextBuilder:
             ids = [c for c in self.profiles if c == viewer or c in k or not self.names.hidden(c)]
         line = g.prompt_line("\n".join(m["content"] for m in msgs),
                              [self.name(c) for c in ids if c in self.profiles])
-        if line:
-            msgs[0] = {**msgs[0], "content": msgs[0]["content"] + " " + line}
+        if line:  # at the tail, not in the system message: the cached prefix stays identical
+            msgs[-1] = {**msgs[-1], "content": msgs[-1]["content"] + "\n" + line}
         return msgs
 
     # -- shared renderers ---------------------------------------------------------------------
@@ -247,12 +247,18 @@ class ContextBuilder:
         seen = self.log.recent_dialogue(witnessed_by=character, limit=self.history_limit)
 
         known_names = self.names.known_set(character) if self.names else frozenset()
-        parts = [self._scene_header(scene, character)]
+        # Order for prompt caching: what grows slowly first (the character's knowledge, condition),
+        # the scene and what just happened last.
+        parts: list[str] = []
+        core = self.core_text(prof)
+        if core:
+            parts.append(core)
         if mem.knows:
             parts.append("What you know:\n" + "\n".join(self.knowledge_lines(mem)))
         if mem.state:
             parts.append("Your own condition:\n" + "\n".join(
                 f"- {e.category}: {e.item}" for e in mem.state))
+        parts.append(self._scene_header(scene, character))
         if mem.noticed:
             parts.append("You have just noticed:\n" + "\n".join(
                 f"- {self.mask(character, f.content)}" for _, f in mem.noticed))
@@ -294,14 +300,24 @@ class ContextBuilder:
             name=prof.name, character=character,
             finish=lambda m, c=character, k=known_names: self.finish(m, c, k))
 
+    @staticmethod
+    def core_text(prof: CharacterProfile) -> str:
+        """The immutable core of a profile (voice, drives, values), always verbatim (task 19)."""
+        return ("Who you are (fixed, never changes): " + prof.core.strip()) if prof.core.strip() else ""
+
     def heard_line(self, viewer: str, speaker: str, text: str) -> str:
         return f"{self.ref(viewer, speaker)}: {text}"
 
     # -- narrator ----------------------------------------------------------------------------
-    def narrator(self, scene: Scene, player_input: str) -> Messages:
+    def narrator(self, scene: Scene, player_input: str, outcome: str | None = None) -> Messages:
         """The narrator speaks from the player character's perception (`PLAYER` below is the
-        viewer): a person whose name the player character has not learned is only described."""
-        campaign = self.facts.all_campaign(scene.time)
+        viewer): a person whose name the player character has not learned is only described, and
+        a campaign fact that other people know but the player character does not (a rumour
+        version, an authority's reaction, a plan made elsewhere) is not in the context (task 19).
+        Layout for prompt caching: static rules (system), then what grows slowly (campaign
+        state), then the scene and the player's input. `outcome`: the world's judgment of the
+        player's attempt, decided before this prose (harness/outcome.py)."""
+        campaign = [f for f in self.facts.all_campaign(scene.time) if self.player_can_know(f)]
         canon = self.facts.search_canon(
             player_input + " " + scene.location + " " + " ".join(f.content for f in campaign[-5:])
         )
@@ -316,11 +332,12 @@ class ContextBuilder:
                 return f"[action] {self.ref(PLAYER, e.payload['actor'], e.id)}: {e.payload['text']}"
             return f"[{e.type}] {m(e.payload['text'])}"
 
-        parts = [self._scene_header(scene, PLAYER)]
-        if canon:
-            parts.append("Relevant canon:\n" + "\n".join(f"- {m(f.content)}" for f in canon))
+        parts: list[str] = []
         if campaign:
             parts.append("Campaign state:\n" + "\n".join(f"- {m(f.content)}" for f in campaign))
+        if canon:
+            parts.append("Relevant canon:\n" + "\n".join(f"- {m(f.content)}" for f in canon))
+        parts.append(self._scene_header(scene, PLAYER))
         state_lines = [
             f"- {self.ref(PLAYER, c)}: {cat}: {item} ({'observable' if obs else 'hidden'})"
             for c in scene.present
@@ -331,17 +348,21 @@ class ContextBuilder:
         if recent:
             parts.append("Recent events:\n" + "\n".join(fmt(e) for e in recent))
         npcs = ", ".join(f"{c} ({self.ref(PLAYER, c)})" for c in scene.present if c != PLAYER)
+        tail = f"The player does/says: {player_input}\n"
+        if outcome:
+            tail += outcome + "\n"
+        tail += "Narrate what happens next."
         if self.narration == "prose":
-            parts.append(
-                f"The player does/says: {player_input}\nNarrate what happens next.\n\n"
+            rules = (
                 "Write the narration as plain prose and nothing else: no JSON, no lists, no "
                 "headings, no markup. Its length and shape follow the moment (a glance can be a "
                 "sentence, a crisis several paragraphs); do not settle into a fixed pattern. "
                 "Never write speech for anyone but the player: NPC lines are produced "
                 "separately, so no quotation marks and no dialogue dashes; show what a "
                 "character does, not what they say. Do not decide what the player character says, does or feels beyond "
-                "what the player gave."
-                + (f"\nWrite in {self.language}." if self.language else "")
+                "what the player gave. Never narrate people, guards or events the player character "
+                "could not perceive or has not been told of."
+                + (f" Write in {self.language}." if self.language else "")
                 + (f"\n{UNLIMITED_NARRATOR}" if self.player_unlimited else ""))
             system = "You are the narrator of a role-playing game. Write vivid prose."
             if self.style is not None:
@@ -349,14 +370,13 @@ class ContextBuilder:
                 examples = self.style.narrator_examples_section(" ".join([
                     scene.location, player_input, *(f.content for f in campaign[-3:])]))
                 if examples:
-                    parts.insert(-1, examples)
+                    parts.append(examples)
             return self.finish([
-                {"role": "system", "content": system},
-                {"role": "user", "content": "\n\n".join(parts)},
+                {"role": "system", "content": system + "\n\n" + rules},
+                {"role": "user", "content": "\n\n".join(parts + [tail])},
             ], PLAYER)
-        parts.append(
-            f"The player does/says: {player_input}\nNarrate what happens next.\n\n"
-            "Reply with ONE JSON object and nothing else:\n"
+        tail += (
+            "\n\nReply with ONE JSON object and nothing else:\n"
             '{"description": <scene prose, no quoted speech>,\n'
             ' "observable_actions": [<one short sentence per thing a character does that anyone '
             "in the room could see or hear, naming the actor>],\n"
@@ -369,8 +389,14 @@ class ContextBuilder:
         system = "You are the narrator of a role-playing game. Write vivid prose."
         return self.finish([
             {"role": "system", "content": system},
-            {"role": "user", "content": "\n\n".join(parts)},
+            {"role": "user", "content": "\n\n".join([*parts, tail])},
         ], PLAYER)
+
+    @staticmethod
+    def player_can_know(f: Fact) -> bool:
+        """A campaign fact reaches the narrator if the player character knows it, or nobody
+        does (the narrator's own scenery); one that only other people know stays out."""
+        return not f.knowers or any(k.character == PLAYER for k in f.knowers)
 
     # -- director ----------------------------------------------------------------------------
     def director_state(self, scene: Scene, player_input: str, narration: str) -> list[str]:
@@ -394,7 +420,8 @@ class ContextBuilder:
             if g else "", limit=limit)
 
     # -- extractor ---------------------------------------------------------------------------
-    def extractor(self, scene: Scene, segments: list[tuple[str, str]]) -> Messages:
+    def extractor(self, scene: Scene, segments: list[tuple[str, str]],
+                  outcomes: Sequence[str] = ()) -> Messages:
         """segments: (source key, text). Asks for a JSON diff: fact text + source + notability,
         and live-state changes. Knowers are not asked for: code computes perception."""
         who = ", ".join(scene.present + scene.outside)
@@ -425,6 +452,9 @@ class ContextBuilder:
                + ("; names, places and titles stay in Ukrainian as they are written. "
                   if self.glossary else ". ") if self.record_language else "")
             + (UNLIMITED_EXTRACTOR + "\n" if self.player_unlimited else "")
+            + ("\n".join(outcomes) + "\nRecord what really happened (a failed attempt did not "
+               "succeed; its consequences are facts and state changes), not what was hoped.\n"
+               if outcomes else "")
             + "Current state:\n" + ("\n".join(cur) if cur else "- (none)")
         )
         return self.finish([
