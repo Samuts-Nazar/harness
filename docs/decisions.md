@@ -6,6 +6,7 @@ Status: closed decisions only. Anything not listed here is undecided. Do not des
 
 - A world-agnostic engine for single-player AI role-playing games. The Witcher (book canon) is the first world.
 - An AI game, not an AI chat. The target is a world simulation, not a game interface with a fixed parameter sheet.
+- The long-term target: the player plays only their own character and can live that character's whole life in Sapkowski's world, doing no less than what the saga contains.
 - Open simulation: the player can attempt anything a person could do in that world. No action is a special mechanic or a dedicated feature (starting a rumour, bribing, lying are ordinary actions).
 - World behaviour follows reality, judged per situation by scale and circumstances, not by fixed rules. Examples: news may arrive before the hero or never arrive; rumours may distort while the truth and several versions coexist; whether a rumour has a concrete source, and how fast a reputation fades, depends on how big the event was and what happened since.
 - Own application. Not built on SillyTavern or another chat frontend.
@@ -19,7 +20,7 @@ Status: closed decisions only. Anything not listed here is undecided. Do not des
 
 - Paid API calls use cheap models only: input price at most 0.60 USD and output at most 2.50 USD per million tokens. Flagship-class models are never called over the API.
 - No Anthropic models in the engine.
-- The model for each role is chosen by a bake-off on our own tasks, from the live OpenRouter catalog, never from memory. The bake-off is re-run when notable new models appear.
+- The model for each role is chosen by a bake-off on our own tasks, from the live OpenRouter catalog, never from memory. The bake-off is re-run when notable new models appear. Current choices live in `docs/tools.md`.
 - Free (`:free`) models may be tested and used, but never as the only option for a role, because they disappear.
 - Strong-model judging in development is done by the Claude Code agent itself, never over the API.
 - Tests and demos use the fake provider by default; network only with `--live`.
@@ -27,34 +28,48 @@ Status: closed decisions only. Anything not listed here is undecided. Do not des
 ## Core architecture
 
 - Code owns world state. LLMs never write state directly.
-- Turn loop: a narrator LLM writes description; each speaking NPC's line comes from a separate call with that NPC's isolated context; an extractor LLM proposes new facts as a JSON diff; typed judgments decide narrow questions; code validates and stores.
-- The narrator never writes NPC speech. It outputs description and which characters speak next. NPC lines come only from NPC calls. A narrator output that contains NPC speech is rejected and regenerated.
+- Turn loop: the outcome of what the player attempts is judged first (see Outcomes); then a narrator LLM writes description; each speaking NPC's line comes from a separate call with that NPC's isolated context; an extractor LLM proposes new facts as a JSON diff; typed judgments decide narrow questions; code validates and stores.
+- Player-facing text must not follow a visible pattern. Narrator and NPC calls write free prose only, with no JSON contract on creative calls. Who speaks next and which observable actions happened are derived by separate steps (a scene director using typed judgments, and the extractor).
+- The narrator never writes NPC speech. NPC lines come only from NPC calls. A narrator output that contains NPC speech is rejected and regenerated. An NPC call may write that NPC's own small actions and manner around its speech (a glance, a lowered voice), never anyone else's actions or speech, and never the player character's.
 - State is an append-only event log; current state is derived from it. This is required for rollback.
 - Records are open-ended: a fact is free text plus metadata (when, where, who knows it and how, its source, notability). No fixed attribute sheet; panel categories are tags on open records, not a schema.
 - Every record carries two times: in-world time (when it happened or became true) and log time (when it was written). Records computed lazily about the past (what an NPC heard on day 12, written on day 40) are legal.
 - A record derived from another record or from a piece of text stores a link to its origin. Rollback removes everything derived from removed text, directly or transitively.
+- The language of records is an engine detail. Names, places and titles are never distorted: one canonical form per name (the Ukrainian translation's form for the Witcher), applied in code when records are written and when context is rendered, so every model always sees one form.
 
 ## Judgments
 
-- Narrow judgments go to Jev first (typed yes/no, choice, or score with probabilities). If Jev's probability for its answer is below 0.8, the same question is escalated to a cheap LLM from the allowed list. Relationship-magnitude judgments go to the LLM directly (Jev was weak there).
-- Several questions about the same state are batched into one Jev call.
-- Jev cannot write text; open questions are re-expressed as choices from a closed list.
+- Narrow judgments go to a typed decision model first (yes/no, choice, or score with probabilities). If its probability for its answer is below 0.8, the same question is escalated to a cheap LLM. Relationship-magnitude judgments go to the LLM directly.
+- Several questions about the same state are batched into one call.
+- Decision models cannot write text; open questions are re-expressed as choices from a closed list.
+
+## Outcomes
+
+- The player decides what the character does and attempts. Whether it works is judged by the world per situation, before any prose is written. No dice, no stats, no success tables: one judgment that may say yes, partly or no, with its reason stored.
+- Failure is real and has consequences in world state. The death of the player character ends the campaign.
+- A campaign may mark the player character as unbounded (used for the Vizima pilot): then the player's own acts always happen as declared, and only the world's reactions are judged.
 
 ## Player character
 
 - The player character is the player's persona. Only the player decides what the character says, does, believes and intends. No component writes these for the player.
-- The world can fully affect the character (wounds, poison, fear, magic, perception) and through it the player.
+- The world sets the character's body (wounds, pain as a physical signal, poison, fatigue, intoxication, illness), senses (what is seen and heard, including hallucinations) and external facts (being wanted, robbed). Emotions, how an event affected the character, trauma, attitudes and meaning belong to the player only; the narrator never assigns them, and the character's inner state in the panel comes only from what the player wrote. NPCs react to the character's observable behaviour, not to an assumed inner state. The turn assistant suggests actions, not feelings.
+- Mind magic (a sorceress's control, a djinn's wish) is a world law like poison: only from an explicit in-world cause, recorded as a timed effect. Whether the character resists is judged per situation (the caster's power, the target's nature, circumstances), not by a fixed rule. While under it, the player still writes, as attempts to resist and remnants of the character's own mind; how much breaks through depends on the spell's strength (under a strong spell the body follows the caster and the narrator describes it). Feelings induced by the spell are part of the effect; after it ends, the character's attitude is the player's again.
 - Toward everyone else, the player character is a being of the world like any other: information from the player character is treated exactly like information from anyone else.
+- The player character's observable appearance and hidden traits come from the player's character file at campaign start, as live state.
+- Player input: text in `*asterisks*` is an action (observable under normal perception rules), the rest is speech. The player's words are kept verbatim.
 
 ## Knowledge and characters
 
-- Epistemic isolation is enforced at retrieval, in code: a character's context contains only what that character perceived or was told. The same applies to collectives (towns, factions): they react to their version of an event, not to the truth.
-- Every NPC line is checked before it is shown: does it contain a claim this character had no channel to learn? If yes, it is regenerated. This also catches knowledge the model brings from pretraining (the model has read the books).
+- Epistemic isolation is enforced at retrieval, in code: a character's context contains only what that character perceived, was told, or knows from their own life. The same applies to collectives (towns, factions): they react to their version of an event, not to the truth. The narrator speaks from the player character's perception and gets the same filter.
+- Background knowledge from life: a character knows what follows from their life (age, occupation and years in it, place, standing, connections). A child knows little; an innkeeper of ten years knows locals, prices and many rumours, often distorted; an aristocrat knows the court and politics. It is computed lazily when a topic comes up and stored as a knowledge record with source "own life" and an in-world time, so the answer stays consistent. Rumour versions come from what reached that place. Secrets never come through this channel.
+- A name is knowledge like any other: a character knows another's name only through a channel (introduction, overhearing, being told, prior acquaintance, canon). Until then the person is rendered by what can be observed.
+- Every NPC line and every narration is checked before it is shown: does it contain a claim or a name the speaker had no channel to learn? If yes, it is regenerated. This also catches knowledge the model brings from pretraining (the model has read the books).
+- What an NPC says is stored as "X said Y" (an asserted claim), never as world truth; the truth is a separate record. If the world has not decided the matter yet, the truth is settled lazily when it matters, by plausibility (what is known about the speaker, their source, the regional situation).
 - Who perceived an event is computed in code from scene state (who is present, what is visible or audible to them), not taken from the extractor. The extractor proposes only the fact text. Characters present perceive observable actions described in narration (a drawn sword), not only spoken lines.
 - Every piece of knowledge records its source ("heard from X"). How much a character believes something depends on that character's trust and relationship with the source; the belief model itself is not decided yet.
 - Information spreads by notability: quiet events stay with witnesses; loud events travel with time and distance and reach places the player has not visited. Different characters hold different attitudes toward the same event. Attitudes are stored separately from facts and point to the facts they are about.
 - An NPC must not comment on something it had no channel to learn, and should not comment on something it would not care about (salience is a separate judgment).
-- Two-level simulation: the world as a whole is simulated cheaply (records plus judgments, no agents). A character becomes a persistent agent once the player has interacted with it. In a scene the agent is fully active (own memory, goals, character). Off-screen it receives cheap periodic updates; how detailed these are depends on measured cost (not decided).
+- Two-level simulation: the world as a whole is simulated cheaply (records plus judgments, no agents). A character becomes a persistent agent once the player has interacted with it. In a scene the agent is fully active (own memory, goals, character). Off-screen it receives cheap periodic updates; how detailed these are depends on measured cost.
 
 ## Character memory and live state
 
@@ -68,21 +83,25 @@ Status: closed decisions only. Anything not listed here is undecided. Do not des
 ## Canon
 
 - Two stores: an immutable canon store (source texts, world rules, pre-campaign history) and a mutable campaign store (events of play).
+- Canon is the world's starting state and its gravity, not a script. Canon events happen while their preconditions hold; when the player changes them, the event is re-judged (as written, differently, or not at all). The further from the player, the longer the world follows the books. Because of the butterfly effect, most of what happens alongside the saga, and everything after it, is the campaign's own invention.
 - A narrated output that contradicts canon is checked against the campaign store. If a campaign event explains the deviation, it is justified drift and accepted. Otherwise it is a hallucination: reject and regenerate.
 - The canon store is too large for any single context; canon reaches judgments and narration through retrieval of relevant passages.
 - Canon pull is proportional to the deviation: small acts do not change big events; large or logically connected changes can, when the consequence is logical and fitting.
-- The books get a one-off structured ingestion (who, what, how others reacted) to make later play cheaper and more accurate.
+- The books get a one-off structured ingestion (who, what, when, where, who knew and how, how others reacted) to make later play cheaper and more accurate. It is piloted on one arc first (book "Останнє бажання": "Голос розуму-1" and the story "Відьмак"), checked record by record and played; only when the result satisfies the user does it extend to the rest of book 1, then the whole saga.
 
 ## Interaction
 
 - Interruption is a button. Narration streams at speaking pace so interruption points are meaningful.
 - "Said" means delivered to the player (displayed or heard), not generated.
-- Retroactive interruption: after an NPC finishes, the player may pick a point inside that NPC's last utterance and interrupt there. The window is the last NPC utterance only.
+- Retroactive interruption: after an NPC finishes, the player may pick a point inside that NPC's last utterance and interrupt there. The window is the last NPC utterance only, and it closes as soon as the next event starts (the player sends a turn, another NPC speaks, or the world acts). Until then that utterance is not final: its facts are stored but can be rolled back.
 - On interruption, everything after the cut point was never said. Any state extracted from the removed part is rolled back. The event "player interrupted X at words Y" is recorded and is visible to everyone present under normal perception rules.
 - The NPC keeps the unsaid remainder as a private intent (it remembers what it meant to say and may return to it later).
 - Choices are final: rewind and "what if" exist only in the debug view.
 - Model errors are not the player's consequences. A "model error" action in normal play requires the player to say what was wrong; only the last world output is regenerated with that explanation, the player's turn stays. The explanation is stored per campaign and fed to later generations so the error is not repeated.
-- Time: two modes will be built and compared in play: turn-based (world waits for the player) and flowing (silence counts as time passing). In both, the world stops when the app is in the background. A world that lives without the player is a future idea.
+- "How does he know that?": the player can mark an NPC line as knowledge the character could not have. The engine checks the speaker's channels. No channel: the line is treated as a model error (regenerated, explanation stored). A channel exists: the player is told how the character knows it; in play only the kind of channel and a rough time are shown, the full event is behind a "show (spoiler)" tap and in the debug view.
+- A model error found later in an old record is fixed by a correction, not a rewind: the record is marked wrong, records derived from it become stale and are recomputed lazily; the player's choices and what already happened stay.
+- Scene modes. Base mode: no queue or rounds; after each event a scene director decides who, if anyone, speaks or acts, from character, situation, who was addressed and interest; silence is possible; the world waits for the player as long as needed. Live scene: a toggle that can be switched on or off mid-scene; real time runs and nobody waits; characters may arrive, leave on their business or get distracted; the player presses "Говорю" to speak or act; silence when addressed is the character's silence in the world, and NPCs react to it. While the player types after "Говорю", the world gives a natural pause (an impatient NPC may cut in); its length is tuned in play.
+- In both modes the world stops when the app is in the background.
 - Quick reactions while an NPC speaks and tappable names and items in the text are to be prototyped and judged in practice.
 
 ## Turn assistant
@@ -99,7 +118,3 @@ Status: closed decisions only. Anything not listed here is undecided. Do not des
 ## Not in the first version
 
 - Music, voice, images.
-
-## Mechanics
-
-- Not decided. Do not implement dice, stats, or success rules.
