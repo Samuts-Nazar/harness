@@ -45,7 +45,10 @@ class OpenRouterProvider:
     def __init__(self, api_key: str | None = None, timeout: float = 120.0,
                  spend: Spend | None = None, *, client: httpx.Client | None = None,
                  retries: int = 4, backoff: float = 1.0,
-                 sleep: Callable[[float], None] = time.sleep) -> None:
+                 sleep: Callable[[float], None] = time.sleep,
+                 session_id: str | None = None) -> None:
+        """`session_id`: OpenRouter sticky routing (up to 256 characters; the same session goes
+        to the same provider endpoint for about ten idle minutes, so the prompt cache is hit)."""
         key = api_key or os.environ.get("OPENROUTER_API_KEY")
         if not key:
             raise RuntimeError("OPENROUTER_API_KEY is not set")
@@ -53,6 +56,7 @@ class OpenRouterProvider:
         self._client = client or httpx.Client(timeout=timeout)
         self.spend = spend or Spend()
         self.retries, self.backoff, self._sleep = retries, backoff, sleep
+        self.session_id = session_id[:256] if session_id else None
 
     def _post(self, body: dict) -> httpx.Response:  # type: ignore[type-arg]
         return send_with_retry(
@@ -64,6 +68,8 @@ class OpenRouterProvider:
         self.spend.check()
         body: dict = {"model": model, "messages": messages,  # type: ignore[type-arg]
                       "reasoning": {"enabled": False}}  # short outputs; no hidden thinking tokens
+        if self.session_id:
+            body["session_id"] = self.session_id
         try:
             r = self._post(body)
             if r.status_code == 400:  # a model that insists on reasoning: retry with defaults
@@ -82,6 +88,8 @@ class OpenRouterProvider:
         check_model(model)
         self.spend.check()
         body = {"model": model, "messages": messages, "stream": True}
+        if self.session_id:
+            body["session_id"] = self.session_id
         resp = None
         try:
             for attempt in range(self.retries + 1):

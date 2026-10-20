@@ -831,11 +831,15 @@ class World:
             return Plan()
         return Plan(str(got["duration"].answer), str(got["move"].answer), str(got["wait"].answer))
 
-    def play(self, text: str, **turn_kw: Any) -> WorldTurn:
+    def play(self, text: str, *, defer_slow: bool = False, **turn_kw: Any) -> WorldTurn:
         """One player turn in the world: interpret it, travel or wait if it says so, let the people
         here hear what has reached them, run the scene turn, register what became news, and let
         the world catch up for the minutes the turn took."""
         eng = self.eng
+        if eng.ended:
+            from ..outcome import CampaignEnded
+            raise CampaignEnded("the player character is dead; the campaign is read-only")
+        eng._settle_for_next_turn()  # the world below needs the last turn's facts and news
         first = max((e.id for e in eng.log.active()), default=0)
         plan = self.interpret(text)
         wt = WorldTurn(None, plan, first_event=first)
@@ -860,13 +864,20 @@ class World:
             turn_minutes = min(turn_minutes, 5)
         saved, eng.minutes_per_turn = eng.minutes_per_turn, turn_minutes
         try:
-            wt.result = eng.turn(text, **turn_kw)
+            wt.result = eng.turn(text, defer_slow=defer_slow, **turn_kw)
         finally:
             eng.minutes_per_turn = saved
-        wt.news = self.register_news(wt.result.fact_ids)
-        stop = self.tick(eng.scene.time, interruptible=True)
-        wt.interrupted_by = wt.interrupted_by or stop
-        self.refresh_place()
+
+        def after() -> None:  # the slow lane of the world: what became news, the catch-up
+            wt.news = self.register_news(wt.result.fact_ids)
+            stop = self.tick(eng.scene.time, interruptible=True)
+            wt.interrupted_by = wt.interrupted_by or stop
+            self.refresh_place()
+
+        if defer_slow:
+            eng.after_settle.append(after)
+        else:
+            after()
         return wt
 
     # -- the debug view ("світ") ----------------------------------------------------------------

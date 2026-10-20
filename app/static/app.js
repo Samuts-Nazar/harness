@@ -118,6 +118,7 @@ function render(state) {
   }
   setPanel(state.panel);
   feed.scrollTop = feed.scrollHeight;
+  if (state.ended) showFinale(state.chronicle); else $("finale").hidden = true;
 }
 
 const handlers = {
@@ -144,8 +145,35 @@ const handlers = {
     setBusy(false); showError(e.message);
     if (!$("debugPanel").hidden) loadDebug();
   },
+  settled(e) {            // the slow lane is done: the panel now shows what the turn changed
+    $("clock").textContent = e.clock + tag;
+    setPanel(e.panel);
+    if (!$("debugPanel").hidden) loadDebug();
+  },
+  retract(e) {            // the bookkeeping of the turn failed after the player had read it
+    for (const n of turnEls) n.remove();
+    turnEls = []; cur = null;
+    $("input").value = e.text; syncSend();
+    setBusy(false); showError(e.message);
+  },
+  ended(e) { showFinale(e.chronicle); },
   reset() {},
 };
+
+// the player character died: a final chronicle, the campaign is read-only
+function showFinale(lines) {
+  const box = $("finaleBody"); box.textContent = "";
+  for (const l of lines || []) {
+    const cls = l.kind === "death" ? "death" : l.kind === "outcome" ? "outcome" : l.kind === "line" ? "npc" : "narr";
+    const p = el("p", cls);
+    if (l.kind === "line") p.append(el("span", "who", l.who), el("span", "w", l.text));
+    else p.textContent = l.text;
+    box.appendChild(p);
+  }
+  $("finale").hidden = false;
+  $("composer").hidden = true;
+  $("dockBusy").hidden = true;
+}
 
 function connect(after) {
   if (es) es.close();
@@ -181,7 +209,7 @@ $("composer").addEventListener("submit", async (ev) => {
   showError("");
   setBusy(true, "thinking");
   const r = await fetch("/api/turn", { method: "POST", body: JSON.stringify({ text }) });
-  if (!r.ok) { setBusy(false); showError((await r.json()).error || "Помилка."); }
+  if (!r.ok) { setBusy(false); const d = await r.json(); showError(d.error || "Помилка."); if (d.ended) load(); }
 });
 $("btnInterrupt").addEventListener("click", () => fetch("/api/interrupt", { method: "POST" }));
 
@@ -220,7 +248,9 @@ async function loadDebug() {
   const tm = d.timing;
   body.appendChild(section("Хід", [
     ["до першого слова", tm.first_word_s == null ? "—" : tm.first_word_s + " с"],
-    ["весь хід", tm.total_s + " с"],
+    ["весь хід (до кінця тексту)", tm.total_s + " с"],
+    ["повільна смуга (поки читаєш)", (tm.slow_s || 0) + " с"],
+    ["очікування попередньої смуги", (tm.waited_s || 0) + " с"],
     ["вартість", "$" + d.cost.toFixed(4)],
     ...(d.error ? [["помилка", d.error]] : []),
   ]));
@@ -307,3 +337,8 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("pagehide", () => presence(false));
 
 load();
+
+$("btnNewFinale").addEventListener("click", async () => {
+  const r = await fetch("/api/campaign/new", { method: "POST" });
+  if (r.ok) { $("finale").hidden = true; load(); }
+});

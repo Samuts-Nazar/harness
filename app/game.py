@@ -14,6 +14,8 @@ from typing import Any, Callable
 from harness.models import PLAYER, format_time
 from harness.streaming import InterruptHandle
 
+from harness.outcome import CampaignEnded
+
 from .campaigns import Campaign
 
 CATEGORY_UK = {"injury": "тіло", "clothing": "одяг", "inventory": "речі",
@@ -22,6 +24,10 @@ CATEGORY_UK = {"injury": "тіло", "clothing": "одяг", "inventory": "ре�
 
 class Busy(RuntimeError):
     pass
+
+
+class Ended(RuntimeError):
+    """The player character is dead: the campaign is read-only."""
 
 
 def clock(t: int) -> str:
@@ -53,6 +59,7 @@ class Game:
         self.seq = 0
         self.events: list[dict[str, Any]] = []
         self.thread: threading.Thread | None = None
+        self.threads: list[threading.Thread] = []
         self.challenging = False
         self.reset(new=False)
 
@@ -123,6 +130,7 @@ class Game:
                 "title": self.camp.title, "live": self.camp.live, "clock": self.clock(),
                 "transcript": list(self.transcript), "panel": self.panel(),
                 "running": self.running, "phase": self.phase,
+                "ended": self.eng.ended, "chronicle": self.chronicle() if self.eng.ended else [],
                 # a client replays everything after this; for an idle game that is nothing
                 "resume_after": self.turn_start_seq if self.running else self.seq,
                 "pending_turn": getattr(self, "pending", None) if self.running else None,
@@ -130,6 +138,11 @@ class Game:
 
     def clock(self) -> str:
         return clock(self.eng.scene.time)
+
+    def chronicle(self) -> list[dict[str, Any]]:
+        """The final chronicle screen after the death of the player character."""
+        from harness.outcome import chronicle
+        return chronicle(self.eng)
 
     # -- presence (the world pauses while the app is in the background) ---------------------
     def set_visible(self, visible: bool) -> None:
@@ -141,7 +154,10 @@ class Game:
         if not text:
             raise ValueError("empty input")
         with self.lock:
-            if self.running or self.challenging:
+            if self.eng.ended:
+                raise Ended("the character is dead; the campaign is read-only")
+            # a turn may start while the slow lane of the last one still runs (it waits for it)
+            if self.phase != "idle" or self.challenging:
                 raise Busy("a turn is already running")
             self.pending = text
             self.phase = "thinking"
@@ -149,6 +165,7 @@ class Game:
             self.events = []
             self._emit("turn_start", text=text)
             self.thread = threading.Thread(target=self._run, args=(text,), daemon=True)
+            self.threads = [t for t in self.threads if t.is_alive()] + [self.thread]
             self.thread.start()
 
     # -- "how does he know that?" ------------------------------------------------------------
@@ -205,6 +222,8 @@ class Game:
     def _run(self, text: str) -> None:
         eng, rec, spend = self.eng, self.camp.recorder, self.camp.spend
         t0 = time.monotonic()
+        eng._settle_for_next_turn()  # the slow lane of the last turn, if it is still running
+        waited = round(time.monotonic() - t0, 2)
         marks = {"calls": len(rec.calls), "dev": len(eng.devlog),
                  "judg": len(eng.judgments.entries), "cost": getattr(spend, "total", 0.0)}
         first_word: list[float] = []
@@ -245,14 +264,17 @@ class Game:
         self.skip_narration = False
         try:
             if world is not None:  # the world interprets the turn (trip, wait) and catches up
-                r = world.play(text, handle=self.handle, on_word=on_word,
+                r = world.play(text, defer_slow=True, handle=self.handle, on_word=on_word,
                                on_narration=on_narration).result
             else:
-                r = eng.turn(text, handle=self.handle, on_word=on_word, on_narration=on_narration)
+                r = eng.turn(text, handle=self.handle, on_word=on_word, on_narration=on_narration,
+                             defer_slow=True)
         except BaseException as e:  # noqa: BLE001 - shown to the player, the input is kept
             self.phase = "idle"
             self._emit("error", message=explain(e), text=text, detail=type(e).__name__)
             self._save_debug(marks, new_events, t0, first_word, error=repr(e)[:300])
+            if isinstance(e, CampaignEnded):
+                self._emit("ended", chronicle=self.chronicle())
             return
         finally:
             unsubscribe()
@@ -264,15 +286,29 @@ class Game:
                 en["event"] = next(line_events, None)
         if narr_words:
             entries.insert(1, {"kind": "narr", "text": " ".join(narr_words)})
+        fast_s = round(time.monotonic() - t0, 2)
         with self.lock:
             self.transcript += entries
-            self.phase = "idle"
-            self._save_debug(marks, new_events, t0, first_word, report=eng.reports[-1])
+            self.phase = "idle"  # the player can read and type now; bookkeeping goes on below
+            self._emit("turn_done", interrupted=r.interrupted, clock=self.clock(),
+                       panel=self._panel, lines=[u.id for u in r.utterances], settling=True)
+        # the slow lane: extraction, salience, attitudes, world catch-up (while the player reads)
+        eng.settle()
+        failure, eng.slow_failure = eng.slow_failure, None
+        with self.lock:
+            if failure is not None:
+                del self.transcript[len(self.transcript) - len(entries) - (1 if narr_words else 0):]
+                self._save_debug(marks, new_events, t0, first_word, error=repr(failure)[:300])
+                self._emit("retract", message=explain(failure), text=text)
+                return
+            self._save_debug(marks, new_events, t0, first_word, report=eng.reports[-1],
+                             fast_s=fast_s, waited=waited)
             if world is not None:
                 self.debug = {**self.debug, "world": world.report(since)}
             self._panel = self._compute_panel()
-            self._emit("turn_done", interrupted=r.interrupted, clock=self.clock(),
-                       panel=self._panel, lines=[u.id for u in r.utterances])
+            self._emit("settled", panel=self._panel, clock=self.clock())
+            if eng.ended:
+                self._emit("ended", chronicle=self.chronicle())
 
     def _stream_narration(self, text: str, spoken: list[str], stamp: Callable[[], None]) -> None:
         self.phase = "narrating"
@@ -291,7 +327,8 @@ class Game:
 
     def _save_debug(self, marks: dict[str, Any], new_events: list[dict[str, Any]], t0: float,
                     first_word: list[float], error: str | None = None,
-                    report: dict[str, Any] | None = None) -> None:
+                    report: dict[str, Any] | None = None, fast_s: float | None = None,
+                    waited: float = 0.0) -> None:
         eng, rec, spend = self.eng, self.camp.recorder, self.camp.spend
         self.debug = {
             "events": new_events,
@@ -299,7 +336,11 @@ class Game:
             "calls": rec.calls[marks["calls"]:],
             "notes": eng.devlog[marks["dev"]:],
             "timing": {"first_word_s": first_word[0] if first_word else None,
-                       "total_s": round(time.monotonic() - t0, 2)},
+                       # total_s: until the player has everything to read; slow_s: the slow lane
+                       "total_s": fast_s if fast_s is not None else round(time.monotonic() - t0, 2),
+                       "slow_s": round(time.monotonic() - t0 - fast_s, 2) if fast_s else 0.0,
+                       "waited_s": waited},
+            "lanes": eng.lane_stats[-1] if eng.lane_stats else None,
             "cost": round(getattr(spend, "total", 0.0) - marks["cost"], 6),
             "error": error,
             "repetition": (report or {}).get("repetition"),
@@ -308,6 +349,6 @@ class Game:
         }
 
     def wait_idle(self, timeout: float = 30.0) -> None:
-        t = self.thread
-        if t is not None:
+        """Until the turn and its slow lane are done."""
+        for t in list(self.threads) or ([self.thread] if self.thread else []):
             t.join(timeout)

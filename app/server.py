@@ -16,7 +16,7 @@ from starlette.responses import FileResponse, JSONResponse, StreamingResponse
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from .game import Busy, Game, explain
+from .game import Busy, Ended, Game, explain
 
 STATIC = Path(__file__).parent / "static"
 KEEPALIVE = 15.0
@@ -35,6 +35,9 @@ def create_app(game: Game) -> Starlette:
             game.start_turn(str(body.get("text", "")))
         except Busy:
             return JSONResponse({"error": "Хід уже триває."}, status_code=409)
+        except Ended:
+            return JSONResponse({"error": "Персонаж загинув. Кампанію завершено.",
+                                 "ended": True}, status_code=423)
         except ValueError:
             return JSONResponse({"error": "Порожній хід."}, status_code=400)
         return JSONResponse({"ok": True}, status_code=202)
