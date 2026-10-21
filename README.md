@@ -62,6 +62,22 @@ The connection allows use from several threads; the caller must run one turn at 
    speech reaches listeners as "told by X". State changes are validated against current state.
 5. Commit; rewrite the memory files.
 
+## How many decisions per action
+
+Every turn counts its decisions (`TurnResult.decisions`, `harness/decisions.py`): typed judgments,
+model calls by role and code-made choices; the debug view and `Engine.last_decisions` show them.
+Measured live (`python -m experiments.dialogue.live_check run all`, then `report` / `decisions`):
+
+- a living-dialogue turn with no NPC line: about 12 decisions; with one line: about 14; with a
+  4-6-line exchange: about 44 (classic: about 17 per turn, always one line);
+- 20-turn inn sessions: 310-408 decisions in living mode, 323-373 in classic; reference scenes
+  (5 turns each, long exchanges): 131-226.
+
+Tables and the per-scene and per-session breakdown: `reports/decisions_count.md`; the dialogue
+numbers against the world profile and the verdict: `reports/dialogue/SUMMARY.md`. The A/B page
+(`/static/ab.html`, key in `reports/dialogue/ab_key.json`) compares the classic and living engines
+(`python -m app --dialogue classic`).
+
 ## Modules
 
 - `db.py`, `eventlog.py` — append-only event log; rollback is a marker that cascades via `cause_id`.

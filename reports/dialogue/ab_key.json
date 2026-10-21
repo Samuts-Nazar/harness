@@ -1,0 +1,72 @@
+[
+ {
+  "pair": 1,
+  "session": "A",
+  "turn": 1,
+  "A": "classic",
+  "B": "living"
+ },
+ {
+  "pair": 2,
+  "session": "A",
+  "turn": 2,
+  "A": "living",
+  "B": "classic"
+ },
+ {
+  "pair": 3,
+  "session": "A",
+  "turn": 3,
+  "A": "classic",
+  "B": "living"
+ },
+ {
+  "pair": 4,
+  "session": "A",
+  "turn": 4,
+  "A": "living",
+  "B": "classic"
+ },
+ {
+  "pair": 5,
+  "session": "A",
+  "turn": 5,
+  "A": "living",
+  "B": "classic"
+ },
+ {
+  "pair": 6,
+  "session": "B",
+  "turn": 1,
+  "A": "living",
+  "B": "classic"
+ },
+ {
+  "pair": 7,
+  "session": "B",
+  "turn": 2,
+  "A": "classic",
+  "B": "living"
+ },
+ {
+  "pair": 8,
+  "session": "B",
+  "turn": 3,
+  "A": "living",
+  "B": "classic"
+ },
+ {
+  "pair": 9,
+  "session": "B",
+  "turn": 4,
+  "A": "living",
+  "B": "classic"
+ },
+ {
+  "pair": 10,
+  "session": "B",
+  "turn": 5,
+  "A": "classic",
+  "B": "living"
+ }
+]
