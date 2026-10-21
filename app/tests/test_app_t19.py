@@ -78,3 +78,13 @@ def test_vizima_on_the_real_canon_store(tmp_path):
     assert "velerad" in eng.profiles and eng.profiles["velerad"].name == "Велерад"
     assert any(f for f in eng.facts.visible_to("velerad", eng.scene.time, store="canon"))
     assert set(g.camp.world.collectives) == {"vizim_townsfolk", "vizim_guards", "velerad", "foltest"}
+
+
+def test_scene_totals_attribute_a_turn_to_its_starting_location(tmp_path):
+    from harness.decisions import DecisionCount
+    g = make(tmp_path)
+    one = DecisionCount(1, 0, {}, 0)
+    g._decisions(one, "inn")
+    g._decisions(one, "inn")
+    out = g._decisions(one, "road")  # a turn that began on the road, wherever it ended
+    assert out["scene"]["judgments"] == 1 and out["session"]["judgments"] == 3

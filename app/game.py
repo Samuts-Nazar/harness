@@ -11,7 +11,7 @@ import threading
 import time
 from typing import Any, Callable
 
-from harness.decisions import DecisionCount, aggregate
+from harness.decisions import DecisionCount, aggregate, count_since
 from harness.models import PLAYER, format_time
 from harness.streaming import InterruptHandle
 
@@ -227,7 +227,9 @@ class Game:
         eng._settle_for_next_turn()  # the slow lane of the last turn, if it is still running
         waited = round(time.monotonic() - t0, 2)
         marks = {"calls": len(rec.calls), "dev": len(eng.devlog),
-                 "judg": len(eng.judgments.entries), "cost": getattr(spend, "total", 0.0)}
+                 "judg": len(eng.judgments.entries), "where": eng.scene.location,
+                 "llm": len(eng.llm_calls),
+                 "cost": getattr(spend, "total", 0.0)}
         first_word: list[float] = []
         new_events: list[dict[str, Any]] = []
         entries: list[dict[str, Any]] = [{"kind": "player", "text": text}]
@@ -304,7 +306,7 @@ class Game:
                 self._emit("retract", message=explain(failure), text=text)
                 return
             self._save_debug(marks, new_events, t0, first_word, report=eng.reports[-1],
-                             fast_s=fast_s, waited=waited, decisions=r.decisions)
+                             fast_s=fast_s, waited=waited)
             if world is not None:
                 self.debug = {**self.debug, "world": world.report(since)}
             self._panel = self._compute_panel()
@@ -327,11 +329,10 @@ class Game:
         self._emit("narr_end", cut=self.skip_narration)
         self.phase = "thinking"
 
-    def _decisions(self, turn: DecisionCount | None) -> dict[str, Any] | None:
+    def _decisions(self, turn: DecisionCount | None, where: str) -> dict[str, Any] | None:
         """The turn's decision count with the running scene (same location) and session totals."""
         if turn is None:
             return None
-        where = self.eng.scene.location
         self.decision_log.append((where, turn))
         scene = []
         for loc, d in reversed(self.decision_log):
@@ -344,7 +345,7 @@ class Game:
     def _save_debug(self, marks: dict[str, Any], new_events: list[dict[str, Any]], t0: float,
                     first_word: list[float], error: str | None = None,
                     report: dict[str, Any] | None = None, fast_s: float | None = None,
-                    waited: float = 0.0, decisions: DecisionCount | None = None) -> None:
+                    waited: float = 0.0) -> None:
         eng, rec, spend = self.eng, self.camp.recorder, self.camp.spend
         self.debug = {
             "events": new_events,
@@ -362,7 +363,8 @@ class Game:
             "repetition": (report or {}).get("repetition"),
             "names": (report or {}).get("names"),
             "parallel": eng.parallel,
-            "decisions": self._decisions(decisions),
+            "decisions": self._decisions(
+                count_since(eng, 0, marks["judg"], marks["llm"], marks["dev"]), marks["where"]),
         }
 
     def wait_idle(self, timeout: float = 30.0) -> None:

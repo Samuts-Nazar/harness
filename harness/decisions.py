@@ -4,7 +4,7 @@ A decision is one of:
 - a typed judgment (`JudgmentLog` entry); `escalations` is how many of them went from the
   first-line decider to the LLM;
 - a model call, counted per role (`llm_calls_by_role`: narrator, npc, extractor, ...), read from
-  the provider's `calls` list (the app's `Recorder` keeps dicts, `FakeProvider` keeps tuples);
+  `Engine.llm_calls` (one role per attempt, recorded in `Engine._complete`, so any provider is counted);
 - a code-made choice: a note the engine logs in `engine.devlog` whose kind is in
   `CODE_CHOICE_KINDS`. Later tasks (shape trimming, exchange cap stops) add their note kinds to
   that set; `code_choices` is the number of such notes in the turn.
@@ -67,25 +67,14 @@ def full_role(messages: list[dict[str, str]]) -> str:
     return "judge"
 
 
-def _role(call: Any) -> str:
-    """Coarse role of one recorded call; an unrecognised record counts as "llm", never raises."""
-    try:
-        role = call.get("role", "judge") if isinstance(call, dict) else full_role(call[1])
-    except (TypeError, KeyError, IndexError, AttributeError):
-        return "llm"
-    return role.split(":")[0].strip()
-
-
 def count_since(engine: "Engine", first_event_id: int, judgment_mark: int, call_mark: int,
                 note_mark: int = 0) -> DecisionCount:
     """Decisions made since the marks (list lengths taken when the turn began).
     `first_event_id` is the turn's first event; the counts do not need it today, it is part of
     the interface so a count can be tied to the events it covers."""
     entries = engine.judgments.entries[judgment_mark:]
-    calls = getattr(engine.provider, "calls", None)
     by_role: dict[str, int] = {}
-    for c in (calls[call_mark:] if isinstance(calls, list) else []):
-        r = _role(c)
+    for r in engine.llm_calls[call_mark:]:
         by_role[r] = by_role.get(r, 0) + 1
     notes = engine.devlog[note_mark:]
     return DecisionCount(

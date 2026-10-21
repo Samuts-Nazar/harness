@@ -289,6 +289,8 @@ class Engine:
         self._slow_lock = threading.RLock()
         self.slow_failure: BaseException | None = None
         self.after_settle: list[Callable[[], None]] = []  # run after the slow lane (the world)
+        self.llm_calls: list[str] = []  # role of every model call attempt (harness/decisions.py)
+        self.last_decisions: DecisionCount | None = None  # of the last settled turn, failed or not
         self.lane_stats: list[dict[str, Any]] = []  # per turn: fast, slow and wait seconds
         self._pool: ThreadPoolExecutor | None = None
         self.devlog: list[dict[str, Any]] = []  # engine-side events for the debug view
@@ -332,12 +334,14 @@ class Engine:
         """One model call for `role`; if it fails after retries, the role's fallback model."""
         model = getattr(self.models, role)
         fallback = getattr(self.models, role + "_fallback", None)
+        self.llm_calls.append(role)  # counted here, so any provider is counted
         try:
             return self.provider.complete(model, messages)
         except ProviderError as e:
             if not fallback:
                 raise
             self._note("model_fallback", role=role, model=model, fallback=fallback, error=str(e))
+            self.llm_calls.append(role)
             return self.provider.complete(fallback, messages)
 
     def _run_captured(self, fn: Callable[..., Any], *args: Any) -> _Captured:
@@ -1157,9 +1161,7 @@ class Engine:
             raise CampaignEnded("the player character is dead; the campaign is read-only")
         t_start = time.monotonic()
         waited = self._settle_for_next_turn()
-        calls = getattr(self.provider, "calls", None)
-        marks = (len(self.judgments.entries), len(calls) if isinstance(calls, list) else 0,
-                 len(self.devlog))
+        marks = (len(self.judgments.entries), len(self.llm_calls), len(self.devlog))
         if self.canon_guard is not None:
             self.canon_guard.refresh(self)
         for s in speakers or ():
@@ -1321,8 +1323,6 @@ class Engine:
                 for hook in list(self.after_settle):
                     hook()
                 self.after_settle.clear()
-                slow.result.decisions = count_since(
-                    self, slow.player_event.id, slow.marks[0], slow.marks[1], slow.marks[2])
             except Exception as e:  # noqa: BLE001 - the turn is undone, the caller decides
                 sc.time = real_time
                 for ev in slow.turn_events:
@@ -1332,6 +1332,9 @@ class Engine:
                 self.refresh_memory()
                 self.slow_failure = e
                 self._note("slow_lane_failed", error=repr(e)[:200])
+            # counted whether or not the slow lane succeeded: the calls were made either way
+            slow.result.decisions = self.last_decisions = count_since(
+                self, slow.player_event.id, slow.marks[0], slow.marks[1], slow.marks[2])
             self.lane_stats.append({"fast_s": round(slow.fast_s, 3),
                                     "slow_s": round(time.monotonic() - t0, 3),
                                     "waited_s": 0.0, "needed": False})

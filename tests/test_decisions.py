@@ -44,3 +44,48 @@ def test_code_choices_count_only_registered_note_kinds():
     d = count_since(eng, 0, 0, 0, note_mark=0)
     assert d.code_choices == 1
 
+
+
+SCRIPT = {"narrator": ["The rope snaps."], "npc": ["Careful."],
+          "extractor": ["none", diff(fact("Geralt fell", "narration", 0.5))]}
+
+
+def test_failed_slow_lane_still_records_counts():
+    eng = _engine({**SCRIPT, "extractor": ["none", RuntimeError("boom")]})
+    try:
+        eng.turn("Hello.")
+    except RuntimeError:
+        pass
+    d = eng.last_decisions
+    assert d is not None and d.llm_calls_by_role.get("narrator") == 1
+    assert d.llm_calls_by_role.get("extractor", 0) >= 1
+
+
+def test_provider_without_calls_list_is_still_counted():
+    class Bare:
+        def __init__(self, inner):
+            self.inner = inner
+
+        def complete(self, model, messages):
+            return self.inner.complete(model, messages)
+
+    eng = _engine(SCRIPT)
+    eng.provider = Bare(eng.provider)
+    d = eng.turn("Hello.", speakers=["innkeeper"]).decisions
+    assert d.llm_calls_by_role["npc"] == 1 and d.llm_calls_by_role["narrator"] == 1
+
+
+def test_count_since_honours_marks_and_counts_escalations():
+    eng = _engine({})
+    from harness.judge import Judgment
+    eng.judgments.record("old", "q", Judgment(True))
+    eng.llm_calls.append("npc")
+    eng._note(sorted(CODE_CHOICE_KINDS)[0])
+    marks = (len(eng.judgments.entries), len(eng.llm_calls), len(eng.devlog))
+    eng.judgments.record("a", "q", Judgment(True, escalated=True))
+    eng.judgments.record("b", "q", Judgment(True))
+    eng.llm_calls.append("narrator")
+    eng._note(sorted(CODE_CHOICE_KINDS)[0])
+    d = count_since(eng, 0, marks[0], marks[1], marks[2])
+    assert (d.judgments, d.escalations, d.code_choices) == (2, 1, 1)
+    assert d.llm_calls_by_role == {"narrator": 1}
