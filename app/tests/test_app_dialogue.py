@@ -260,3 +260,24 @@ def test_gesture_step_survives_a_reload():
     rebuilt = [(t["kind"], t["who"], t.get("name"), t["text"]) for t in g.camp.transcript()
                if t["kind"] in ("npc", "npc_act")]
     assert rebuilt == live
+
+
+def test_start_turn_rechecks_a_challenge_that_began_while_it_waited():
+    """Final review: a challenge that starts while start_turn waits for the running turn to stop
+    is seen in the second locked block (Busy), not raced."""
+    from app.game import Busy
+    g = make(pace=0.02, floors=["horst", "elza", "horst", "player"])
+    g.start_turn("Перша.")
+    wait_phase(g, "speaking")
+    real = g.interrupt
+
+    def interrupt(any_phase=False):
+        g.challenging = True  # a challenge begins right after the first check
+        return real(any_phase)
+
+    g.interrupt = interrupt
+    with pytest.raises(Busy):
+        g.start_turn("Друга.")
+    g.challenging = False
+    g.wait_idle(30)
+    assert [t["text"] for t in g.transcript if t["kind"] == "player"] == ["Перша."]

@@ -186,6 +186,8 @@ class Game:
             with self.lock:
                 if self._is_ended():
                     raise Ended("the character is dead; the campaign is read-only")
+                if self.challenging:  # a challenge began while this waited
+                    raise Busy("a challenge is running")
                 self.pending = text
                 self.phase = "thinking"
                 self.pace = self.base_pace
