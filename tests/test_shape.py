@@ -78,6 +78,17 @@ def test_short_enough_text_is_ok():
     assert fit_to_shape(t, Shape.NORMAL, (10, 25)) == (t, "ok")
 
 
+def test_shape_instruction_uses_given_bounds_and_name():
+    line = shape_instruction(Shape.SHORT, None, bounds=(4, 7), name="Горст")
+    assert "4-7" in line and "The character" not in line
+    assert "Горст" in shape_instruction(Shape.GESTURE, None, name="Горст")
+
+
+def test_gesture_without_dash_is_the_action_itself():
+    assert fit_to_shape("Горст знизує плечима", Shape.GESTURE, (0, 0)) == (
+        "Горст знизує плечима.", "ok")
+
+
 def test_shape_instruction_per_shape():
     for s in Shape:
         assert shape_instruction(s, "Ukrainian").strip()
@@ -89,7 +100,10 @@ def test_npc_instruction_mentions_shape():
     s = Style.load("witcher", exemplars=False)
     prof = CharacterProfile("horst", "Горст", "Староста.")
     ins = s.npc_instruction(prof, "Ukrainian", Shape.WORD)
-    assert shape_instruction(Shape.WORD, "Ukrainian") in ins
+    assert shape_instruction(Shape.WORD, None, name="Горст") in ins
+    assert ins.count("Write in Ukrainian.") == 1, "the language line appears once"
+    with_bounds = s.npc_instruction(prof, "Ukrainian", Shape.SHORT, bounds=(4, 7))
+    assert "4-7 words" in with_bounds and "Горст" in with_bounds
     assert "last thing said" in ins
     assert "one to three" not in ins
     assert shape_instruction(Shape.WORD, None) not in s.npc_instruction(prof, "Ukrainian")

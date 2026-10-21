@@ -19,7 +19,7 @@ from .belief import BeliefFn, neutral_belief
 from .context import ContextBuilder, NpcView
 from .db import connect
 from .decisions import DecisionCount, count_since
-from .director import decide_speakers, parse_actions
+from .director import NOBODY, PLAYER_FLOOR, decide_next, decide_speakers, parse_actions
 from .eventlog import EventLog
 from .extractor import Diff, DiffValidationError, parse_diff, validate_diff
 from .facts import FactStore
@@ -63,10 +63,12 @@ from .policy import (
 )
 from .providers import Provider, ProviderError
 from .repetition import WINDOW as REPETITION_WINDOW, measure_turn
+from .profile import WorldProfile
 from .settings import (
-    DEFAULT_NARRATION, DEFAULT_OUTPUT_LANGUAGE, DEFAULT_RECORD_LANGUAGE, MAX_SPEAKERS,
-    NPC_REJECT_P,
+    DEFAULT_DIALOGUE, DEFAULT_NARRATION, DEFAULT_OUTPUT_LANGUAGE, DEFAULT_RECORD_LANGUAGE,
+    MAX_EXCHANGE_LINES, MAX_SPEAKERS, NPC_REJECT_P,
 )
+from .shape import Shape, fit_to_shape, word_bounds
 from .state import LiveState, StateChange, check_change, payload as change_payload
 from .streaming import InterruptHandle, StreamResult, run_stream
 from .style import Style, beat_as_action, foreign_voice, manner_messages, parse_manner, split_npc_output
@@ -149,10 +151,11 @@ class _NpcPrep:
     view: NpcView
     known_names: frozenset[str] = frozenset()  # snapshot of the names this NPC knows
     player_known: frozenset[str] = frozenset()  # and the player character's
+    instruction: str | None = None  # the closing instruction with a response shape (living mode)
 
     def messages(self, heard: Sequence[str] = (),
                  notes: Sequence[str] = ()) -> list[dict[str, str]]:
-        return self.view.messages(heard, notes)
+        return self.view.messages(heard, notes, self.instruction)
 
     def check_prefix(self, heard: Sequence[str] = ()) -> str:
         return self.view.check_prefix(heard)  # judge state up to "Line: "
@@ -168,6 +171,10 @@ class _Launch:
     speech: Future[_Captured] | None = None
     heard: dict[str, list[str]] = field(default_factory=dict)
     chains: dict[str, tuple[_NpcPrep, Future[_Captured]]] = field(default_factory=dict)
+    # living mode: what the exchange director reads, fixed before the narration is written
+    director: list[str] = field(default_factory=list)
+    npcs: dict[str, str] = field(default_factory=dict)
+    first: Future[_Captured] | None = None  # the first step, asked in a worker (parallel mode)
 
 
 @dataclass
@@ -205,6 +212,12 @@ class TurnResult:
     repetition: dict[str, Any] = field(default_factory=dict)  # see harness/repetition.py
     names: dict[str, Any] = field(default_factory=dict)  # glossary report of the turn
     decisions: DecisionCount | None = None  # set when the slow lane settles (harness/decisions.py)
+    # why the NPCs stopped talking: "player_addressed", "nobody", "cap" or "interrupted" (living
+    # mode); classic mode sets only "interrupted"
+    stop_reason: str = ""
+    # living mode, in order: ("line", npc, delivered text), ("gesture", npc, the action as the
+    # player sees it) or ("silence", npc, "")
+    exchange: list[tuple[str, str, str]] = field(default_factory=list)
 
 
 class Engine:
@@ -237,6 +250,8 @@ class Engine:
         player_unlimited: bool = False,
         outcomes: bool = False,
         seed: int | str = 0,
+        dialogue: str = DEFAULT_DIALOGUE,
+        world_profile: WorldProfile | None = None,
     ) -> None:
         """`player_unlimited` (task 17): the player's declared acts happen as declared; the
         narrator and the extractor must not soften them. `parallel`: run the independent calls of a turn concurrently. None (default): only if
@@ -257,9 +272,20 @@ class Engine:
         `style`: Sapkowski-style prompts and exemplars (harness/style.py). With it an NPC line may
         carry the NPC's own beats ("— ..., — озирнувся Горст. — ..."): the line is stored whole, its
         spoken part in `payload['speech']`, and each beat as an observable action of that NPC; a
-        profile without manner notes gets them from a cheap model once."""
+        profile without manner notes gets them from a cheap model once.
+        `dialogue` (living dialogue, task LD-4): "living" (default): in prose mode, when the turn
+        does not fix `speakers`, the scene director picks one step at a time who takes the floor
+        next and the shape of that response, and NPCs may answer each other, until the player is
+        addressed, nobody speaks, `MAX_EXCHANGE_LINES` steps, or an interrupt. "classic": the
+        task 12 director (a first speaker and who also speaks, at most `max_speakers`). Explicit
+        `speakers` and the json narrator's list are spoken as given in both modes.
+        `world_profile`: the world's dialogue numbers (harness/profile.py); the shapes' word
+        bounds follow its length bins."""
         if narration not in ("prose", "json"):
             raise ValueError(f"narration must be 'prose' or 'json', not {narration!r}")
+        if dialogue not in ("living", "classic"):
+            raise ValueError(f"dialogue must be 'living' or 'classic', not {dialogue!r}")
+        self.dialogue, self.world_profile = dialogue, world_profile
         self.conn = conn or connect()
         self._owns_conn = conn is None
         self.provider, self.models, self.scene = provider, models, scene
@@ -677,13 +703,15 @@ class Engine:
         p = j.probabilities.get("yes")
         return float(p) if p is not None else (j.probability if j.answer else 1 - j.probability)
 
-    def _npc_line(self, prep: _NpcPrep, heard: Sequence[str] = ()) -> str:
+    def _npc_line(self, prep: _NpcPrep, heard: Sequence[str] = (),
+                  notes: Sequence[str] = ()) -> str:
         """Generate and output-check one NPC line. A line is rejected at suspicion >=
         `npc_reject_p`; up to `check_retries` regenerations. If every try is rejected, the least
         suspicious candidate is used (and logged) rather than a canned line. `heard`: lines other
-        NPCs said earlier in this turn, which this NPC also heard."""
+        NPCs said earlier in this turn, which this NPC also heard. `notes`: what to fix from the
+        start (a reply that was over its shape)."""
         tried: list[tuple[float, str]] = []
-        notes: list[str] = []
+        notes = list(notes)
         for _ in range(self.check_retries + 1):
             text = self._fix_names(
                 clean_npc_line(self._complete("npc", prep.messages(heard, notes))), "npc_line")
@@ -785,11 +813,11 @@ class Engine:
             return DESCRIPTION, None
         if key.startswith("action") and key[6:].isdigit():
             return ACTION, None
-        if key.startswith("paction"):  # the player's own action (asterisks)
-            return ACTION, None
-        if key.startswith(PLAYER + "~"):  # a further speech part of the player's input
-            return SPEECH, PLAYER
-        return SPEECH, key  # "player" or an NPC id
+        if key.startswith("paction") or key.startswith("gesture"):  # the player's own action
+            return ACTION, None  # (asterisks), or an NPC's gesture-only turn (living mode)
+        # "player~2": a further speech part of the player's input; "horst~2": Horst's second
+        # line in this turn's exchange
+        return SPEECH, key.split("~", 1)[0]  # "player" or an NPC id
 
     def _commit(self, diff: Diff, source_events: dict[str, Event]) -> list[int]:
         """Store facts with perception computed from scene state, then apply state changes."""
@@ -979,12 +1007,27 @@ class Engine:
         """Prose mode: run the scene director (speakers and observable actions). Write the
         narration and action events, and (parallel mode) start the speech check and one chain per
         speaking NPC, each chain waiting for the lines of the NPCs before it so that it hears them.
-        Event writes stay on this thread, in a fixed order."""
+        Event writes stay on this thread, in a fixed order.
+
+        Living mode: no speaker list here; what the exchange director reads is taken now (before
+        the narration events are written, so it is the same in both modes), and in parallel
+        mode its first step runs in a worker next to the speech check and the actions lister."""
         speech = None
         if self.parallel and check:
             speech = self._submit(self._speech_judged, "\n".join(out.texts()))
+        living = self._living(speakers)
+        director: list[str] = []
+        npcs: dict[str, str] = {}
+        first: Future[_Captured] | None = None
+        if living:
+            npcs = {c: self.ctx.describe(c) for c in self.scene.present if c != PLAYER}
+            director = self.ctx.director_state(self.scene, player_text, out.description)
+            if self.parallel:
+                first = self._submit(self._decide_next, self._exchange_state(director, []),
+                                     npcs, out.description, True)
         if self.narration == "prose":
-            spk, act = self._direct_jobs(out.description, player_text, speakers)
+            spk, act = self._direct_jobs(out.description, player_text,
+                                         [] if living else speakers)
             if self.parallel:
                 fs = self._submit(spk) if spk is not None else None
                 fa = self._submit(act)
@@ -1007,8 +1050,9 @@ class Engine:
             segments.append((f"action{i}", action))
         turn_events.extend(evs)
         order = list(speakers) if speakers is not None else list(out.speakers)
-        launch = _Launch(out, evs, sources, segments, order)
+        launch = _Launch(out, evs, sources, segments, [] if living else order)
         launch.speech = speech
+        launch.director, launch.npcs, launch.first = director, npcs, first
         if self.parallel:
             earlier: list[tuple[str, Future[_Captured]]] = []
             for npc in order:
@@ -1018,12 +1062,166 @@ class Engine:
                 earlier.append((npc, fut))
         return launch
 
+    # -- the NPC exchange (living mode) ------------------------------------------------------
+    def _living(self, speakers: Sequence[str] | None) -> bool:
+        """The director picks each next line (prose narration, no fixed speakers)."""
+        return self.dialogue == "living" and self.narration == "prose" and speakers is None
+
+    def _exchange_state(self, director: list[str], lines: Sequence[str]) -> list[str]:
+        """What the exchange director reads at a step: the scene and the player's input (taken
+        once, before the turn's events), who the player character is to the others, and every
+        line of this exchange so far. Main-thread data only, so the log never depends on timing."""
+        who = (f"The player character is {self.ctx.describe(PLAYER)}. Someone who does not know "
+               "the name addresses them by how they look or what they seem to be.")
+        extra = [who] + (["This exchange so far, in order (the last line was just said):\n"
+                          + "\n".join(lines)] if lines else [])
+        g = self.glossary
+        return [*director, *([g.apply(x) for x in extra] if g else extra)]
+
+    def _decide_next(self, state: list[str], npcs: dict[str, str], narration: str,
+                     first: bool) -> tuple[str, Shape]:
+        """One exchange step (network only; safe in a worker). No decider: on the first step the
+        fallback speaker (silence would stall the scene), later the floor goes back to the
+        player."""
+        try:
+            return decide_next(self.judge, state, npcs)
+        except JudgeError as e:
+            kept = self._fallback_speakers(narration)[:1] if first else []
+            self._note("director_unavailable", error=str(e), fallback=kept)
+            return (kept[0], Shape.NORMAL) if kept else (NOBODY, Shape.NORMAL)
+
+    def _shaped_line(self, prep: _NpcPrep, shape: Shape, bounds: tuple[int, int]) -> str:
+        """An NPC line told its shape, output-checked as every line, and fitted to the same
+        bounds: far over them it is asked once more, then cut at a sentence boundary. For a
+        gesture the result is the action alone ("" when none came back)."""
+        prof = self.profiles.get(prep.npc) or CharacterProfile(prep.npc, prep.npc)
+        prep = replace(prep, instruction=self.ctx.npc_instruction(prof, shape, bounds))
+        text = self._npc_line(prep)
+        fitted, how = fit_to_shape(text, shape, bounds)
+        if how == "regenerate":
+            self._note("shape_regenerated", npc=prep.npc, shape=shape.value, text=text)
+            fix = (f"Do not speak: write only the one small thing {prof.name} does."
+                   if shape is Shape.GESTURE else
+                   f"Your last reply was far too long: say at most {bounds[1]} words.")
+            text = self._npc_line(prep, notes=[fix])
+            fitted, how = fit_to_shape(text, shape, bounds, allow_trim=True)
+            if how == "trimmed":
+                self._note("shape_trimmed", npc=prep.npc, shape=shape.value, before=text,
+                           after=fitted)
+        return fitted
+
+    def _exchange(self, launch: _Launch, result: "TurnResult", turn_events: list[Event],
+                  sources: dict[str, Event], segments: list[tuple[str, str]],
+                  handle: InterruptHandle | None, on_word: Callable[[str, str], None] | None
+                  ) -> None:
+        """The NPC exchange of one turn. Each step: the director picks the floor and the shape
+        (one batched judge call), the NPC's context is read fresh from the log (so it holds every
+        line and name learned so far this turn), its line is generated, checked, fitted and
+        delivered, and its events are written. Strictly sequential: each step depends on the
+        line before it."""
+        sc, npcs = self.scene, launch.npcs
+        lines: list[str] = []  # as the director reads them
+        said: dict[str, int] = {}
+        gestures = 0
+        for step in range(MAX_EXCHANGE_LINES + 1):
+            if step == MAX_EXCHANGE_LINES:
+                result.stop_reason = "cap"
+                self._note("exchange_cap", steps=step)
+                return
+            if step == 0 and launch.first is not None:
+                nxt, shape = self._take(launch.first)
+            else:
+                nxt, shape = self._decide_next(self._exchange_state(launch.director, lines),
+                                               npcs, launch.out.description, step == 0)
+            if nxt == PLAYER_FLOOR:
+                result.stop_reason = "player_addressed"
+                return
+            if nxt == NOBODY or nxt not in npcs:
+                result.stop_reason = "nobody"
+                return
+            name = self.names.real(nxt)
+            if shape is Shape.SILENCE:
+                self._note("silence", npc=nxt, step=step + 1)
+                result.exchange.append(("silence", nxt, ""))
+                lines.append(f"[{name} says nothing]")
+                continue
+            prep = self._prep_npc(nxt)
+            text = self._shaped_line(prep, shape, word_bounds(shape, self.world_profile))
+            if shape is Shape.GESTURE:
+                if not text:
+                    self._note("silence", npc=nxt, step=step + 1, why="no action came back")
+                    result.exchange.append(("silence", nxt, ""))
+                    lines.append(f"[{name} says nothing]")
+                    continue
+                for notice, _ in prep.mem.noticed:
+                    turn_events.append(self.notices.mark_shown(notice, sc))
+                act = self._fix_names(beat_as_action(text, name), "npc_beat")
+                ev = self._event(ACTION_EVENT, [nxt], {"text": act, "by": nxt, "gesture": True},
+                                 notability=0.3)
+                turn_events.append(ev)
+                gestures += 1
+                sources[f"gesture{gestures}"] = ev
+                segments.append((f"gesture{gestures}", act))
+                seen = self.names.mask(PLAYER, act, known=prep.player_known)
+                self._note("gesture", npc=nxt, step=step + 1, text=act)
+                result.exchange.append(("gesture", nxt, seen))
+                lines.append(f"[{name} does] {act}")
+                continue
+            said[nxt] = said.get(nxt, 0) + 1
+            sr = self._deliver(nxt, prep, text, result, turn_events, sources, segments, handle,
+                               on_word, key=nxt if said[nxt] == 1 else f"{nxt}~{said[nxt]}")
+            result.exchange.append(("line", nxt, sr.spoken_text))
+            lines.append(f"{name}: {sr.spoken_text}")
+            if sr.interrupted:
+                result.stop_reason = "interrupted"
+                return
+
+    def _deliver(self, npc: str, prep: _NpcPrep, text: str, result: "TurnResult",
+                 turn_events: list[Event], sources: dict[str, Event],
+                 segments: list[tuple[str, str]], handle: InterruptHandle | None,
+                 on_word: Callable[[str, str], None] | None, *, key: str | None = None
+                 ) -> StreamResult:
+        """Stream an NPC line to the player and write its events (main thread): the utterance
+        (only the delivered words), names learned from it, the NPC's own beats as actions, the
+        interruption if the handle fired. `key`: the extractor segment (default: the NPC id)."""
+        sc = self.scene
+        for notice, _ in prep.mem.noticed:  # surfaced now, so not again next turn
+            turn_events.append(self.notices.mark_shown(notice, sc))
+        cb = (lambda w, n=npc: on_word(n, w)) if on_word else None
+        sr = run_stream(iter([text]), handle, cb, self.pace)
+        parsed = split_npc_output(sr.spoken_text) if self.style is not None else None
+        extra: dict[str, object] = (
+            {"speech": parsed.speech} if parsed is not None and parsed.has_dash else {})
+        ev = self._utterance(npc, sr.spoken_text, interrupted=sr.interrupted, **extra)
+        turn_events.append(ev)
+        result.utterances.append(ev)
+        # only what is said aloud teaches a name, never the NPC's own beats
+        self._learn_from_speech(
+            ev, npc, parsed.speech if parsed is not None and parsed.has_dash
+            else sr.spoken_text)
+        if parsed is not None:  # the NPC's own beats, only the delivered part
+            for beat in parsed.beats:
+                act = self._fix_names(beat_as_action(beat, self.ctx.name(npc)), "npc_beat")
+                if act:
+                    turn_events.append(self._event(
+                        ACTION_EVENT, [npc], {"text": act, "by": npc}, notability=0.3,
+                        cause_id=ev.id))
+        key = key or npc
+        sources[key] = ev
+        segments.append((key, sr.spoken_text))
+        if sr.interrupted:
+            turn_events += self._record_interruption(ev, sr)
+            result.interrupted = True
+        return sr
+
     def _discard(self, launch: _Launch) -> None:
         """The narration was rejected after the chains had started: forget it all."""
         for ev in launch.events:
             self.log.rollback(ev.id, "narration rejected")
         for _, fut in launch.chains.values():
             fut.cancel()
+        if launch.first is not None:
+            launch.first.cancel()
         self._note("speculative_chains_discarded", npcs=list(launch.chains))
 
     def _prior_outputs(self, before_id: int) -> list[tuple[str, str]]:
@@ -1211,39 +1409,19 @@ class Engine:
             sources = {**{k: ev for k, ev in player_pairs}, **launch.sources}
             segments = [*[(k, ev.payload["text"]) for k, ev in player_pairs], *launch.segments]
             result = TurnResult(out.description, actions=list(out.actions))
-            for npc in launch.speakers:
+            if self._living(speakers):
+                self._exchange(launch, result, turn_events, sources, segments, handle, on_word)
+            for npc in launch.speakers:  # classic, or a fixed list of speakers
                 if npc in launch.chains:
                     prep, fut = launch.chains[npc]
                     text = self._take(fut)
                 else:  # sequential: this NPC sees what earlier speakers of the turn said
                     prep = self._prep_npc(npc)
                     text = self._npc_line(prep)
-                for notice, _ in prep.mem.noticed:  # surfaced now, so not again next turn
-                    turn_events.append(self.notices.mark_shown(notice, sc))
-                cb = (lambda w, n=npc: on_word(n, w)) if on_word else None
-                sr = run_stream(iter([text]), handle, cb, self.pace)
-                parsed = split_npc_output(sr.spoken_text) if self.style is not None else None
-                extra: dict[str, object] = (
-                    {"speech": parsed.speech} if parsed is not None and parsed.has_dash else {})
-                ev = self._utterance(npc, sr.spoken_text, interrupted=sr.interrupted, **extra)
-                turn_events.append(ev)
-                result.utterances.append(ev)
-                # only what is said aloud teaches a name, never the NPC's own beats
-                self._learn_from_speech(
-                    ev, npc, parsed.speech if parsed is not None and parsed.has_dash
-                    else sr.spoken_text)
-                if parsed is not None:  # the NPC's own beats, only the delivered part
-                    for beat in parsed.beats:
-                        act = self._fix_names(beat_as_action(beat, self.ctx.name(npc)), "npc_beat")
-                        if act:
-                            turn_events.append(self._event(
-                                ACTION_EVENT, [npc], {"text": act, "by": npc}, notability=0.3,
-                                cause_id=ev.id))
-                sources[npc] = ev
-                segments.append((npc, sr.spoken_text))
+                sr = self._deliver(npc, prep, text, result, turn_events, sources, segments,
+                                   handle, on_word)
                 if sr.interrupted:
-                    turn_events += self._record_interruption(ev, sr)
-                    result.interrupted = True
+                    result.stop_reason = "interrupted"
                     break
 
             if self.outcomes_on and not result.interrupted:
@@ -1257,6 +1435,8 @@ class Engine:
             if launch is not None:
                 for _, fut in launch.chains.values():
                     fut.cancel()
+                if launch.first is not None:
+                    launch.first.cancel()
             for e in turn_events:
                 self.log.rollback(e.id, "turn failed")
             self.refresh_memory()
@@ -1356,6 +1536,7 @@ class Engine:
         acts = [("", a) for a in launch.out.actions]
         acts += [(u.payload["speaker"], b) for u in result.utterances
                  for b in ([] if self.style is None else split_npc_output(u.payload["text"]).beats)]
+        acts += [(npc, t) for kind, npc, t in result.exchange if kind == "gesture"]
         got = self.outcome_judge.npc_acts(acts, unbounded=self.ctx.player_unlimited)
         done: list[Outcome] = []
         for o in got:
@@ -1640,7 +1821,8 @@ class Engine:
                              "narration": self.narration,
                              "minutes_per_turn": self.minutes_per_turn,
                              "player_unlimited": self.ctx.player_unlimited,
-                             "outcomes": self.outcomes_on, "seed": self.seed},
+                             "outcomes": self.outcomes_on, "seed": self.seed,
+                             "dialogue": self.dialogue},
                 "vitals": self.vitals.to_json(),
             }.items():
                 self.conn.execute("INSERT OR REPLACE INTO campaign_meta (key, value) VALUES (?,?)",

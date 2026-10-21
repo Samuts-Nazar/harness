@@ -340,6 +340,10 @@ NPC_FORM = (
     "a hand to the purse). Not thoughts, not explanations. Speech can be short, and "
     "sometimes it should be. Answer the last thing said, not the whole situation.")
 
+GESTURE_FORM = (  # the gesture-only shape: the reply is the action itself, stored as an action
+    "Form: one short sentence in the third person about {name}, something anyone present could "
+    "see or hear. No dash, no speech, no thoughts.")
+
 NPC_LIMITS = (
     "You write only {name}: your own words and your own actions. Never another character's "
     "words or actions, and never anything the player character says, does, thinks or feels. "
@@ -400,12 +404,16 @@ class Style:
         return "\n\n".join(p for p in parts if p)
 
     def npc_instruction(self, prof: CharacterProfile, language: str | None,
-                        shape: "Shape | None" = None) -> str:
-        from .shape import shape_instruction  # shape imports this module
+                        shape: "Shape | None" = None,
+                        bounds: tuple[int, int] | None = None) -> str:
+        """`bounds`: the words the shape allows (`shape.word_bounds`); the caller fits the reply
+        to the same bounds. The language line appears once, at the end."""
+        from .shape import Shape, shape_instruction  # shape imports this module
+        form = (GESTURE_FORM if shape is Shape.GESTURE else NPC_FORM).format(name=prof.name)
         return (f"Write {prof.name}'s next turn: what {prof.name} says and does in this moment.\n"
-                + (shape_instruction(shape, language).replace("The character", prof.name) + "\n"
+                + (shape_instruction(shape, None, bounds=bounds, name=prof.name) + "\n"
                    if shape is not None else "")
-                + NPC_FORM.format(name=prof.name) + "\n" + NPC_LIMITS.format(name=prof.name)
+                + form + "\n" + NPC_LIMITS.format(name=prof.name)
                 + (f"\nWrite in {language}." if language else ""))
 
     def npc_examples_section(self, situation: str) -> str:

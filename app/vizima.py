@@ -65,7 +65,7 @@ def open_vizima(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = False
             embedder = OpenRouterEmbedder("qwen/qwen3-embedding-8b")
         canon = Canon(store, embedder)
     kw = dict(models=stack.models, judge=stack.judge, glossary=Glossary.for_world("witcher"),
-              style=Style.load("witcher"))
+              style=Style.load("witcher"), dialogue="classic")  # see app.campaigns.DIALOGUE
     reopened = bool(name) and not new and Engine.campaign_exists(name, root)
     if reopened:
         eng = Engine.open_campaign(name, rec, root=root, **kw)  # type: ignore[arg-type]

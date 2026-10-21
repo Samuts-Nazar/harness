@@ -21,6 +21,7 @@ from .models import (
 )
 from .names import Names
 from .providers import Messages
+from .shape import Shape, shape_instruction
 from .state import LiveState
 from .style import Style
 
@@ -52,14 +53,16 @@ class NpcView:
     finish: Callable[[Messages], Messages]
     character: str = ""
 
-    def messages(self, heard_lines: Sequence[str] = (), notes: Sequence[str] = ()) -> Messages:
-        """`notes`: extra lines for a retry (what the last try got wrong)."""
+    def messages(self, heard_lines: Sequence[str] = (), notes: Sequence[str] = (),
+                 instruction: str | None = None) -> Messages:
+        """`notes`: extra lines for a retry (what the last try got wrong). `instruction`: replaces
+        the closing instruction (a response shape, `ContextBuilder.npc_instruction`)."""
         seen = [*self.seen, *heard_lines]
         parts = [*self.sections]
         if seen:
             parts.append("Recent conversation:\n" + "\n".join(seen))
         parts.extend(notes)
-        parts.append(self.instruction)
+        parts.append(self.instruction if instruction is None else instruction)
         return self.finish([
             {"role": "system", "content": self.system},
             {"role": "user", "content": "\n\n".join(parts)},
@@ -277,15 +280,10 @@ class ContextBuilder:
         if notes:
             parts.append("The player has pointed out mistakes in earlier lines; do not repeat "
                          "them:\n" + "\n".join(notes))
-        instruction = (
-            f"Say what {prof.name} says next, aloud and in character. Write only {prof.name}'s "
-            "own words as one continuous speech: no stage directions, no other characters' lines."
-            + (f" Speak in {self.language}." if self.language else "")
-        )
+        instruction = self.npc_instruction(prof)
         system = f"You are {prof.name}. {prof.description}".strip()
         if self.style is not None:
             system = self.style.npc_system(prof)
-            instruction = self.style.npc_instruction(prof, self.language)
             examples = self.style.npc_examples_section(" ".join([
                 scene.location, prof.description, *(e.payload["text"] for e in seen[-2:]),
                 *(it.fact.content for it in mem.knows[-4:])]))
@@ -300,6 +298,23 @@ class ContextBuilder:
             seen=[self._seen(e, character) for e in seen], instruction=instruction, known=known,
             name=prof.name, character=character,
             finish=lambda m, c=character, k=known_names: self.finish(m, c, k))
+
+    def npc_instruction(self, prof: CharacterProfile, shape: Shape | None = None,
+                        bounds: tuple[int, int] | None = None) -> str:
+        """The closing instruction of an NPC call, with the response shape when one is given.
+        `bounds` are the words the shape allows; the engine fits the reply to the same bounds."""
+        if self.style is not None:
+            return self.style.npc_instruction(prof, self.language, shape, bounds)
+        lang = f" Speak in {self.language}." if self.language else ""
+        if shape is Shape.GESTURE:
+            return (shape_instruction(shape, None, name=prof.name) + " Write it as one short "
+                    f"sentence in the third person about {prof.name}: no words spoken." + lang)
+        return (f"Say what {prof.name} says next, aloud and in character. Write only {prof.name}'s "
+                "own words as one continuous speech: no stage directions, no other characters' "
+                "lines."
+                + (" " + shape_instruction(shape, None, bounds=bounds, name=prof.name)
+                   if shape is not None else "")
+                + lang)
 
     @staticmethod
     def core_text(prof: CharacterProfile) -> str:

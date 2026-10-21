@@ -27,6 +27,9 @@ CODE_CHOICE_KINDS: set[str] = {
     "narrator_bad_speakers",   # unknown speakers filtered from the narrator's list
     "shape_regenerated",       # an NPC line far over its shape, asked again once
     "shape_trimmed",          # still over after that: cut at a sentence boundary
+    "exchange_cap",            # the NPC exchange stopped at MAX_EXCHANGE_LINES (task LD-4)
+    "silence",                 # an NPC step ended without words or action (chosen, or an empty gesture)
+    "gesture",                 # an NPC step stored as an action only, no utterance
 }
 
 

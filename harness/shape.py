@@ -56,11 +56,15 @@ _INSTR = {
 }
 
 
-def shape_instruction(shape: Shape, language: str | None) -> str:
-    """An English instruction line for the shape (bounds are the no-profile defaults)."""
-    lo, hi = _DEFAULT[shape]
-    line = _INSTR[shape].format(name="The character", lo=lo, hi=hi)
-    return line + (f" Write in {language}." if language and shape not in (Shape.SILENCE,) else "")
+def shape_instruction(shape: Shape, language: str | None = None, *,
+                      bounds: tuple[int, int] | None = None, name: str | None = None) -> str:
+    """An English instruction line for the shape. `bounds`: the same (min, max) words the caller
+    gives `fit_to_shape` (default: the no-profile bounds), so the prompt and the fit agree.
+    `name`: the character (default "The character"). `language`: appends "Write in <language>."
+    for a caller that has no language line of its own (`Style.npc_instruction` has one)."""
+    lo, hi = bounds if bounds is not None else _DEFAULT[shape]
+    line = _INSTR[shape].format(name=name or "The character", lo=lo, hi=hi)
+    return line + (f" Write in {language}." if language and shape is not Shape.SILENCE else "")
 
 
 def _n(text: str) -> int:
@@ -87,8 +91,9 @@ def _trim_speech(speech: str, hi: int) -> str:
 def fit_to_shape(text: str, shape: Shape, bounds: tuple[int, int], *,
                  allow_trim: bool = False) -> tuple[str, str]:
     """Fit an NPC line to its shape; returns (text, how), how in {"ok", "trimmed", "regenerate"}.
-    Only the spoken part is counted. SILENCE -> empty; GESTURE -> beats only (no beats: ask
-    again, or silence once `allow_trim`). Speech over 1.5x the upper bound -> "regenerate"; the
+    Only the spoken part is counted. SILENCE -> empty; GESTURE -> beats only, as plain text with
+    no dash (a reply with no dash at all is taken whole as the action; a dash reply without
+    beats is speech: ask again, or silence once `allow_trim`). Speech over 1.5x the upper bound -> "regenerate"; the
     caller asks once more and then calls with `allow_trim=True`, which cuts the speech at a
     sentence boundary (beats kept, as "— speech — beat.")."""
     if shape is Shape.SILENCE:
@@ -97,6 +102,8 @@ def fit_to_shape(text: str, shape: Shape, bounds: tuple[int, int], *,
     if shape is Shape.GESTURE:
         if out.beats:
             return " ".join(_ensure_end(b) for b in out.beats), "ok"
+        if not out.has_dash and out.speech:  # no dash at all: the answer is the action itself
+            return _ensure_end(out.speech), "ok"
         return ("", "ok") if allow_trim else (text, "regenerate")
     hi = bounds[1]
     n = _n(out.speech)
@@ -105,5 +112,7 @@ def fit_to_shape(text: str, shape: Shape, bounds: tuple[int, int], *,
     if n <= hi or not allow_trim:
         return text, "ok"
     speech = _trim_speech(out.speech, hi)
+    if not out.has_dash:  # plain speech (no book-style dashes): stays plain
+        return speech, "trimmed"
     parts = ["— " + speech] + [_ensure_end(b) for b in out.beats]
     return " — ".join(parts), "trimmed"

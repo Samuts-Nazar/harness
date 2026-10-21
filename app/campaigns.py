@@ -212,6 +212,11 @@ def _pointer(root: Path) -> Path:
     return root / "current.txt"
 
 
+# The app shows NPC lines and not yet gesture-only turns, and merges two lines of one speaker in
+# a row: it stays on the classic director until it can show a living exchange (plan task 7).
+DIALOGUE = "classic"
+
+
 def open_campaign(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = False,
                   name: str | None = None, data_file: Path | str | None = None) -> Campaign:
     """Continue the current campaign, or start a new one (`new=True`, or none exists yet)."""
@@ -225,7 +230,8 @@ def open_campaign(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = Fal
         name = cur.read_text().strip()
     if name and not new and Engine.campaign_exists(name, root):
         eng = Engine.open_campaign(name, rec, root=root, models=stack.models, judge=stack.judge,
-                                   glossary=glossary, style=Style.load("witcher"))
+                                   glossary=glossary, style=Style.load("witcher"),
+                                   dialogue=DIALOGUE)
     else:
         name = name if (new and name) else time.strftime("inn-%Y%m%d-%H%M%S")
         while Engine.campaign_exists(name, root):
@@ -236,7 +242,7 @@ def open_campaign(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = Fal
             name, rec, profiles(traits.label if traits and traits.label else PLAYER_LOOK),
             Scene(TITLE, ("horst", "elza"), START_TIME), root=root,
             models=stack.models, judge=stack.judge, glossary=glossary,
-            style=Style.load("witcher"))
+            style=Style.load("witcher"), dialogue=DIALOGUE)
         eng.acquaint("horst", "elza")  # neighbours: they know each other by name
         for text, knowers in SEEDS:
             eng.facts.add_canon(text, knowers=[(k, "told") for k in knowers])

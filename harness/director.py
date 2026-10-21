@@ -6,6 +6,11 @@ structure is derived afterwards by two small, separate steps that know nothing a
 - `decide_speakers(judge, state, npcs)`: the first-line decider (typed choice over the present
   characters plus "nobody", then one yes/no per other character: "would they also speak right
   after?"), all in ONE batched call. Returns ids in speaking order.
+- `decide_next(judge, state, npcs)` (living dialogue, task LD-4): one step of an NPC exchange
+  inside a turn. One batched call with two questions: who takes the floor next (an NPC, the
+  player because someone just addressed them, or nobody) and the shape of that response
+  (`harness/shape.py`). The engine repeats it after every line until the player or nobody is
+  chosen, or the cap.
 - `actions_messages(...)` / `parse_actions(raw)`: a cheap LLM lists what characters *did* in the
   narration that anyone in the room could see or hear. The caller runs the model.
 
@@ -18,9 +23,12 @@ import re
 from typing import Mapping, Sequence
 
 from .judge import Judge, Question, choice_q, yes_no_q
+from .shape import Shape
 
 NOBODY = "nobody"
+PLAYER_FLOOR = "player"  # the floor returns to the player (same id as models.PLAYER)
 FIRST_TAG, ALSO_TAG = "director_first", "director_also"
+NEXT_TAG, SHAPE_TAG = "director_next", "director_shape"
 
 
 def speaker_questions(npcs: Mapping[str, str]) -> dict[str, Question]:
@@ -56,6 +64,62 @@ def decide_speakers(judge: Judge, state: Sequence[str], npcs: Mapping[str, str],
             for c in npcs if c != first and f"also:{c}" in got and got[f"also:{c}"].answer]
     rest.sort(key=lambda t: -t[0])  # the likelier voice goes first; stable for ties
     return [first, *(c for _, c in rest)][:max_speakers]
+
+
+# The order matters only to a judge that answers with the first option when it has no rule (the
+# offline fake): a normal-length line, never silence by accident.
+_SHAPES = {
+    Shape.NORMAL: "a sentence or two",
+    Shape.SHORT: "a short phrase or a short sentence",
+    Shape.WORD: "a word or two",
+    Shape.LONG: "several sentences (rare: a story, an argument that needs it)",
+    Shape.GESTURE: "no words, only a small visible action (a shrug, a look, a nod)",
+    Shape.SILENCE: "nothing at all: they let it pass",
+}
+
+
+def next_floor_questions(npcs: Mapping[str, str]) -> dict[str, Question]:
+    """The batch for one exchange step: `next` (an NPC, the player, or nobody) and `shape`."""
+    options = {
+        **dict(npcs),
+        PLAYER_FLOOR: "the player character: someone has just addressed them (by name, by how "
+                      "they look, or with a question to them), or the talk naturally turns to "
+                      "them",
+        NOBODY: "no one: the talk has died down and the room goes quiet",
+    }
+    return {
+        "next": choice_q(
+            "The lines said so far in this exchange are listed in order; the last one is what "
+            "was just said. Who takes the floor now? If the last line asked or addressed the "
+            "player character, choose the player, and the others wait for the answer. If it was "
+            "aimed at another character, that character answers, or someone cuts in, objects, "
+            "teases or changes the subject, as people do. Choose nobody when the exchange has "
+            "run its course. Someone who just spoke rarely speaks again at once.",
+            options, tag=NEXT_TAG),
+        "shape": choice_q(
+            "If a character takes the floor now, how much do they say? Think of the character "
+            "and their mood, of what was just said and the pace of the talk: in books most "
+            "replies in a quick exchange are short.",
+            {s.value: d for s, d in _SHAPES.items()}, tag=SHAPE_TAG),
+    }
+
+
+def decide_next(judge: Judge, state: Sequence[str], npcs: Mapping[str, str]
+                ) -> tuple[str, Shape]:
+    """One exchange step: (an NPC id, `PLAYER_FLOOR` or `NOBODY`; the shape of the response).
+    `npcs`: id -> how the director knows them (never the player). An unknown answer is nobody;
+    an unknown shape is normal."""
+    if not npcs:
+        return NOBODY, Shape.NORMAL
+    got = judge.ask(state, next_floor_questions(npcs))
+    nxt = str(got["next"].answer)
+    if nxt not in npcs and nxt != PLAYER_FLOOR:
+        nxt = NOBODY
+    try:
+        shape = Shape(str(got["shape"].answer))
+    except ValueError:
+        shape = Shape.NORMAL
+    return nxt, shape
 
 
 ACTIONS_SYSTEM = "You list the observable actions in a passage of narration."
