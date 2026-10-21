@@ -40,3 +40,9 @@ You are the lead ("brain") for the harness project. The user talks to you; Sonne
 - All decisions agreed in chat up to 2026-10-20 are in `docs/decisions.md` (written 2026-10-20). Pilot setup (not a design rule): Vizima situation A, tavern «Під Лисом», day 3 evening; player = limitless demon (own creature in the spirit of Master Mirror, not O'Dimm); Ragnar will be replayed from scratch once the harness is ready; checklist page `app/static/checklist.html`.
 - User feedback to remember: the first NPC lines read as "neural-network style", not Sapkowski; this drove task 15. The A/B style page `/static/ab.html` awaits the user's verdict. Ragnar's chronicle will be replayed from scratch once the harness is ready.
 - Open user question: none pending.
+
+## Checkpoint 2026-10-21 (session paused at usage limit)
+- Living-dialogue plan (`docs/superpowers/plans/2026-10-21-living-dialogue.md`, spec in `docs/superpowers/specs/`) runs with superpowers subagent-driven-development; the ledger is `.claude/worktrees/living-dialogue/.superpowers/sdd/2026-10-21-living-dialogue/progress.md` (read it first; tasks marked complete are done).
+- Branches: `living-dialogue` (tasks 1-8 + 10), `ld-t9`, `ld-t11` (pending review/merge). Nothing of these is on main yet.
+- Research done and on main: `reports/research/21A_decisions.md`, `21B_tone_leaks.md`.
+- Open user questions: model bake-off above the price ceiling?; approve an 8 GB local Gemma 4 E4B download for a base-model tone test?
