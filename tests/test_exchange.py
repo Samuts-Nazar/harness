@@ -473,3 +473,18 @@ def test_session_profile_without_world_profile_has_no_distance():
     eng.turn("Добрий вечір.", speakers=None)
     rep = eng.dialogue_report()
     assert rep["median_words"] >= 1 and rep["distance"] is None
+
+
+# -- task 12 fixes ---------------------------------------------------------------------------------
+def test_extractor_citing_display_name_with_repeat_suffix_maps_to_segment_key():
+    """The extractor names Horst's second line «Горст~2» (display name + ~N); it is the segment
+    `horst~2`, not an unknown source that rolls the turn back."""
+    lines = ["Ельзо, знову ти тут?", "А де ж мені ще бути?", "Іди додому."]
+    extractor = ["none", diff(fact("Horst tells Elza to go home", "Горст~2"),
+                              fact("Elza asks where else she would be", "Ельза"))]
+    eng, prov, _ = make(lines, ["horst", "elza", "horst", NOBODY], ["short"], extractor=extractor)
+    res = eng.turn("Мовчки п'ю.")
+    assert eng.slow_failure is None
+    assert len(res.fact_ids) == 2
+    third = res.utterances[2].id
+    assert [f.content for f in eng.facts.by_source_event(third)] == ["Horst tells Elza to go home"]

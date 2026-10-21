@@ -485,7 +485,8 @@ class Engine:
 
     def _ids_for_names(self, data: Any) -> Any:
         """The extractor sometimes answers with a character's display name where an id is
-        required (a "source" or "character" field); map the name back to the id."""
+        required (a "source" or "character" field); map the name back to the id. A source may
+        carry a line suffix: «Горст~2» (the display name plus ~N) is the segment `horst~2`."""
         by_name = {p.name.lower(): c for c, p in self.profiles.items()}
         if isinstance(data, dict):
             for key in ("new_facts", "state_changes"):
@@ -493,8 +494,15 @@ class Engine:
                     if isinstance(item, dict):
                         for f in ("source", "character"):
                             v = item.get(f)
-                            if isinstance(v, str) and v not in self.profiles:
-                                item[f] = by_name.get(v.strip().lower(), v)
+                            if not isinstance(v, str) or v in self.profiles:
+                                continue
+                            base, sep, n = v.strip().partition("~")
+                            if f == "source" and sep and n.strip().isdigit():
+                                cid = by_name.get(base.strip().lower())
+                                if cid is not None:
+                                    item[f] = f"{cid}~{n.strip()}"
+                                continue
+                            item[f] = by_name.get(v.strip().lower(), v)
         return data
 
     # -- narrator -------------------------------------------------------
