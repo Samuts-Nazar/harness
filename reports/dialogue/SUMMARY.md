@@ -30,9 +30,8 @@ line opening with a beat is put in book form; foreign-script output is regenerat
   classic 0.80-1.13). The samples are small (18-27 lines per unit), so a single unit moves by
   several points between runs.
 - **Fewer lines per inn session** (21 and 18 against 44 and 32): 16 of 20 turns in each session
-  ended with the player addressed after the first line (Task 8 A: 10 of 20, with 4 cap stops).
-  Not tuned here; the director's floor choice did not change, so this is likely the longer lines
-  inviting the player's answer. Worth watching in play.
+  ended with the player addressed after the first line (Task 8: 10 of 20 in A, 18 of 20 in B).
+  Consistent with run-to-run noise.
 - Reference-scene medians stay well under the book's scenes (6-10 against 16-28): the session
   tracks the *world* profile, not a scene's.
 - Slow-lane failures (`unknown source 'Горст~2'`): **0** in all units (Task 8: 5 and 2).
@@ -44,12 +43,20 @@ line opening with a beat is put in book form; foreign-script output is regenerat
   modelled on the Task 8 behaviour): L1 0.92 -> 0.31 pooled, over 15 words 0% -> 26%, lines with
   a beat 90% -> 39%.
 
-A/B regenerated (`python -m experiments.dialogue.make_ab`): 10 pairs from the new units, 1
-dropped (session A turn 3: the living side was empty, all silence), **9 pairs** in
-`app/static/ab_data.js`, key in `reports/dialogue/ab_key.json` (living on side A in 6). No pair
-had a script switch, a speaker prefix or a line opening with the speaker's own name or
-description. The caveats below still hold (sides from separate campaigns; classic sides open
-with narration, so the engines are easy to tell apart).
+A/B regenerated (`python -m experiments.dialogue.make_ab`, from the raw outputs of this run, no
+new calls): 10 pairs from the new units, **4 dropped**, **6 pairs** in `app/static/ab_data.js`,
+key in `reports/dialogue/ab_key.json` (living on side A in 4). Dropped, by the builder's glitch
+checks (review round 1 added the last three):
+- session A turn 3: the living side was empty (all silence);
+- session A turn 1: a classic line mangled by the first version of `tidy_speaker` (it opened
+  with the fragment "— до дверей."; fixed in the engine since, the stored text is the old one);
+- session A turn 2: a name written lower-case («горст повів очима»), a name distortion;
+- session B turn 3: a line that ends without punctuation.
+One masked description in the wrong case («підсунула мідяк кремезний сивий чоловік») was flagged
+for review; it is in the already dropped pair A1. The checks cannot see everything (grammar
+slips such as «нічний виття» pass), so the remaining pairs are glitch-free only as far as these
+checks go. The caveats below still hold (sides from separate campaigns; classic sides open with
+narration, so the engines are easy to tell apart).
 
 ## Task 8 (2026-10-21), as reported then
 

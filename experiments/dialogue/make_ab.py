@@ -6,8 +6,11 @@ differ). Which side is which is shuffled with a fixed seed and written to
 reports/dialogue/ab_key.json (not shown).
 
 A pair is dropped when either side shows a detected glitch (`glitches`): letters of another
-script, an empty side, a line that opens with a speaker prefix or with the speaker's own name or description
-(the page puts the name before the line), or another character's script line inside a line.
+script, an empty side, a lower-case name, an unterminated paragraph, a line that opens with a
+lower-case dash fragment, with a speaker prefix or with the
+speaker's own name or description (the page puts the name before the line), or another
+character's script line inside a line. A description in the middle of a sentence is printed for
+review (its case may be wrong) and judged by hand.
 
     python -m experiments.dialogue.make_ab
 """
@@ -46,12 +49,28 @@ def side(turn: dict) -> str:
     return "\n\n".join(parts) or "(тиша)"
 
 
+_LOWER_FRAGMENT = re.compile(r"^\s*[—–]\s*[a-zа-яіїєґ]")
+_END = ".!?…»\")"
+PLAYER_NAME = "Рагнар"
+
+
 def glitches(turn: dict, looks: dict[str, str]) -> list[str]:
     """What would show as a glitch on the page; [] for a clean side."""
-    out = [f"script: {r}" for r in foreign_runs(side(turn), "Ukrainian")]
-    if side(turn) == "(тиша)":
+    text = side(turn)
+    out = [f"script: {r}" for r in foreign_runs(text, "Ukrainian")]
+    if text == "(тиша)":
         out.append("empty side: nothing said or narrated")
+    for name in [*NAMES.values(), PLAYER_NAME]:  # a name written lower-case is a distortion
+        if m := re.search(rf"(?<![\w]){name.lower()[:4]}", text):
+            out.append(f"lower-case name: {text[max(0, m.start() - 20):m.end() + 20]}")
+    paras = ([turn["narration"].strip()] if turn["narration"].strip() else []) + [
+        t.strip() for _, t in _lines(turn)]
+    for para in paras:
+        if para and para[-1] not in _END:
+            out.append(f"unterminated: ...{para[-40:]}")
     for npc, text in _lines(turn):
+        if _LOWER_FRAGMENT.match(text):
+            out.append(f"opens with a lower-case fragment: {text[:40]}")
         t = text.strip().lstrip("—– ").lower()
         own = [NAMES.get(npc, npc).lower()[:4], looks.get(npc, "").lower()]
         if _PREFIX.match(text):
@@ -61,6 +80,18 @@ def glitches(turn: dict, looks: dict[str, str]) -> list[str]:
         for other in NAMES.values():
             if re.search(rf"(?:^|\n)\s*{other}\s*:", text):
                 out.append(f"script line for {other}")
+    return out
+
+
+def review_flags(turn: dict, looks: dict[str, str]) -> list[str]:
+    """Not dropped, shown for a human look: a masked description in the middle of a sentence
+    (after a word), where the case may be wrong («підсунула мідяк кремезний сивий чоловік»)."""
+    text = side(turn)
+    out = []
+    for look in looks.values():
+        for m in re.finditer(re.escape(look), text, re.IGNORECASE):
+            if re.search(r"\w\s+$", text[max(0, m.start() - 3):m.start()]):
+                out.append(f"description mid-sentence: ...{text[max(0, m.start() - 30):m.end() + 10]}")
     return out
 
 
@@ -75,6 +106,8 @@ def main() -> None:
         for i in range(PER_SESSION):
             living_is_a = rng.random() < 0.5  # drawn for every pair, so the shuffle is stable
             bad = glitches(liv[i], looks) + glitches(cla[i], looks)
+            for f in review_flags(liv[i], looks) + review_flags(cla[i], looks):
+                print(f"review ({sess} turn {i + 1}):", f)
             if bad:
                 dropped.append({"session": sess, "turn": i + 1, "why": bad})
                 continue
