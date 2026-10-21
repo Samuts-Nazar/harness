@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import json
 import os
+import re
 
 import threading
 
 from harness.judge import (
-    DecisionJudge, EscalatingJudge, FakeJudge, FallbackJudge, LLMJudge,
+    DecisionJudge, EscalatingJudge, FakeJudge, FallbackJudge, LLMJudge, fake_needs_narration,
 )
 from harness.director import EXCHANGE_HEADER, NOBODY, PLAYER_FLOOR
 from harness.pipeline import ModelConfig
@@ -97,9 +98,12 @@ class FakeUk:
             if "fact extractor" in sys:
                 i = self.n["extractor"]
                 self.n["extractor"] += 1
-                diff = {"new_facts": [{"content": FACTS[i % len(FACTS)], "source": "narration",
+                keys = re.search(r"<one of: ([^>]*)>", messages[1]["content"])
+                keys = keys.group(1).split(", ") if keys else ["narration"]
+                src = "narration" if "narration" in keys else keys[0]  # no narration: just talk
+                diff = {"new_facts": [{"content": FACTS[i % len(FACTS)], "source": src,
                                        "notability": 0.4}],
-                        "state_changes": [CHANGES[i]] if i < len(CHANGES) else []}
+                        "state_changes": [{**CHANGES[i], "source": src}] if i < len(CHANGES) else []}
                 return json.dumps(diff, ensure_ascii=False)
             name = sys[8:].split(".")[0]
             lines = LINES.get(name, GENERIC_LINES)  # any other cast (the Vizima campaign)
@@ -155,6 +159,7 @@ def fake_judge() -> FakeJudge:
         "attitude_direction": "neutral", "relationship_magnitude": 0,
         "director_first": first,
         "director_next": next_floor,
+        "director_narration": fake_needs_narration,
         "director_also": lambda q, st: any(
             f in " ".join(st).split("Narration:")[-1].lower()
             for f in _forms(q.text.split(" also ")[0].removeprefix("Would "))),

@@ -20,7 +20,7 @@ from .context import ContextBuilder, NpcView
 from .db import connect
 from .decisions import DecisionCount, count_since
 from .director import (
-    EXCHANGE_HEADER, NOBODY, PLAYER_FLOOR, decide_next, decide_speakers, parse_actions,
+    EXCHANGE_HEADER, NOBODY, PLAYER_FLOOR, decide_first_step, decide_next, decide_speakers, parse_actions,
 )
 from .eventlog import EventLog
 from .extractor import Diff, DiffValidationError, parse_diff, validate_diff
@@ -177,6 +177,7 @@ class _Launch:
     director: list[str] = field(default_factory=list)
     npcs: dict[str, str] = field(default_factory=dict)
     first: Future[_Captured] | None = None  # the first step, asked in a worker (parallel mode)
+    first_step: tuple[str, Shape] | None = None  # the first step, already answered (no narration)
 
 
 @dataclass
@@ -1005,7 +1006,8 @@ class Engine:
 
     # -- the turn -------------------------------------------------------
     def _launch(self, out: NarratorOutput, player_text: str, speakers: Sequence[str] | None,
-                turn_events: list[Event], *, check: bool) -> _Launch:
+                turn_events: list[Event], *, check: bool,
+                first_step: tuple[str, Shape] | None = None) -> _Launch:
         """Prose mode: run the scene director (speakers and observable actions). Write the
         narration and action events, and (parallel mode) start the speech check and one chain per
         speaking NPC, each chain waiting for the lines of the NPCs before it so that it hears them.
@@ -1013,8 +1015,11 @@ class Engine:
 
         Living mode: no speaker list here; what the exchange director reads is taken now (before
         the narration events are written, so it is the same in both modes), and in parallel
-        mode its first step runs in a worker next to the speech check and the actions lister."""
+        mode its first step runs in a worker next to the speech check and the actions lister.
+        `first_step`: no narration this turn (empty `out`): nothing is written for it, and the
+        exchange starts from the first step already answered."""
         speech = None
+        bare = not out.description
         if self.parallel and check:
             speech = self._submit(self._speech_judged, "\n".join(out.texts()))
         living = self._living(speakers)
@@ -1024,10 +1029,10 @@ class Engine:
         if living:
             npcs = {c: self.ctx.describe(c) for c in self.scene.present if c != PLAYER}
             director = self.ctx.director_state(self.scene, player_text, out.description)
-            if self.parallel:
+            if self.parallel and not bare:
                 first = self._submit(self._decide_next, self._exchange_state(director, []),
                                      npcs, out.description, True)
-        if self.narration == "prose":
+        if self.narration == "prose" and not bare:
             spk, act = self._direct_jobs(out.description, player_text,
                                          [] if living else speakers)
             if self.parallel:
@@ -1040,11 +1045,15 @@ class Engine:
                 out.actions = act()
             if got is not None:
                 out.speakers = got
-        narr_ev = self._event(NARRATION, [], {"text": out.description}, witnesses=[],
-                              notability=0.4)
-        evs = [narr_ev]
-        sources = {"narration": narr_ev}
-        segments = [("narration", out.description)]
+        evs: list[Event] = []
+        sources: dict[str, Event] = {}
+        segments: list[tuple[str, str]] = []
+        if not bare:
+            narr_ev = self._event(NARRATION, [], {"text": out.description}, witnesses=[],
+                                  notability=0.4)
+            evs.append(narr_ev)
+            sources["narration"] = narr_ev
+            segments.append(("narration", out.description))
         for i, action in enumerate(out.actions, 1):
             ev = self._event(ACTION_EVENT, [], {"text": action}, notability=0.4)
             evs.append(ev)
@@ -1055,6 +1064,7 @@ class Engine:
         launch = _Launch(out, evs, sources, segments, [] if living else order)
         launch.speech = speech
         launch.director, launch.npcs, launch.first = director, npcs, first
+        launch.first_step = first_step
         if self.parallel:
             earlier: list[tuple[str, Future[_Captured]]] = []
             for npc in order:
@@ -1090,6 +1100,22 @@ class Engine:
             kept = self._fallback_speakers(narration)[:1] if first else []
             self._note("director_unavailable", error=str(e), fallback=kept)
             return (kept[0], Shape.NORMAL) if kept else (NOBODY, Shape.NORMAL)
+
+    def _without_narration(self, player_text: str) -> tuple[str, Shape] | None:
+        """Living mode: is the moment just talk? One batched call (the need for narration and the
+        first exchange step, read without any narration). None: narrate as usual (the director
+        says so, or is unavailable). Otherwise the first step, and the narrator is not called."""
+        npcs = {c: self.ctx.describe(c) for c in self.scene.present if c != PLAYER}
+        state = self.ctx.director_state(self.scene, player_text, "")
+        try:
+            need, nxt, shape = decide_first_step(self.judge, self._exchange_state(state, []), npcs)
+        except JudgeError as e:
+            self._note("director_unavailable", error=str(e), fallback="narrate")
+            return None
+        if need:
+            return None
+        self._note("narration_skipped", first=nxt, shape=shape.value)
+        return nxt, shape
 
     def _shaped_line(self, prep: _NpcPrep, shape: Shape, bounds: tuple[int, int]) -> str:
         """An NPC line told its shape, output-checked as every line, and fitted to the same
@@ -1144,7 +1170,9 @@ class Engine:
                 result.stop_reason = "cap"
                 self._note("exchange_cap", steps=step)
                 return
-            if step == 0 and launch.first is not None:
+            if step == 0 and launch.first_step is not None:
+                nxt, shape = launch.first_step
+            elif step == 0 and launch.first is not None:
                 nxt, shape = self._take(launch.first)
             else:
                 nxt, shape = self._decide_next(self._exchange_state(launch.director, lines),
@@ -1407,7 +1435,13 @@ class Engine:
                         turn_events.append(record_death(self, outcome, player_ev))
             outcomes = [outcome] if outcome else []
 
-            if self.parallel:
+            first_step = (self._without_narration(model_text)
+                          if outcome is None and self._living(speakers) else None)
+            if first_step is not None:
+                out = NarratorOutput("")
+                launch = self._launch(out, model_text, speakers, turn_events, check=False,
+                                      first_step=first_step)
+            elif self.parallel:
                 def on_candidate(out: NarratorOutput) -> bool:
                     nonlocal launch
                     cand = self._launch(out, model_text, speakers, turn_events, check=True)
@@ -1425,7 +1459,7 @@ class Engine:
                 out = self._narrate(model_text, outcome=outcome)
                 launch = self._launch(out, model_text, speakers, turn_events, check=False)
 
-            if on_narration is not None:
+            if on_narration is not None and out.description:
                 on_narration(out.description)
             sources = {**{k: ev for k, ev in player_pairs}, **launch.sources}
             segments = [*[(k, ev.payload["text"]) for k, ev in player_pairs], *launch.segments]

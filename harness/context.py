@@ -429,7 +429,9 @@ class ContextBuilder:
         lines = [self._scene_header(scene)]
         if recent:
             lines.append("Recent:\n" + "\n".join(self._seen(e) for e in recent))
-        lines += [f"The player does/says: {player_input}", f"Narration: {narration}"]
+        lines.append(f"The player does/says: {player_input}")
+        if narration:  # none when the moment is just talk (living dialogue)
+            lines.append(f"Narration: {narration}")
         g = self.glossary
         return [g.apply(x) for x in lines] if g else lines
 

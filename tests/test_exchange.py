@@ -24,12 +24,26 @@ PROFILES = [
 NARRATION = "Дощ стукає у вікна корчми."
 
 
+def scripted(answers, rules):
+    """Pops one answer per exchange step. When the turn is narrated, the opening batch (asked
+    before the narration exists, only to learn whether to narrate) does not use up the script."""
+    left, narrated = list(answers), rules["director_narration"] is True
+
+    def rule(q, state):
+        if narrated and not any(str(x).startswith("Narration:") for x in state):
+            return None
+        return left.pop(0) if len(left) > 1 else (left[0] if left else None)
+
+    return rule
+
+
 def make(npc_lines, nxt, shape, *, present=(PLAYER, "horst", "elza"), extractor=None,
          rules=None, **kw):
     script = {"narrator": [NARRATION], "npc": list(npc_lines),
               "extractor": list(extractor or ["none", diff()])}
-    judge = FakeJudge({"director_next": list(nxt), "director_shape": list(shape),
-                       **(rules or {})})
+    rules = {"director_narration": True, **(rules or {})}
+    judge = FakeJudge({"director_next": scripted(nxt, rules), "director_shape": scripted(shape, rules),
+                       **rules})
     prov = FakeProvider(script=script)
     kw.setdefault("record_language", None)
     eng = Engine(prov, PROFILES, Scene("Inn", tuple(present), time=0), models=ModelConfig(),
@@ -43,7 +57,8 @@ def npc_prompts(prov):
 
 
 def next_asks(judge):
-    return [(st, qs) for st, qs in judge.asked if "next" in qs]
+    """The exchange steps read with a narration (the opening need-narration batch is not one)."""
+    return [(st, qs) for st, qs in judge.asked if "next" in qs and "narration" not in qs]
 
 
 def speakers(res):
@@ -304,3 +319,80 @@ def test_offline_app_stack_in_living_mode_gives_one_or_two_lines():
     for text in ("Добрий вечір.", "Що чути?", "Ну?"):
         res = eng.turn(text)
         assert 1 <= len(res.utterances) <= 2, (text, res.stop_reason, len(res.utterances))
+
+
+# -- task 5: narration only when needed ----------------------------------------------------------
+def narrator_calls(prov):
+    return [m for mod, m in prov.calls if mod == "narrator"]
+
+
+def test_quick_exchange_skips_narrator():
+    eng, prov, judge = make(["Чого тобі?"], ["horst", PLAYER_FLOOR], ["short"],
+                            rules={"director_narration": False})
+    words, narrated = [], []
+    res = eng.turn("Так.", on_word=lambda n, w: words.append(w), on_narration=narrated.append)
+    assert narrator_calls(prov) == [] and res.narration == "" and narrated == []
+    assert speakers(res) == ["horst"] and words
+    assert res.stop_reason == "player_addressed"
+    assert eng.log.active(["narration"]) == []
+    # one batch carried the narration question and the first step; the second step is its own call
+    first = judge.asked[0][1]
+    assert {"narration", "next", "shape"} <= set(first)
+    assert "Narration:" not in "\n".join(judge.asked[0][0])
+    assert any(n["kind"] == "narration_skipped" for n in eng.devlog)
+    assert "narration_skipped" in CODE_CHOICE_KINDS
+
+
+def test_narration_yes_narrates_as_before():
+    eng, prov, judge = make(["Чого тобі?"], ["horst", PLAYER_FLOOR], ["short"])
+    res = eng.turn("Заходжу.")
+    assert len(narrator_calls(prov)) == 1 and res.narration == NARRATION
+    assert not any(n["kind"] == "narration_skipped" for n in eng.devlog)
+
+
+def test_classic_mode_always_narrates_and_never_asks():
+    eng, prov, judge = make(["Привіт."], [], [], dialogue="classic",
+                            rules={"director_narration": False})
+    res = eng.turn("Заходжу.")
+    assert len(narrator_calls(prov)) == 1 and res.narration == NARRATION
+    assert all("narration" not in qs for _, qs in judge.asked)
+
+
+def test_outcome_forces_narration():
+    from harness.outcome import OutcomeJudge  # noqa: F401  (the engine builds its own)
+
+    eng, prov, judge = make(["Чого тобі?"], ["horst", PLAYER_FLOOR], ["short"], outcomes=True,
+                            rules={"director_narration": False, "outcome_attempt": True})
+    res = eng.turn("Б'ю Горста кулаком.")
+    assert res.narration and len(narrator_calls(prov)) == 1
+    assert all("narration" not in qs for _, qs in judge.asked)
+
+
+def test_interrupt_before_first_step_without_narration_writes_nothing():
+    eng, prov, judge = make(["Не буде."], ["horst"], ["short"], rules={"director_narration": False})
+    h = InterruptHandle()
+    h.request()
+    res = eng.turn("Так.", handle=h)
+    assert res.interrupted and res.utterances == [] and res.narration == ""
+    assert npc_prompts(prov) == []
+
+
+def test_skipped_narration_in_parallel_mode_matches_sequential():
+    def run(parallel):
+        eng, prov, _ = make(["Чого тобі?"], ["horst", PLAYER_FLOOR], ["short"], parallel=parallel,
+                            rules={"director_narration": False})
+        eng.turn("Так.")
+        return [(e.type, e.payload.get("speaker"), e.payload.get("text"))
+                for e in eng.log.active()]
+
+    assert run(False) == run(True)
+
+
+def test_default_offline_judge_narrates_first_turn_then_usually_not():
+    prov = FakeProvider(script={"narrator": ["Тиша."] * 4, "npc": [f"Рядок {i}." for i in range(8)],
+                                "extractor": ["none", diff()] * 4})
+    eng = Engine(prov, PROFILES, Scene("Inn", (PLAYER, "horst", "elza"), time=0),
+                 models=ModelConfig(), narration="prose", record_language=None)
+    assert eng.turn("Добрий вечір.").narration == "Тиша."
+    assert eng.turn("Що чути?").narration == ""
+    assert len(narrator_calls(prov)) == 1

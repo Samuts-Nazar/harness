@@ -29,6 +29,7 @@ NOBODY = "nobody"
 PLAYER_FLOOR = "player"  # the floor returns to the player (same id as models.PLAYER)
 FIRST_TAG, ALSO_TAG = "director_first", "director_also"
 NEXT_TAG, SHAPE_TAG = "director_next", "director_shape"
+NARRATION_TAG = "director_narration"
 # heads the lines of the exchange so far in the director's state (absent on the first step)
 EXCHANGE_HEADER = "This exchange so far, in order (the last line was just said):"
 
@@ -104,6 +105,35 @@ def next_floor_questions(npcs: Mapping[str, str]) -> dict[str, Question]:
             "replies in a quick exchange are short.",
             {s.value: d for s, d in _SHAPES.items()}, tag=SHAPE_TAG),
     }
+
+
+def needs_narration_question() -> Question:
+    """Yes/no: does this moment need a narrated passage, or is it just talk (living dialogue)."""
+    return yes_no_q(
+        "Does this moment need a narrated passage (a change of scene, an action with a visible "
+        "result, someone arriving, a pause worth describing, an outcome to tell), or is it just "
+        "talk? Answer yes only if a passage of narration is needed; a quick exchange of lines, "
+        "a question and its answer, needs none.", tag=NARRATION_TAG)
+
+
+def decide_first_step(judge: Judge, state: Sequence[str], npcs: Mapping[str, str]
+                      ) -> tuple[bool, str, Shape]:
+    """The start of a living turn in ONE batched call: (does the moment need narration, then the
+    first exchange step as `decide_next` answers it). The state has no narration yet; when the
+    answer is yes the caller narrates and asks the first step again with the narration."""
+    qs = {"narration": needs_narration_question(), **(next_floor_questions(npcs) if npcs else {})}
+    got = judge.ask(state, qs)
+    need = bool(got["narration"].answer)
+    if not npcs:
+        return need, NOBODY, Shape.NORMAL
+    nxt = str(got["next"].answer)
+    if nxt not in npcs and nxt != PLAYER_FLOOR:
+        nxt = NOBODY
+    try:
+        shape = Shape(str(got["shape"].answer))
+    except ValueError:
+        shape = Shape.NORMAL
+    return need, nxt, shape
 
 
 def decide_next(judge: Judge, state: Sequence[str], npcs: Mapping[str, str]
