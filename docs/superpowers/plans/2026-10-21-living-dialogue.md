@@ -295,3 +295,27 @@ Found by the lead in the user's live session; added as Tasks 9–11 after Task 8
   - a beat must look like a narrated act (a third-person verb or the speaker's name/pronoun near its start); otherwise the piece is speech;
   - seeded names carry gender and are drawn to match the character's gender (from profile/appearance; ask the decider once if unknown).
 - Tests: the exact line above parses as one speech piece plus the real beat; a male role never gets a female-table name.
+
+### Task 12: Fixes from the Task 8 measurement and the reviews
+**Files:** `harness/pipeline.py`, `harness/director.py`, `harness/shape.py`, `harness/style.py`, `app/`, `experiments/dialogue/`; tests in the matching files.
+- **Extractor source bug.**
+  - In live runs, 5 of 20 turns hit `ExtractionRejected: unknown source 'Горст~2'`: for an NPC's second line in a turn the extractor cites the display name plus `~2`, not `horst~2`, and the slow lane rolls back the turn.
+  - Map display-name + `~N` back to the segment key before validation (`_ids_for_names`).
+  - Test with a fake extractor answering `Горст~2`.
+- **Shape distribution follows the profile.**
+  - Living runs had 0 lines over 15 words (book 36%) and a beat on every line (book ~45–59% without beats).
+  - Change the shape choice so the session's length distribution tracks the world profile: e.g. the decider gives shape probabilities and code samples from them, reweighted by the gap between the session so far and the profile.
+  - Make the beat a per-line choice drawn from the profile's `no_beat_share` (the NPC call is told "no gesture this line"), not left to the model.
+  - Report the distance before/after on a fake-provider simulation and in the live re-run below.
+- **Names in parsing.** Pass the known character names to `split_npc_output(..., names=...)` from the pipeline (Task 11 added the parameter).
+- **Gender.** Wire `sex_decider` for NPCs whose sex cannot be inferred (one decider call, cached in the profile).
+- **Speaker-prefix glitches.**
+  - Two glitches seen in output: a description used as a speaker prefix ("Горст: кремезний сивий чоловік…") and a name repeated after the label ("Ельза: Ельза потерла…").
+  - Strip a leading "<label or name>:" prefix and a leading repeat of the speaker's own name/label in NPC output. Tests with both lines.
+- **Script-switch check.**
+  - A stray "天天爱彩票" reached output.
+  - Any narration/NPC output with characters outside the expected scripts (Cyrillic, Latin for names, punctuation) is regenerated once, then the foreign run is cut. Test.
+- **Flaky tests.** Make `app/tests/test_app_dialogue.py::test_send_during_exchange_via_http_does_not_return_409` and `test_send_during_exchange_interrupts_then_runs` deterministic (they failed 1–2 of 3 full runs): synchronise on events, not sleeps. The full suite must pass 5 times in a row.
+- **Live re-run and A/B.**
+  - Re-run `experiments/dialogue/live_check.py` (2 inn sessions living + classic, 3 scenes; budget 0.40 USD) and update `reports/dialogue/SUMMARY.md` with before/after numbers.
+  - Regenerate the A/B pairs (whole short exchanges, no book text, no glitches; drop any pair with a detected glitch) into `app/static/ab_data.js` and `reports/dialogue/ab_key.json`.
