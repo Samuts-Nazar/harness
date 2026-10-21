@@ -37,33 +37,26 @@
  {
   "pair": 6,
   "session": "B",
-  "turn": 1,
-  "A": "living",
-  "B": "classic"
- },
- {
-  "pair": 7,
-  "session": "B",
   "turn": 2,
   "A": "classic",
   "B": "living"
  },
  {
-  "pair": 8,
+  "pair": 7,
   "session": "B",
   "turn": 3,
   "A": "living",
   "B": "classic"
  },
  {
-  "pair": 9,
+  "pair": 8,
   "session": "B",
   "turn": 4,
   "A": "living",
   "B": "classic"
  },
  {
-  "pair": 10,
+  "pair": 9,
   "session": "B",
   "turn": 5,
   "A": "classic",
