@@ -315,6 +315,10 @@ class Engine:
         self.vitals = VitalsBook()
         self.outcome_judge = OutcomeJudge(self)
         self.canon_guard: Any = None   # harness.canon.play.CanonGuard: narrated output that contradicts canon is regenerated
+        # harness.scene_cast.SceneCast: people the narration brings in are admitted or the
+        # narration is regenerated (living dialogue task 9); None: not checked
+        self.scene_cast: Any = None
+        self._admitted: list[tuple[Event, bool, bool]] = []  # this turn: (entry, new profile, was outside)
         self._fixes: list[dict[str, str]] = []  # glossary replacements of the running turn
         self._fixes_lock = threading.Lock()
         self._tl = threading.local()
@@ -542,9 +546,13 @@ class Engine:
         no actions or speakers yet: the scene director fills them in."""
         sc = self.scene
         raw, parsed = "", None
+        notes: list[str] = []  # why earlier drafts were rejected, when the narrator can fix it
+        # the cast review's last draft that passed it, and the last one that drifted (task LD-9)
+        cast: dict[str, tuple[NarratorOutput, Any]] = {}
         for attempt in range(self.narrate_retries + 1):
-            raw = self._complete("narrator", self.ctx.narrator(
-                sc, player_text, outcome.for_narrator() if outcome else None)).strip()
+            admitted: list[tuple[Event, bool, bool]] = []
+            raw = self._complete("narrator", self._with_notes(self.ctx.narrator(
+                sc, player_text, outcome.for_narrator() if outcome else None), notes)).strip()
             if self.narration == "prose":
                 text = self._prose_of(raw)
                 if not text:
@@ -573,14 +581,24 @@ class Engine:
                     why := self.canon_guard.check("\n".join(out.texts()), "narration")) is not None:
                 self._note("canon_drift_rejected", attempt=attempt, why=why, text=out.description)
                 ok = False
+            elif self.scene_cast is not None and (
+                    why := self._cast_review(out, admitted, attempt, cast)) is not None:
+                notes.append(why)
+                ok = False
             elif on_candidate is not None:
                 ok = on_candidate(self._valid_speakers(out))
             else:
                 ok = not self._speech_judged("\n".join(out.texts()))
             if ok:
                 return self._valid_speakers(out)
+            self._unadmit(admitted)
             self._note("narrator_speech_rejected", attempt=attempt, text=out.description)
         names = self._npc_names
+        late: tuple[NarratorOutput, Any] | None = None  # people to admit into the delivered draft
+        if "ok" in cast:  # never deliver a person who cannot be here: the last draft that passed
+            parsed, late = cast["ok"][0], cast["ok"]
+        elif "drift" in cast:  # every reviewed draft drifted: remove the people, keep the rest
+            parsed, late = self._remove_absent(*cast["drift"]), cast["drift"]
         if parsed is None:
             parsed = NarratorOutput(self._fix_names(self._prose_of(raw), "narration"))
         mask = lambda t: self.names.mask(PLAYER, t)  # noqa: E731 - last resort: no unknown name
@@ -593,7 +611,92 @@ class Engine:
             stripped.description = "..."
         self._note("narrator_speech_stripped", before=parsed.description,
                    after=stripped.description)
+        if late is not None:
+            self._cast_admit(stripped, late[1], [], -1)
         return self._valid_speakers(stripped)
+
+    @staticmethod
+    def _with_notes(messages: list[dict[str, str]], notes: Sequence[str]
+                    ) -> list[dict[str, str]]:
+        """The narrator's messages with the reasons earlier drafts were rejected, at the end."""
+        if not notes or not messages:
+            return messages
+        last = messages[-1]
+        return [*messages[:-1], {**last, "content": last["content"] + "\n\nNote on your earlier "
+                                 "draft: " + " ".join(dict.fromkeys(notes))}]
+
+    def _cast_review(self, out: NarratorOutput, admitted: list[tuple[Event, bool, bool]],
+                     attempt: int, cast: dict[str, tuple[NarratorOutput, Any]]) -> str | None:
+        """People the narration shows present who are not in the scene (main thread). A person
+        who cannot be here (canon calendar, the world, a plausibility judgment) makes the draft
+        drift: the reason is returned and the narrator writes again with it. Everyone else enters
+        the scene now (`_cast_admit`). `admitted` collects the entries, undone if the draft is
+        rejected later. `cast` keeps the last draft that passed ("ok") and the last that drifted
+        ("drift"), with their reviews, for the case that every draft is rejected."""
+        rv = self.scene_cast.review(self, "\n".join(out.texts()))
+        draft = NarratorOutput(out.description, list(out.actions), list(out.speakers))
+        if rv.reject is not None:
+            cast["drift"] = (draft, rv)
+            self._note("narrator_absent_character", attempt=attempt, people=rv.people,
+                       absent=rv.absent, why=rv.reject, text=out.description)
+            return rv.reject
+        cast["ok"] = (draft, rv)
+        self._cast_admit(out, rv, admitted, attempt)
+        return None
+
+    def _cast_admit(self, out: NarratorOutput, rv: Any, admitted: list[tuple[Event, bool, bool]],
+                    attempt: int) -> None:
+        """The people a review admits enter the scene (`enter_scene`, a profile from canon or
+        npcgen), so they can speak and the director can pick them; a name the player character
+        has not learned is replaced by how the person looks."""
+        for adm in rv.admit:
+            before = set(self.profiles)
+            cid = self.scene_cast.character_for(self, adm)
+            if cid in self.scene.present:
+                continue
+            outside = cid in self.scene.outside
+            ev = self.enter_scene(cid)
+            # only a generated passer-by's profile is dropped on undo; a canon profile stays
+            # made (harness/canon/play.py keeps it), as for any canon person of the campaign
+            entry = (ev, adm.kind == "passer_by" and cid not in before, outside)
+            admitted.append(entry)
+            self._admitted.append(entry)
+            self._note("character_admitted", attempt=attempt, character=cid, how=adm.kind,
+                       mention=adm.mention)
+        if admitted:  # names stay knowledge: a newcomer is shown by appearance
+            out.description = self.names.mask(PLAYER, out.description)
+            out.actions = [self.names.mask(PLAYER, a) for a in out.actions]
+
+    def _remove_absent(self, draft: NarratorOutput, rv: Any) -> NarratorOutput:
+        """Last resort after every draft drifted: the sentences that put the absent people here
+        are removed in code."""
+        from .scene_cast import remove_people
+
+        desc, removed = remove_people(draft.description, rv.absent)
+        acts = [a for a in (remove_people(a, rv.absent)[0] for a in draft.actions) if a]
+        self._note("narrator_absent_character_removed", absent=rv.absent, removed=removed,
+                   before=draft.description, after=desc)
+        return NarratorOutput(desc, acts, list(draft.speakers))
+
+    def _unadmit(self, admitted: list[tuple[Event, bool, bool]]) -> None:
+        """Undo admissions of a rejected draft (or a failed turn): the entry and what it caused
+        are rolled back, the person leaves the scene, a passer-by made for the draft is dropped."""
+        for ev, created, outside in reversed(admitted):
+            cid = ev.payload["character"]
+            self.log.rollback(ev.id, "narration rejected")
+            self.scene.present = tuple(c for c in self.scene.present if c != cid)
+            if outside and cid not in self.scene.outside:
+                self.scene.outside = self.scene.outside + (cid,)
+            if created:
+                self.profiles.pop(cid, None)
+                self.vitals.people.pop(cid, None)
+            self._admitted = [x for x in self._admitted if x[0].id != ev.id]
+            self._note("character_admission_undone", character=cid)
+        if admitted:
+            if self._owns_conn:
+                self._save_setup()
+            self.refresh_memory()
+        admitted.clear()
 
     def _valid_speakers(self, out: NarratorOutput) -> NarratorOutput:
         by_name = {p.name.lower(): c for c, p in self.profiles.items()}
@@ -1437,6 +1540,7 @@ class Engine:
                 raise ValueError(f"{s!r} cannot speak: not an NPC in the scene")
         turn_events: list[Event] = []
         launch: _Launch | None = None
+        self._admitted = []
         with self._fixes_lock:
             self._fixes = []
         parts = split_input(player_text)
@@ -1480,6 +1584,7 @@ class Engine:
                 out = self._narrate(model_text, outcome=outcome)
                 launch = self._launch(out, model_text, speakers, turn_events, check=False)
 
+            turn_events.extend(ev for ev, _, _ in self._admitted)  # undone with the turn
             if on_narration is not None and first_step is None:
                 on_narration(out.description)
             sources = {**{k: ev for k, ev in player_pairs}, **launch.sources}
@@ -1515,6 +1620,7 @@ class Engine:
                     launch.first.cancel()
             for e in turn_events:
                 self.log.rollback(e.id, "turn failed")
+            self._unadmit(self._admitted)
             self.refresh_memory()
             raise
         if launch is not None and self.parallel:
@@ -1583,6 +1689,9 @@ class Engine:
                 sc.time = real_time
                 for ev in slow.turn_events:
                     self.log.rollback(ev.id, "turn failed")
+                    if ev.type == SCENE_ENTRY:  # a person the narration brought in (task LD-9)
+                        sc.present = tuple(c for c in sc.present
+                                           if c != ev.payload["character"])
                 sc.time = slow.time  # the turn's minutes did not happen
                 self.after_settle.clear()
                 self.refresh_memory()
