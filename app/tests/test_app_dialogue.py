@@ -281,3 +281,34 @@ def test_start_turn_rechecks_a_challenge_that_began_while_it_waited():
     g.challenging = False
     g.wait_idle(30)
     assert [t["text"] for t in g.transcript if t["kind"] == "player"] == ["Перша."]
+
+
+def test_late_retract_of_a_cut_in_turn_names_that_turn():
+    """Final review: turn 1's slow lane fails after the player cut in with turn 2. The retract
+    carries turn 1's id (turn 2's turn_start already went out), so a client removes only turn 1's
+    elements; the server transcript keeps turn 2."""
+    g = make()
+    entered, release = threading.Event(), threading.Event()
+    real_settle = g.eng.settle
+
+    def settle():
+        if g.phase == "idle" and not entered.is_set():
+            entered.set()
+            assert release.wait(10)
+            g.eng.slow_failure = RuntimeError("slow lane failed")
+            return False
+        return real_settle()
+
+    g.eng.settle = settle
+    g.start_turn("Перша.")
+    assert entered.wait(10)
+    g.start_turn("Друга.")   # cuts in while turn 1's slow lane runs
+    release.set()
+    g.wait_idle(30)
+    evs = g.events_after(0)
+    starts = [e for e in evs if e["type"] == "turn_start"]
+    retract = next(e for e in evs if e["type"] == "retract")
+    assert starts and starts[-1]["turn"] == 2 and retract["turn"] == 1
+    assert evs.index(starts[-1]) < evs.index(retract)
+    assert all(e["turn"] == 2 for e in evs if e["type"] in ("turn_done", "speaker", "word"))
+    assert [t["text"] for t in g.transcript if t["kind"] == "player"] == ["Друга."]

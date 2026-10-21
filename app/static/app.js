@@ -1,7 +1,10 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
 const feed = $("feed");
-let tag = "", lastSeq = 0, es = null, turnEls = [], cur = null, busy = false, turnNpc = [], sending = 0;
+let tag = "", lastSeq = 0, es = null, cur = null, busy = false, turnNpc = [], sending = 0;
+// the feed elements of each turn, by the server's turn id: a late retract or error of an earlier
+// turn (its slow lane failed after the player had cut in) removes only that turn's elements
+let turnEls = {}, curTurn = null;
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -12,7 +15,7 @@ function el(tag, cls, text) {
 function add(node, tracked = true) {
   const atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 80;
   feed.appendChild(node);
-  if (tracked) turnEls.push(node);
+  if (tracked) (turnEls[curTurn] = turnEls[curTurn] || []).push(node);
   if (atBottom) feed.scrollTop = feed.scrollHeight;
   return node;
 }
@@ -140,8 +143,18 @@ function render(state) {
   if (state.ended) showFinale(state.chronicle); else $("finale").hidden = true;
 }
 
+// remove the elements of the event's turn; true when it is the current turn
+function dropTurn(e) {
+  const t = e.turn != null ? e.turn : curTurn;
+  for (const n of turnEls[t] || []) n.remove();
+  delete turnEls[t];
+  if (t !== curTurn) return false;
+  cur = null;
+  return true;
+}
+
 const handlers = {
-  turn_start(e) { turnEls = []; turnNpc = []; cur = null; add(el("p", "me", e.text)); },
+  turn_start(e) { curTurn = e.turn; turnEls[curTurn] = []; turnNpc = []; cur = null; add(el("p", "me", e.text)); },
   narr_start() { cur = null; setBusy(true, "narrating"); },   // the bubble appears with its first word
   narr_word(e) { if (!cur || !cur.classList.contains("narr")) cur = add(el("p", "narr")); addWord(cur, e.w); },
   narr_end() { setBusy(true, "thinking"); },
@@ -161,11 +174,12 @@ const handlers = {
     if (!$("debugPanel").hidden) loadDebug();
   },
   error(e) {
-    for (const n of turnEls) n.remove();
-    turnEls = []; cur = null;
-    if (!$("input").value.trim()) $("input").value = e.text;   // keep what is being typed now
-    syncSend();
-    setBusy(false); showError(e.message);
+    if (dropTurn(e)) {
+      if (!$("input").value.trim()) $("input").value = e.text;   // keep what is being typed now
+      syncSend();
+      setBusy(false);
+    }
+    showError(e.message);
     if (!$("debugPanel").hidden) loadDebug();
   },
   settled(e) {            // the slow lane is done: the panel now shows what the turn changed
@@ -174,11 +188,12 @@ const handlers = {
     if (!$("debugPanel").hidden) loadDebug();
   },
   retract(e) {            // the bookkeeping of the turn failed after the player had read it
-    for (const n of turnEls) n.remove();
-    turnEls = []; cur = null;
-    if (!$("input").value.trim()) $("input").value = e.text;
-    syncSend();
-    setBusy(false); showError(e.message);
+    if (dropTurn(e)) {      // an earlier turn: the running one keeps its bubbles, input and busy state
+      if (!$("input").value.trim()) $("input").value = e.text;
+      syncSend();
+      setBusy(false);
+    }
+    showError(e.message);
   },
   ended(e) { showFinale(e.chronicle); },
   reset() {},

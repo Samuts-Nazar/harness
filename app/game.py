@@ -64,6 +64,8 @@ class Game:
         self.thread: threading.Thread | None = None
         self.threads: list[threading.Thread] = []
         self.challenging = False
+        self.turn_no = 0  # every turn's events carry its id, so a client scopes them per turn
+        self._tl = threading.local()  # the turn id of the running thread
         self.reset(new=False)
 
     # -- campaign ---------------------------------------------------------------------------
@@ -105,6 +107,9 @@ class Game:
 
     # -- events -----------------------------------------------------------------------------
     def _emit(self, type: str, **data: Any) -> dict[str, Any]:
+        turn = getattr(self._tl, "turn", None)
+        if turn is not None:
+            data.setdefault("turn", turn)
         with self.lock:
             self.seq += 1
             ev = {"seq": self.seq, "type": type, **data}
@@ -195,11 +200,13 @@ class Game:
                 self.skip_narration = False
                 self.turn_start_seq = self.seq
                 self.events = []
-                self._emit("turn_start", text=text)
+                self.turn_no += 1
+                self._emit("turn_start", text=text, turn=self.turn_no)
                 # the last turn's thread may still be in its slow lane and bookkeeping: the new
                 # one waits for it before it touches the engine
-                self.thread = threading.Thread(target=self._run,
-                                               args=(text, self.handle, self.thread), daemon=True)
+                self.thread = threading.Thread(
+                    target=self._run, args=(text, self.handle, self.thread, self.turn_no),
+                    daemon=True)
                 self.threads = [t for t in self.threads if t.is_alive()] + [self.thread]
                 self.thread.start()
 
@@ -275,9 +282,10 @@ class Game:
             time.sleep(self.pace)
 
     def _run(self, text: str, handle: InterruptHandle,
-             last: threading.Thread | None = None) -> None:
+             last: threading.Thread | None = None, turn: int | None = None) -> None:
         eng, rec, spend = self.eng, self.camp.recorder, self.camp.spend
         t0 = time.monotonic()
+        self._tl.turn = turn  # every event this thread emits belongs to this turn
         if last is not None and last is not threading.current_thread():
             last.join()  # one thread on the engine and its database at a time
         try:
