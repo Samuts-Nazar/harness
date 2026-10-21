@@ -171,6 +171,16 @@ class Campaign:
             if e.type == NARRATION:
                 out.append({"kind": "narr", "text": e.payload["text"]})
                 continue
+            if e.type == ACTION and e.payload.get("gesture"):
+                # a gesture-only step of an NPC, shown as their action (as the live path does)
+                by = e.payload.get("by") or (e.participants[0] if e.participants else "")
+                names = self.engine.names
+                text = (names.mask(PLAYER, str(e.payload.get("text", "")), before=e.id)
+                        if names else str(e.payload.get("text", ""))).strip()
+                if text:
+                    out.append({"kind": "npc_act", "who": by, "text": text,
+                                "name": self.engine.ctx.label(PLAYER, by, e.id)})
+                continue
             if e.type == ACTION and e.payload.get("actor") != PLAYER:
                 continue  # observable actions of narration are not shown as such
             who = e.payload.get("speaker", e.payload.get("actor"))

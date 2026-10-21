@@ -247,3 +247,16 @@ def test_death_in_a_turn_is_seen_as_soon_as_the_player_can_read():
     finally:
         release.set()
         g.wait_idle(30)
+
+
+def test_gesture_step_survives_a_reload():
+    """Final review: a gesture-only step is an ACTION with {text, by, gesture}; the rebuilt
+    transcript shows it as the NPC's action, in its place, masked like the live path."""
+    g = make(floors=["horst", "elza", "horst", "player"], shapes=["normal", "gesture", "normal"])
+    g.start_turn("Що кажете?")
+    g.wait_idle(20)
+    live = [(t["kind"], t["who"], t.get("name"), t["text"]) for t in g.transcript
+            if t["kind"] in ("npc", "npc_act")]
+    rebuilt = [(t["kind"], t["who"], t.get("name"), t["text"]) for t in g.camp.transcript()
+               if t["kind"] in ("npc", "npc_act")]
+    assert rebuilt == live
