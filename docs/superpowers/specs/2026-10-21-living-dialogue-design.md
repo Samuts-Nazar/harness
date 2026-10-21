@@ -1,6 +1,6 @@
 # Living dialogue and the world profile — design
 
-Date: 2026-10-21. Status: draft for the user's approval.
+Date: 2026-10-21. Status: approved by the user on 2026-10-21.
 First of three projects against "averaging" (this one; then a decision layer; then prose tone).
 
 ## Intent and the why
