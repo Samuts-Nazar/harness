@@ -4,6 +4,7 @@ the pace."""
 from __future__ import annotations
 
 import tempfile
+import threading
 import time
 
 import pytest
@@ -37,6 +38,14 @@ def wait_phase(g, phase, timeout=10):
     while g.phase != phase and time.time() < end:
         time.sleep(0.005)
     assert g.phase == phase
+
+
+def wait_event(g, type, timeout=10):
+    """Until the running turn has emitted an event of this type (no fixed sleeps)."""
+    end = time.time() + timeout
+    while not any(e["type"] == type for e in g.events_after(0)) and time.time() < end:
+        time.sleep(0.002)
+    assert any(e["type"] == type for e in g.events_after(0))
 
 
 def after(g, text):
@@ -111,7 +120,7 @@ def test_send_during_exchange_interrupts_then_runs():
     g = make(pace=0.02, floors=["horst", "elza", "horst", "player"])
     g.start_turn("Перша.")
     wait_phase(g, "speaking")
-    time.sleep(0.08)
+    wait_event(g, "word")  # at least one word of the first line is out
     g.start_turn("Друга.")  # cuts in, waits for the first turn, runs the second
     g.wait_idle(30)
     assert [t["text"] for t in g.transcript if t["kind"] == "player"] == ["Перша.", "Друга."]
@@ -158,3 +167,48 @@ def test_skip_when_idle_is_harmless():
     g = make(pace=0.1)
     assert TestClient(create_app(g)).post("/api/skip").status_code == 200
     assert g.pace == 0.1
+
+
+def test_next_turn_waits_for_the_last_turns_slow_lane_and_reads_no_db_meanwhile():
+    """The flaky failures: a new turn started while the last turn's thread was still in its slow
+    lane (and the bookkeeping after it), and the request thread read the database (`ended`) at
+    the same time; one SQLite connection used from two threads. Now the new turn's thread waits
+    for the last one, and nothing reads the database from the request thread while a turn's
+    thread is alive. Synchronised on events, no sleeps."""
+    g = make()
+    entered, release = threading.Event(), threading.Event()
+    real_settle = g.eng.settle
+
+    def settle():
+        if g.phase == "idle" and not entered.is_set():  # the slow lane after the fast one
+            entered.set()
+            assert release.wait(10)
+        return real_settle()
+
+    g.eng.settle = settle
+    g.start_turn("Перша.")
+    assert entered.wait(10)  # the first turn is idle for the player, its thread still busy
+    first = g.thread
+    reads: list[object] = []
+    real_active, real_turn = g.eng.log.active, g.eng.turn
+    turns: list[str] = []
+
+    def active(*a, **k):
+        if threading.current_thread() is threading.main_thread():
+            reads.append(a)
+        return real_active(*a, **k)
+
+    def turn(text, **k):
+        assert not first.is_alive(), "the new turn ran next to the last turn's slow lane"
+        turns.append(text)
+        return real_turn(text, **k)
+
+    g.eng.log.active, g.eng.turn = active, turn
+    st = g.state()
+    assert st["running"] and st["ended"] is False and st["phase"] == "idle"
+    g.start_turn("Друга.")
+    assert reads == [], "no database read from the request thread while a turn's thread runs"
+    release.set()
+    g.wait_idle(30)
+    assert turns == ["Друга."]
+    assert [t["text"] for t in g.transcript if t["kind"] == "player"] == ["Перша.", "Друга."]

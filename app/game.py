@@ -74,6 +74,7 @@ class Game:
             if self.running or self.challenging:
                 raise Busy("a turn is running")
             self.camp = self._open(new)
+            self._ended = self.eng.ended  # read again whenever no turn's thread uses the database
             self.transcript: list[dict[str, Any]] = self.camp.transcript()
             self.phase = "idle"  # idle | thinking | narrating | speaking
             self.handle: InterruptHandle | None = None
@@ -93,6 +94,14 @@ class Game:
     @property
     def eng(self):  # type: ignore[no-untyped-def]
         return self.camp.engine
+
+    def _is_ended(self) -> bool:
+        """Is the player character dead? Read from the database only while no turn's thread is
+        alive (one SQLite connection must not be used from two threads at once); otherwise the
+        value that thread left after its turn. Call with `self.lock` held."""
+        if not self.running:
+            self._ended = self.eng.ended
+        return self._ended
 
     # -- events -----------------------------------------------------------------------------
     def _emit(self, type: str, **data: Any) -> dict[str, Any]:
@@ -134,7 +143,8 @@ class Game:
                 "title": self.camp.title, "live": self.camp.live, "clock": self.clock(),
                 "transcript": list(self.transcript), "panel": self.panel(),
                 "running": self.running, "phase": self.phase,
-                "ended": self.eng.ended, "chronicle": self.chronicle() if self.eng.ended else [],
+                "ended": self._is_ended(),
+                "chronicle": self.chronicle() if self._is_ended() and not self.running else [],
                 # a client replays everything after this; for an idle game that is nothing
                 "resume_after": self.turn_start_seq if self.running else self.seq,
                 "pending_turn": getattr(self, "pending", None) if self.running else None,
@@ -162,7 +172,7 @@ class Game:
             raise ValueError("empty input")
         with self.start_lock:
             with self.lock:
-                if self.eng.ended:
+                if self._is_ended():
                     raise Ended("the character is dead; the campaign is read-only")
                 if self.challenging:
                     raise Busy("a challenge is running")
@@ -174,7 +184,7 @@ class Game:
                     raise Busy("the running turn did not stop")
                 time.sleep(0.01)
             with self.lock:
-                if self.eng.ended:
+                if self._is_ended():
                     raise Ended("the character is dead; the campaign is read-only")
                 self.pending = text
                 self.phase = "thinking"
@@ -184,8 +194,10 @@ class Game:
                 self.turn_start_seq = self.seq
                 self.events = []
                 self._emit("turn_start", text=text)
-                self.thread = threading.Thread(target=self._run, args=(text, self.handle),
-                                               daemon=True)
+                # the last turn's thread may still be in its slow lane and bookkeeping: the new
+                # one waits for it before it touches the engine
+                self.thread = threading.Thread(target=self._run,
+                                               args=(text, self.handle, self.thread), daemon=True)
                 self.threads = [t for t in self.threads if t.is_alive()] + [self.thread]
                 self.thread.start()
 
@@ -260,9 +272,19 @@ class Game:
         if self.pace:
             time.sleep(self.pace)
 
-    def _run(self, text: str, handle: InterruptHandle) -> None:
+    def _run(self, text: str, handle: InterruptHandle,
+             last: threading.Thread | None = None) -> None:
         eng, rec, spend = self.eng, self.camp.recorder, self.camp.spend
         t0 = time.monotonic()
+        if last is not None and last is not threading.current_thread():
+            last.join()  # one thread on the engine and its database at a time
+        try:
+            self._turn(text, handle, eng, rec, spend, t0)
+        finally:
+            self._ended = eng.ended  # this thread is the database's only user here
+
+    def _turn(self, text: str, handle: InterruptHandle, eng: Any, rec: Any, spend: Any,
+              t0: float) -> None:
         eng._settle_for_next_turn()  # the slow lane of the last turn, if it is still running
         waited = round(time.monotonic() - t0, 2)
         marks = {"calls": len(rec.calls), "dev": len(eng.devlog),
