@@ -21,6 +21,7 @@ import math
 import os
 import re
 import threading
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterable, Sequence
@@ -250,6 +251,56 @@ def tidy_speaker(text: str, own: Iterable[str], names: Iterable[str] = (), *,
     elif rest[-1] == ".":
         beat = beat[0].upper() + beat[1:]
     return f"— {rest} — {beat}"
+
+
+# ---------------------------------------------------------------------------------------------
+# Script switches ("天天爱彩票" in a Ukrainian line)
+# ---------------------------------------------------------------------------------------------
+# the script of an output language besides Latin (always allowed: names, terms); a language not
+# listed is not checked
+LANGUAGE_SCRIPTS = {
+    "ukrainian": ("CYRILLIC",), "russian": ("CYRILLIC",), "belarusian": ("CYRILLIC",),
+    "bulgarian": ("CYRILLIC",), "serbian": ("CYRILLIC",), "macedonian": ("CYRILLIC",),
+    "english": (), "polish": (), "german": (), "french": (), "spanish": (), "italian": (),
+    "czech": (), "slovak": (), "portuguese": (), "greek": ("GREEK",),
+}
+
+
+def _foreign(ch: str, allowed: tuple[str, ...]) -> bool:
+    if not ch.isalpha() or unicodedata.category(ch) == "Lm":  # modifier letters: apostrophes
+        return False
+    script = unicodedata.name(ch, "").split(" ", 1)[0]
+    return script not in ("LATIN", *allowed)
+
+
+def foreign_runs(text: str, language: str | None) -> list[str]:
+    """Runs of letters outside the expected scripts of `language` (Latin is always allowed),
+    in order; [] when the language is unknown or None."""
+    allowed = LANGUAGE_SCRIPTS.get((language or "").strip().lower())
+    if allowed is None:
+        return []
+    runs: list[str] = []
+    cur = ""
+    for ch in text:
+        if _foreign(ch, allowed):
+            cur += ch
+        elif cur and not ch.isalpha() and not ch.isspace() and ch not in ".,;:!?…—–«»\"'()":
+            cur += ch  # a symbol inside the run (a dot between ideographs) stays with it
+        else:
+            if cur:
+                runs.append(cur)
+            cur = ""
+    if cur:
+        runs.append(cur)
+    return runs
+
+
+def cut_foreign(text: str, language: str | None) -> str:
+    """The text without its foreign-script runs, spacing and punctuation tidied."""
+    for run in foreign_runs(text, language):
+        text = text.replace(run, " ")
+    text = re.sub(r"[ \t]+([,.;:!?…])", r"\1", text)
+    return re.sub(r"[ \t]{2,}", " ", text).strip()
 
 
 # ---------------------------------------------------------------------------------------------

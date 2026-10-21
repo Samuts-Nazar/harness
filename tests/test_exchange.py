@@ -536,3 +536,33 @@ def test_npc_line_with_own_prefix_is_tidied_in_the_engine():
     text = res.utterances[0].payload["text"]
     assert text.startswith("— Скільки?") and "Горст:" not in text
     assert res.utterances[0].payload["speech"] == "Скільки?"
+
+
+def test_script_switch_in_npc_line_is_regenerated_once():
+    from harness.style import foreign_runs
+    assert foreign_runs("— Так, Geralt. 天天爱彩票", "Ukrainian") == ["天天爱彩票"]
+    assert foreign_runs("— Так, Geralt, — сказав він. «Ні!» 1272 р.", "Ukrainian") == []
+    assert foreign_runs("Ні. 天天", None) == []  # no output language: no check
+    eng, prov, _ = make(["— Так. 天天爱彩票", "— Так, піду."], ["horst", NOBODY], ["short"],
+                        present=(PLAYER, "horst"), output_language="Ukrainian")
+    res = eng.turn("Підеш?")
+    assert res.utterances[0].payload["text"] == "— Так, піду."
+    assert any(n["kind"] == "script_regenerated" for n in eng.devlog)
+
+
+def test_script_switch_twice_cuts_the_foreign_run():
+    eng, prov, _ = make(["— Так. 天天爱彩票", "— Ні 天天, не піду."], ["horst", NOBODY], ["short"],
+                        present=(PLAYER, "horst"), output_language="Ukrainian")
+    res = eng.turn("Підеш?")
+    assert res.utterances[0].payload["text"] == "— Ні, не піду."
+    kinds = [n["kind"] for n in eng.devlog]
+    assert "script_regenerated" in kinds and "script_cut" in kinds
+    assert {"script_regenerated", "script_cut"} <= CODE_CHOICE_KINDS
+
+
+def test_script_switch_in_narration_is_regenerated():
+    eng, prov, _ = make(["— Так."], ["horst", NOBODY], ["short"], present=(PLAYER, "horst"),
+                        output_language="Ukrainian")
+    prov.script["narrator"] = ["Дощ стукає у вікна. 天天爱彩票", NARRATION]
+    res = eng.turn("Сідаю.")
+    assert res.narration == NARRATION

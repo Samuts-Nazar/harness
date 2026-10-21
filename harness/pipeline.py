@@ -76,6 +76,7 @@ from .state import LiveState, StateChange, check_change, payload as change_paylo
 from .streaming import InterruptHandle, StreamResult, run_stream
 from .style import (Style, beat_as_action, foreign_voice, manner_messages, parse_manner,
                     split_npc_output, tidy_speaker)
+from .style import cut_foreign, foreign_runs
 
 ATTITUDE_MIN_NOTABILITY = 0.6  # only notable facts get attitude judgments (cost control)
 FALLBACK_LINE = "I don't know what to tell you."  # no longer shown: the least suspicious candidate is
@@ -382,6 +383,22 @@ class Engine:
             self.llm_calls.append(role)
             return self.provider.complete(fallback, messages)
 
+    def _complete_text(self, role: str, messages: list[dict[str, str]]) -> str:
+        """A creative call (narrator, NPC) whose output must stay in the output language's
+        script: letters of another script (a stray "天天爱彩票") make it ask once more; if the
+        second answer has them too, the foreign runs are cut."""
+        text = self._complete(role, messages)
+        runs = foreign_runs(text, self.output_language)
+        if not runs:
+            return text
+        self._note("script_regenerated", role=role, runs=runs)
+        text = self._complete(role, messages)
+        runs = foreign_runs(text, self.output_language)
+        if runs:
+            self._note("script_cut", role=role, runs=runs)
+            text = cut_foreign(text, self.output_language)
+        return text
+
     def _run_captured(self, fn: Callable[..., Any], *args: Any) -> _Captured:
         """Run in a worker: notes and judgments go to private buffers, not to the shared logs."""
         cap = _Captured()
@@ -572,7 +589,7 @@ class Engine:
         cast: dict[str, tuple[NarratorOutput, Any]] = {}
         for attempt in range(self.narrate_retries + 1):
             admitted: list[tuple[Event, bool, bool]] = []
-            raw = self._complete("narrator", self._with_notes(self.ctx.narrator(
+            raw = self._complete_text("narrator", self._with_notes(self.ctx.narrator(
                 sc, player_text, outcome.for_narrator() if outcome else None), notes)).strip()
             if self.narration == "prose":
                 text = self._prose_of(raw)
@@ -845,7 +862,7 @@ class Engine:
         notes = list(notes)
         for _ in range(self.check_retries + 1):
             text = self._fix_names(
-                clean_npc_line(self._complete("npc", prep.messages(heard, notes))), "npc_line")
+                clean_npc_line(self._complete_text("npc", prep.messages(heard, notes))), "npc_line")
             # without a style there is no book form: only a self-prefix is dropped
             tidy = tidy_speaker(text, [self.names.real(prep.npc), self.names.label(prep.npc)],
                                 self._name_words, book_form=self.style is not None)
@@ -1783,7 +1800,7 @@ class Engine:
                 + (f" Write in {self.output_language}." if self.output_language else ""))
         for _ in range(2):
             try:
-                text = self._prose_of(self._complete("narrator", self.ctx.finish([
+                text = self._prose_of(self._complete_text("narrator", self.ctx.finish([
                     {"role": "system", "content": "You are the narrator of a role-playing game. "
                      "Write vivid prose."},
                     {"role": "user", "content": user}], PLAYER))).strip()
