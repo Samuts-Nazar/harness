@@ -263,3 +263,19 @@ Chosen by the task 7 bake-off on our own Ukrainian test set (`reports/bakeoff/SU
 - Fine-tuning: not offered for d1, Jev, pplx. Open recipes: Tev1 (MIT, 37,840 examples). Hosted LoRA SFT: Together 0.48 and Fireworks 0.50 USD per M training tokens up to 16B; OpenAI fine-tuning shutting down (jobs end 2027-01-06). OpenRouter hosts tuned models only via invite-only Private Models.
 - Local training on 8 GB: Unsloth 2026.10.7, bf16 LoRA 5 GB for Qwen3.5-2B, 10 GB for 4B; QLoRA not recommended for Qwen3.5. Speed on the 3070 not measured.
 - Sources: see `reports/research/21A_decisions.md`.
+
+## Writes-like-a-person bake-off candidates (task 22, 2026-10-22)
+
+Role: narrator and NPC prose, judged by the user's taste, not by agent grading. Catalog fetched live from `GET /api/v1/models` on 2026-10-22 (469 models). Filter: `created` within about 100 days, input at most 0.60 and output at most 2.50 USD per M, not OpenAI, not Anthropic, not `:free`, text output only. Prices USD per M input/output; date is the catalog `created` field. Baseline: `openai/gpt-6-luna` (0.10/0.50, current engine choice).
+
+| Model | created | price |
+|---|---|---|
+| xiaomi/mimo-v2.6-pro | 2026-09-21 | 0.435/0.87 |
+| xiaomi/mimo-v2.6-flash | 2026-09-21 | 0.14/0.28 |
+| z-ai/glm-5.3 | 2026-08-18 | 0.079/1.4 |
+| deepseek/deepseek-v4.1-flash-1017 | 2026-10-17 | 0.15/0.60 |
+| qwen/qwen3.8-27b | 2026-08-14 | 0.04/1.35 |
+| cohere/command-a-plus | 2026-09-22 | 0.30/1.50 |
+| bytedance-seed/seed-2-1-turbo | 2026-08-12 | 0.50/2.50 |
+
+Not taken: `google/gemini-3.6/3.7/3.8-flash` (0.75 to 0.83 input, over the ceiling), `gemini-3.5-flash-lite` (93 days old, and the user called that generation outdated), `moonshotai/kimi-k3` (output 11.9), `x-ai/grok-*` (2.0/6.0), `mistralai/mistral-large-4-0` (1.36/4.18), `google/gemma-4-*` (April, too old), `meta/muse-spark-*-contributor` (unclear data terms), tiny and infrastructure models (granite, ling, nex, mercury, nemotron, hy-mt translators). Prompts: the engine's own (`Style.load("witcher")`, no book exemplars), temperature 0.8, reasoning disabled. Results page: `app/static/human_ab.html`; summary `reports/human_ab/README.md`.
