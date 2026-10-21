@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Чи звучить по-людському</title>
+<style>
+:root{--bg:#faf8f4;--fg:#1f1d1a;--mute:#6b665e;--card:#fff;--line:#e2ddd2;--acc:#8a4b12;--on:#8a4b12;--onfg:#fff}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#171513;--fg:#ece7de;--mute:#9b948a;--card:#211e1b;--line:#37322c;--acc:#e0a35c;--on:#e0a35c;--onfg:#1b1409}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.55 Georgia,"Times New Roman",serif}
+main{max-width:42rem;margin:0 auto;padding:12px 16px 80px}
+h1{font-size:1.15rem;margin:.6rem 0 .2rem}
+.sub{color:var(--mute);font:14px/1.4 system-ui,sans-serif;margin:0 0 .8rem}
+.bar{position:sticky;top:0;background:var(--bg);padding:8px 0;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center;font:14px system-ui,sans-serif;z-index:2}
+.bar .grow{flex:1;color:var(--mute)}
+button{font:15px system-ui,sans-serif;padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--fg);min-height:44px;cursor:pointer}
+button.pri{background:var(--on);color:var(--onfg);border-color:var(--on)}
+.sit{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin:12px 0;font:15px/1.45 system-ui,sans-serif}
+.sit b{display:block;margin-bottom:2px}
+.player{color:var(--mute);font-style:italic;margin-top:6px}
+.t{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:14px 0}
+.t .lab{font:600 13px system-ui,sans-serif;color:var(--acc);letter-spacing:.06em}
+.t p{margin:.3rem 0 .7rem;white-space:pre-wrap}
+.rate{display:flex;gap:6px}
+.rate button{flex:1;padding:8px 0;min-width:44px}
+.rate button[aria-pressed=true]{background:var(--on);color:var(--onfg);border-color:var(--on)}
+.cap{font:12px system-ui,sans-serif;color:var(--mute);margin-top:4px}
+textarea{width:100%;min-height:64px;font:15px system-ui,sans-serif;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--fg)}
+.nav{display:flex;gap:8px;margin-top:16px}.nav button{flex:1}
+pre{white-space:pre-wrap;word-break:break-word;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;font:13px/1.4 ui-monospace,monospace}
+</style>
+</head>
+<body>
+<main>
+<h1>Чи звучить це по-людському?</h1>
+<p class="sub">Для кожної сцени оціни кожен текст від 1 до 5: наскільки він <b>звучить по-людському і приємно читати</b> (1 — штучно, 5 — як жива людина). Не думай про фактичну правильність, лише про відчуття. Авторів не видно.</p>
+<div class="bar"><span class="grow" id="pos"></span><button id="toRes">Результат</button></div>
+<div id="view"></div>
+</main>
+<script src="human_ab_data.js"></script>
+<script>
+(function(){
+var D=window.HUMAN_AB||[],KEY="human_ab_v1",S={r:{},n:{},i:0};
+try{var raw=localStorage.getItem(KEY);if(raw){var p=JSON.parse(raw);if(p&&p.r)S=p;}}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+var view=document.getElementById("view"),pos=document.getElementById("pos");
+function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e;}
+function count(i){
+  var done=D.filter(function(d){return d.texts.every(function(t){return S.r[d.id+t.label];});}).length;
+  pos.textContent="Сцена "+(i+1)+" з "+D.length+" · оцінено сцен: "+done;
+}
+function show(i){
+  S.i=i;save();view.textContent="";
+  var m=D[i];
+  count(i);
+  var sit=el("div","sit");sit.appendChild(el("b",null,m.title));sit.appendChild(el("div",null,m.situation));
+  sit.appendChild(el("div","player",(m.kind==="npc"?"Ти кажеш: «":"Ти: «")+m.player+"»"));
+  view.appendChild(sit);
+  m.texts.forEach(function(t){
+    var c=el("div","t");c.appendChild(el("div","lab","ТЕКСТ "+t.label));c.appendChild(el("p",null,t.text));
+    var rate=el("div","rate"),k=m.id+t.label;
+    for(var n=1;n<=5;n++){(function(n){
+      var b=el("button",null,String(n));b.setAttribute("aria-pressed",S.r[k]===n?"true":"false");
+      b.setAttribute("aria-label","Оцінка "+n);
+      b.onclick=function(){S.r[k]=(S.r[k]===n?0:n);save();Array.prototype.forEach.call(rate.children,function(x,j){x.setAttribute("aria-pressed",S.r[k]===j+1?"true":"false");});count(i);};
+      rate.appendChild(b);})(n);}
+    c.appendChild(rate);c.appendChild(el("div","cap","1 штучно · 5 як жива людина"));view.appendChild(c);
+  });
+  var ta=el("textarea");ta.placeholder="Нотатка (необов'язково): що саме не так або добре";ta.value=S.n[m.id]||"";
+  ta.oninput=function(){S.n[m.id]=ta.value;save();};view.appendChild(ta);
+  var nav=el("div","nav"),prev=el("button",null,"Назад"),next=el("button","pri",i<D.length-1?"Далі":"До результату");
+  prev.disabled=i===0;prev.onclick=function(){show(i-1);window.scrollTo(0,0);};
+  next.onclick=function(){if(i<D.length-1)show(i+1);else result();window.scrollTo(0,0);};
+  nav.appendChild(prev);nav.appendChild(next);view.appendChild(nav);
+}
+function result(){
+  view.textContent="";
+  var lines=["human_ab v1"],miss=0;
+  D.forEach(function(m){
+    var parts=m.texts.map(function(t){var v=S.r[m.id+t.label];if(!v)miss++;return t.label+"="+(v||"-");});
+    var l=m.id+": "+parts.join(" ");var n=(S.n[m.id]||"").replace(/\s+/g," ").trim();
+    if(n)l+=" | "+n;lines.push(l);
+  });
+  var txt=lines.join("\n");
+  view.appendChild(el("h1",null,"Результат"));
+  view.appendChild(el("p","sub",miss?("Ще не оцінено текстів: "+miss+". Можна скопіювати й так (позначено «-»)."):"Усе оцінено. Скопіюй і встав у чат."));
+  var pre=el("pre",null,txt);view.appendChild(pre);
+  var nav=el("div","nav"),cp=el("button","pri","Копіювати"),back=el("button",null,"До сцен"),clr=el("button",null,"Стерти оцінки");
+  cp.onclick=function(){
+    function fallback(){var r=document.createRange();r.selectNodeContents(pre);var s=getSelection();s.removeAllRanges();s.addRange(r);
+      try{document.execCommand("copy");cp.textContent="Скопійовано";}catch(e){cp.textContent="Виділено, скопіюй вручну";}}
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(function(){cp.textContent="Скопійовано";},fallback);}else fallback();};
+  back.onclick=function(){show(S.i||0);};
+  clr.onclick=function(){if(confirm("Стерти всі оцінки?")){S={r:{},n:{},i:0};save();show(0);}};
+  nav.appendChild(cp);nav.appendChild(back);view.appendChild(nav);
+  var n2=el("div","nav");n2.appendChild(clr);view.appendChild(n2);
+}
+document.getElementById("toRes").onclick=function(){result();};
+if(!D.length){view.textContent="Немає даних.";}else show(Math.min(S.i||0,D.length-1));
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+{
+ "i1": {
+  "A": "bytedance-seed/seed-2-1-turbo",
+  "B": "deepseek/deepseek-v4.1-flash-1017",
+  "C": "cohere/command-a-plus",
+  "D": "qwen/qwen3.8-27b",
+  "E": "openai/gpt-6-luna",
+  "F": "xiaomi/mimo-v2.6-flash",
+  "G": "xiaomi/mimo-v2.6-pro"
+ },
+ "i3": {
+  "A": "bytedance-seed/seed-2-1-turbo",
+  "B": "z-ai/glm-5.3",
+  "C": "qwen/qwen3.8-27b",
+  "D": "xiaomi/mimo-v2.6-pro",
+  "E": "deepseek/deepseek-v4.1-flash-1017",
+  "F": "xiaomi/mimo-v2.6-flash"
+ },
+ "c07": {
+  "A": "xiaomi/mimo-v2.6-flash",
+  "B": "qwen/qwen3.8-27b",
+  "C": "cohere/command-a-plus",
+  "D": "xiaomi/mimo-v2.6-pro",
+  "E": "deepseek/deepseek-v4.1-flash-1017",
+  "F": "openai/gpt-6-luna"
+ },
+ "c08": {
+  "A": "cohere/command-a-plus",
+  "B": "deepseek/deepseek-v4.1-flash-1017",
+  "C": "xiaomi/mimo-v2.6-pro",
+  "D": "z-ai/glm-5.3",
+  "E": "bytedance-seed/seed-2-1-turbo",
+  "F": "xiaomi/mimo-v2.6-flash",
+  "G": "qwen/qwen3.8-27b",
+  "H": "openai/gpt-6-luna"
+ },
+ "v1": {
+  "A": "bytedance-seed/seed-2-1-turbo",
+  "B": "qwen/qwen3.8-27b",
+  "C": "deepseek/deepseek-v4.1-flash-1017",
+  "D": "openai/gpt-6-luna",
+  "E": "xiaomi/mimo-v2.6-flash",
+  "F": "xiaomi/mimo-v2.6-pro"
+ },
+ "v2": {
+  "A": "qwen/qwen3.8-27b",
+  "B": "openai/gpt-6-luna",
+  "C": "xiaomi/mimo-v2.6-pro",
+  "D": "bytedance-seed/seed-2-1-turbo",
+  "E": "deepseek/deepseek-v4.1-flash-1017"
+ }
+}
