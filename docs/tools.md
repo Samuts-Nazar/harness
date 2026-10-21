@@ -248,3 +248,10 @@ Chosen by the task 7 bake-off on our own Ukrainian test set (`reports/bakeoff/SU
 - Role: non-canon NPC names, traits, quirks, ages, natural death.
 - Chosen: own tables in `harness/npcgen.py`, Ukrainian, seeded (`zlib.crc32`), no library. Alternatives: a names library (not period- or world-appropriate), the model (homogeneity: 11 words in 88.3 percent of stories, 18B), the books' names (would reuse canon people).
 - Checked: 2026-10-20.
+
+## Task 21B research (2026-10-21)
+
+- Role: base (non-instruct) model for prose tone. Live OpenRouter catalog (468 models) has none; Hyperbolic dropped Llama 3.1 405B Base; Together lists instruct variants only. Open candidate for a local test: `google/gemma-4-E4B` base (Apache 2.0, official GGUF `ggml-org/gemma-4-E4B-GGUF`). Not run (download blocked). No choice made.
+- Role: style fine-tuning of an author. OpenAI fine-tuning of 4o/4.1 ends 2027-01-14 and `gpt-6-luna` cannot be fine-tuned; Together AI serverless LoRA is discontinued (dedicated endpoint only); Fireworks and Tinker train LoRA per token. No choice made; see `reports/research/21B_tone_leaks.md`.
+- Role: leak check. Claim splitting with `openai/gpt-6-luna` (about 0.00007 USD per line) caught 24 of 25 leaks but flagged 20 to 32 of 43 clean lines; not adopted. HHEM-2.3 does not list Ukrainian. `gpt-6-luna` accepts no temperature or min_p parameter (catalog `supported_parameters`).
+- Checked: 2026-10-21.
