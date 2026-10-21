@@ -477,14 +477,13 @@ class Engine:
 
     @property
     def _name_words(self) -> list[str]:
-        """Every word of every character's name, and the first word of how they look (a beat
-        shown to a player who does not know the name says «жінка в темній хустці»), for
-        `split_npc_output(names=...)`: a piece between dashes that names a character is a beat,
-        not speech."""
+        """Every word of every character's name, and each whole description (a beat shown to a
+        player who does not know the name says «жінка в темній хустці ...»; its first word alone
+        is not a name), for `split_npc_output(names=...)`: a piece between dashes that names a
+        character is a beat, not speech."""
         out = {w for p in self.profiles.values() for w in re.findall(r"[\w'’]+", p.name)
                if len(w) > 2 and w[0].isupper()}
-        out |= {m.group(0) for p in self.profiles.values()
-                if (m := re.match(r"[\w'’]{3,}", p.appearance.strip()))}
+        out |= {p.appearance.strip() for p in self.profiles.values() if p.appearance.strip()}
         return sorted(out)
 
     @property

@@ -80,8 +80,9 @@ def shape_targets(profile: "WorldProfile") -> dict[Shape, float]:
 
 
 def decider_dist(probs: Mapping[str, float], answer: str, p_answer: float) -> dict[Shape, float]:
-    """The decider's answer as a distribution over all shapes. Options it gave no probability
-    share what is left evenly (a decider that reports only its answer's probability)."""
+    """The decider's answer as a distribution over all shapes. Speech options it gave no
+    probability share what is left evenly (a decider that reports only its answer's
+    probability); silence and gesture keep only what the decider gave them."""
     known = {s: float(probs[s.value]) for s in Shape if s.value in probs}
     try:
         ans = Shape(answer)
@@ -89,9 +90,10 @@ def decider_dist(probs: Mapping[str, float], answer: str, p_answer: float) -> di
         ans = Shape.NORMAL
     if ans not in known:
         known[ans] = max(0.0, min(1.0, p_answer))
-    left = [s for s in Shape if s not in known]
+    # silence and gesture get nothing the decider did not give them
+    left = [s for s in Shape if s not in known and s in SHAPE_BINS]
     rest = max(0.0, 1.0 - sum(known.values()))
-    dist = {s: known.get(s, rest / len(left) if left else 0.0) for s in Shape}
+    dist = {s: known.get(s, rest / len(left) if s in left else 0.0) for s in Shape}
     tot = sum(dist.values())
     return {s: v / tot for s, v in dist.items()} if tot > 0 else {s: float(s is ans) for s in Shape}
 

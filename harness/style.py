@@ -102,6 +102,11 @@ def _is_beat(piece: str, names: Iterable[str] = ()) -> bool:
     if not words:
         return False
     known = {n.lower() for n in names if n}
+    head = " ".join(re.findall(r"[\w']+", piece.lower())[:12])
+    for ph in (k for k in known if " " in k):  # a whole description («жінка в темній хустці»)
+        ph = " ".join(re.findall(r"[\w']+", ph))
+        if head.startswith(ph + " ") or head == ph:
+            return True
     gerund = any(w.endswith(_GERUND) for w in words[:3])
     for i, w in enumerate(words):
         if w in _SPEAKERS or (i == 0 and w in {"це", "то", "ось", "так", "ні", "тут", "там"}):
@@ -216,10 +221,10 @@ def tidy_speaker(text: str, own: Iterable[str], names: Iterable[str] = (), *,
 
     - A leading "<own name or label>:" prefix (a script line for oneself, or the appearance used
       as one) is dropped.
-    - A line that opens with a beat before the first dash ("Ельза потерла край фартуха. — А
-      якщо...?") gets the book form, speech first and the beat after it ("— А якщо...? — Ельза
-      потерла край фартуха."), so a label shown before the line is never followed by the
-      speaker's own name or description.
+    - A line that opens with a one-sentence beat ending right before the dash that opens speech
+      ("Ельза потерла край фартуха. — А якщо...?") gets the book form, speech first and the beat
+      after it ("— А якщо...? — Ельза потерла край фартуха."). A longer opening beat, or a dash
+      inside it, is left as written (that dash is punctuation, not the start of speech).
     Anything else is returned unchanged. `book_form=False`: only the prefix is dropped."""
     t = text.strip()
     owns = sorted({o.strip() for o in own if o and o.strip()}, key=len, reverse=True)
@@ -233,15 +238,22 @@ def tidy_speaker(text: str, own: Iterable[str], names: Iterable[str] = (), *,
                 break
     if not book_form or not t or t[0] in DASHES:
         return t
-    m = re.search(r"\s[—–]\s", t)
+    # only the dash that opens speech: the opening beat is one sentence that ends before it
+    m = re.search(r"(?<=[.!?…])\s[—–]\s", t)
     if m is None:
         return t
     beat, rest = t[: m.start()].strip(), t[m.end():].strip()
-    known = [*names, *(w for o in owns for w in o.split()[:1])]
-    if not beat or not rest or len(beat.split()) > 40 or not _is_beat(beat, known):
+    known = [*names, *owns]
+    if (not beat or not rest or len(beat.split()) > 40 or re.search(r"[—–]|[.!?…]\s", beat)
+            or not _is_beat(beat, known)):
         return t
-    beat = beat.rstrip(",;: ")
-    beat = beat if beat[-1] in ".!?…" else beat + "."
+    # what follows the dash must be speech: not another narrated act that opens with he/she
+    # or a name ("— Він замовк"). (The full `_is_beat` would also reject speech that starts with
+    # a verb, "А якщо вернеться...".)
+    nxt = re.findall(r"[\w'’]+", rest)[:1]
+    if nxt and (nxt[0].lower() in _PRON or nxt[0] in names or any(
+            rest.lower().startswith(o.lower()) for o in owns)):
+        return t
     rest = rest if rest[-1] in ".!?…" else rest + "."
     first = re.match(r"[\w'’]+", beat)
     proper = first is not None and first.group(0) in set(names) | {o.split()[0] for o in owns

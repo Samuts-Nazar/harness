@@ -633,3 +633,41 @@ def test_without_a_profile_the_deciders_shape_is_used_as_before():
     eng.turn("Так?")
     assert not any(n["kind"] == "shape_sampled" for n in eng.devlog)
     assert shape_instruction(Shape.WORD, None, bounds=(1, 2), name="Горст") in npc_prompts(prov)[0]
+
+
+# -- Task 12 fix round 1 ----------------------------------------------------------------------
+LIVE_1 = ("Горст притиснув рукавом пивну калюжу, а другою рукою перевернув на столі стертий мідяк. "
+          "На меч глянув і відразу — до дверей. — За двох хлопців мірошник би дав більше. Та "
+          "мірошника нема. — Він замовк, потер великим пальцем мідяк. — І не за самий лемент.")
+LIVE_2 = ("Ельза витерла палець об фартух. Очі ковзнули до дверей млина — ні, до дверей корчми, — "
+          "й назад. — Кров була. А хто її змивав, Горсте?")
+
+
+def test_tidy_speaker_never_splits_at_a_dash_inside_the_opening_beat():
+    """Review round 1: a dash inside a multi-sentence opening beat is punctuation; the live lines
+    are left intact (they are never reordered at that dash)."""
+    from harness.style import tidy_speaker
+    assert tidy_speaker(LIVE_1, ["Горст", "кремезний сивий чоловік"], ["Горст", "Ельза"]) == LIVE_1
+    assert tidy_speaker(LIVE_2, ["Ельза", "жінка в темній хустці"], ["Горст", "Ельза"]) == LIVE_2
+    # a one-sentence beat that ends before the dash that opens speech is still put in book form
+    assert tidy_speaker("Горст кивнув, не підводячи очей. — Добре.", ["Горст"], ["Горст"]) == \
+        "— Добре. — Горст кивнув, не підводячи очей."
+    # a dash inside a one-sentence beat (no full stop before it): left alone
+    t = "Горст глянув на меч — тоді на двері. — Ні."
+    assert tidy_speaker(t, ["Горст"], ["Горст"]) == t
+    # the self-prefix is still dropped from these lines
+    assert tidy_speaker("Горст: " + LIVE_1, ["Горст"], ["Горст"]) == LIVE_1
+
+
+def test_whole_description_marks_a_beat_not_its_first_word():
+    """Review round 1: «жінка» alone is not a name; speech that says it stays speech, while the
+    whole masked description still marks a beat."""
+    eng, *_ = make(["— Так."], ["horst", NOBODY], ["short"])
+    words = eng._name_words
+    assert "жінка" not in words and "жінка в темній хустці" in words
+    from harness.style import split_npc_output
+    line = "— Ти що, віриш їй? — жінка ж бреше, — Горст ляснув долонею по столу."
+    out = split_npc_output(line, words)
+    assert "жінка ж бреше" in out.speech
+    masked = "— Ні, — жінка в темній хустці відвела очі. — Іди."
+    assert split_npc_output(masked, words).beats == ["жінка в темній хустці відвела очі."]

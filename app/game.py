@@ -347,6 +347,7 @@ class Game:
                 r = eng.turn(text, handle=handle, on_word=on_word, on_narration=on_narration,
                              defer_slow=True)
         except BaseException as e:  # noqa: BLE001 - shown to the player, the input is kept
+            self._ended = eng.ended
             self.phase = "idle"
             self._emit("error", message=explain(e), text=text, detail=type(e).__name__)
             self._save_debug(marks, new_events, t0, first_word, error=repr(e)[:300])
@@ -367,6 +368,7 @@ class Game:
         fast_s = round(time.monotonic() - t0, 2)
         with self.lock:
             self.transcript += entries
+            self._ended = eng.ended  # before the player is free: a death shows at once
             self.phase = "idle"  # the player can read and type now; bookkeeping goes on below
             self._emit("turn_done", interrupted=r.interrupted, clock=self.clock(),
                        panel=self._panel, lines=line_ids, cut_lines=cut_ids, settling=True)

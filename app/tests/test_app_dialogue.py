@@ -212,3 +212,38 @@ def test_next_turn_waits_for_the_last_turns_slow_lane_and_reads_no_db_meanwhile(
     g.wait_idle(30)
     assert turns == ["Друга."]
     assert [t["text"] for t in g.transcript if t["kind"] == "player"] == ["Перша.", "Друга."]
+
+
+def test_death_in_a_turn_is_seen_as_soon_as_the_player_can_read():
+    """Review round 1: the player character dies in a turn; while that turn's slow lane still
+    runs, `state()` already says ended and a new turn is refused."""
+    from app.game import Ended
+    from harness.models import PLAYER
+    from harness.outcome import CHARACTER_DEATH
+    g = make()
+    entered, release = threading.Event(), threading.Event()
+    real_settle, real_turn = g.eng.settle, g.eng.turn
+
+    def turn(text, **k):
+        r = real_turn(text, **k)
+        g.eng.log.append(CHARACTER_DEATH, game_time=g.eng.scene.time, location="x",
+                         participants=[PLAYER], witnesses=[], notability=1.0,
+                         payload={"text": "The player character dies: x", "reason": "body"})
+        return r
+
+    def settle():
+        if g.phase == "idle" and not entered.is_set():
+            entered.set()
+            assert release.wait(10)
+        return real_settle()
+
+    g.eng.turn, g.eng.settle = turn, settle
+    g.start_turn("Перша.")
+    assert entered.wait(10)
+    try:
+        assert g.state()["ended"] is True
+        with pytest.raises(Ended):
+            g.start_turn("Друга.")
+    finally:
+        release.set()
+        g.wait_idle(30)

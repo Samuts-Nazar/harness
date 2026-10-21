@@ -208,3 +208,12 @@ def test_profile_of_lines_with_names_does_not_count_a_masked_beat_as_speech():
     assert profile_of_lines([line]).median_words == 10
     p = profile_of_lines([line], ["кремезний"])
     assert p.median_words == 3 and p.no_beat_share == 0
+
+
+def test_decider_dist_does_not_spread_leftover_to_silence_and_gesture():
+    """Review round 1: a decider that names only its answer does not make silence likely."""
+    d = decider_dist({}, "short", 0.6)
+    assert d[Shape.SILENCE] == 0 and d[Shape.GESTURE] == 0
+    assert abs(d[Shape.SHORT] - 0.6) < 1e-9 and abs(sum(d.values()) - 1) < 1e-9
+    g = decider_dist({"silence": 0.3}, "short", 0.6)
+    assert abs(g[Shape.SILENCE] - 0.3) < 1e-9 and g[Shape.GESTURE] == 0
