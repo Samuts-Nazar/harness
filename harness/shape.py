@@ -11,9 +11,11 @@ function; the engine wiring and the notes it logs live in the turn loop. Note ki
 """
 from __future__ import annotations
 
+import math
+import random
 import re
 from enum import Enum
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING, Iterable, Mapping, Sequence
 
 from .style import split_npc_output
 
@@ -55,13 +57,118 @@ def shape_prior(profile: "WorldProfile | None") -> str:
     return f"In this world about {pct}% of replies are 1-3 words."
 
 
+# -- the session's shapes follow the world profile (Task 12) ----------------------------------
+# The decider says which shape fits the moment, as probabilities; code samples the shape from
+# them blended with the world's length bins, and leans against the gap between the lines said so
+# far in the session and the profile (the model's own drift, e.g. never writing long, is
+# corrected by asking for more of what is missing). Note kind `shape_sampled`.
+SHAPE_BINS: dict[Shape, tuple[str, ...]] = {
+    Shape.WORD: ("1", "2-3"), Shape.SHORT: ("4-7",), Shape.NORMAL: ("8-15",),
+    Shape.LONG: ("16-30", "31+")}
+SPEECH_SHAPES = tuple(SHAPE_BINS)
+MIX = 0.5     # weight of the profile against the decider in the base distribution
+CONF_K = 6.0  # lines after which the session gap counts half
+GAIN = 1.5    # how hard a gap pulls (exponent per relative gap)
+_CLIP = (0.25, 4.0)
+
+
+def shape_targets(profile: "WorldProfile") -> dict[Shape, float]:
+    """The world's share of spoken lines per speech shape."""
+    raw = {s: sum(profile.length_bins.get(b, 0.0) for b in bins) for s, bins in SHAPE_BINS.items()}
+    tot = sum(raw.values()) or 1.0
+    return {s: v / tot for s, v in raw.items()}
+
+
+def decider_dist(probs: Mapping[str, float], answer: str, p_answer: float) -> dict[Shape, float]:
+    """The decider's answer as a distribution over all shapes. Options it gave no probability
+    share what is left evenly (a decider that reports only its answer's probability)."""
+    known = {s: float(probs[s.value]) for s in Shape if s.value in probs}
+    try:
+        ans = Shape(answer)
+    except ValueError:
+        ans = Shape.NORMAL
+    if ans not in known:
+        known[ans] = max(0.0, min(1.0, p_answer))
+    left = [s for s in Shape if s not in known]
+    rest = max(0.0, 1.0 - sum(known.values()))
+    dist = {s: known.get(s, rest / len(left) if left else 0.0) for s in Shape}
+    tot = sum(dist.values())
+    return {s: v / tot for s, v in dist.items()} if tot > 0 else {s: float(s is ans) for s in Shape}
+
+
+def _session(lines: Sequence[str], names: Sequence[str]) -> tuple[dict[Shape, float], int]:
+    from .profile import profile_of_lines
+    try:
+        p = profile_of_lines(lines, names)
+    except ValueError:
+        return {s: 0.0 for s in SPEECH_SHAPES}, 0
+    return shape_targets(p), p.n_lines
+
+
+def shape_weights(decider: Mapping[Shape, float], profile: "WorldProfile",
+                  lines: Sequence[str], names: Sequence[str] = ()) -> dict[Shape, float]:
+    """Probabilities to sample this step's shape from. Gesture and silence keep the decider's
+    mass; the speech mass is shared by base = (1-MIX)*decider + MIX*profile, times
+    exp(GAIN * conf * (target - session) / target) clipped to [0.25, 4], conf = n / (n + 6) over
+    the n spoken lines of the session so far (`names`: as `profile_of_lines` takes them)."""
+    speech = sum(decider.get(s, 0.0) for s in SPEECH_SHAPES)
+    out = {s: float(decider.get(s, 0.0)) for s in Shape if s not in SHAPE_BINS}
+    if speech <= 0:
+        return {**out, **{s: 0.0 for s in SPEECH_SHAPES}}
+    target = shape_targets(profile)
+    have, n = _session(lines, names)
+    conf = n / (n + CONF_K)
+    q: dict[Shape, float] = {}
+    for s in SPEECH_SHAPES:
+        base = (1 - MIX) * decider.get(s, 0.0) / speech + MIX * target[s]
+        rel = (target[s] - have[s]) / max(target[s], 0.05)
+        q[s] = base * min(_CLIP[1], max(_CLIP[0], math.exp(GAIN * conf * rel)))
+    tot = sum(q.values())
+    return {**out, **{s: speech * v / tot for s, v in q.items()}}
+
+
+def sample_shape(weights: Mapping[Shape, float], rng: random.Random) -> Shape:
+    """One draw (the order of `Shape` is fixed, so a seeded rng gives the same shape)."""
+    x, acc = rng.random() * sum(weights.values()), 0.0
+    last = Shape.NORMAL
+    for s in Shape:
+        w = weights.get(s, 0.0)
+        if w <= 0:
+            continue
+        acc += w
+        last = s
+        if x < acc:
+            return s
+    return last
+
+
+def beat_wanted(profile: "WorldProfile | None", lines: Sequence[str],
+                rng: random.Random, names: Sequence[str] = ()) -> bool | None:
+    """Does this line carry a beat (the speaker's own small action)? Drawn from the profile's
+    `no_beat_share`, leaning against the session's own share the same way; None without a
+    profile (left to the model)."""
+    if profile is None or not profile.no_beat_share:
+        return None
+    from .profile import profile_of_lines
+    t = profile.no_beat_share
+    try:
+        p = profile_of_lines(lines, names)
+        have, n = p.no_beat_share, p.n_lines
+    except ValueError:
+        have, n = t, 0
+    conf = n / (n + CONF_K)
+    p_none = min(0.95, max(0.05, t + conf * (t - have)))
+    return rng.random() >= p_none
+
+
 _INSTR = {
     Shape.SILENCE: "{name} says nothing this turn and does nothing worth noting.",
     Shape.GESTURE: "{name} does not speak this turn: write only one small action, no words.",
     Shape.WORD: "Reply with a word or two ({lo}-{hi} words), nothing more.",
     Shape.SHORT: "Keep it short: {lo}-{hi} words of speech.",
-    Shape.NORMAL: "Speak in one or two sentences, about {lo}-{hi} words.",
-    Shape.LONG: "This turn may run longer, up to about {hi} words, but not a speech.",
+    Shape.NORMAL: "Speak in one or two full sentences, {lo}-{hi} words.",
+    Shape.LONG: ("This turn runs longer: several sentences, at least {lo} and up to about {hi} "
+                 "words (an explanation, a story, an argument), but not a speech."),
 }
 
 

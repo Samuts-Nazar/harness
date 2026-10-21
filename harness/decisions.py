@@ -34,6 +34,8 @@ CODE_CHOICE_KINDS: set[str] = {
     "same_speaker_stopped",    # the director picked the NPC of the step just taken: exchange ends
     "script_regenerated",      # a narrator/NPC answer had letters of another script: asked once more
     "script_cut",              # the second answer too: the foreign runs were cut
+    "shape_sampled",           # code drew the step's shape (and beat) against the world profile
+    "beat_stripped",           # a no-beat line came back with a beat: the beat was cut
     "speaker_tidied",          # an NPC line's own-name prefix dropped / opening beat moved after the speech
 }
 

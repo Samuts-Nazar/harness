@@ -566,3 +566,70 @@ def test_script_switch_in_narration_is_regenerated():
     prov.script["narrator"] = ["Дощ стукає у вікна. 天天爱彩票", NARRATION]
     res = eng.turn("Сідаю.")
     assert res.narration == NARRATION
+
+
+# -- shapes sampled against the profile, the beat drawn per line (Task 12) ----------------------
+def _style_make(lines, nxt, shape, **kw):
+    from harness.style import Style
+    return make(lines, nxt, shape, style=Style(), world_profile=_witcher(),
+                extractor=["none", "говорить тихо", "говорить повільно", diff()], **kw)
+
+
+def test_with_a_profile_code_samples_the_shape_and_logs_it(monkeypatch):
+    import harness.pipeline as pl
+    seen = {}
+
+    def fake_sample(weights, rng):
+        seen["weights"] = dict(weights)
+        return Shape.LONG
+
+    monkeypatch.setattr(pl, "sample_shape", fake_sample)
+    eng, prov, _ = _style_make(["— " + " ".join(["слово"] * 20) + "."], ["horst", NOBODY],
+                               ["short"], present=(PLAYER, "horst"))
+    eng.turn("Розкажи.")
+    note = next(n for n in eng.devlog if n["kind"] == "shape_sampled")
+    assert note["decider"] == "short" and note["shape"] == "long"
+    assert "shape_sampled" in CODE_CHOICE_KINDS
+    assert seen["weights"][Shape.LONG] > 0, "the profile's long tail is reachable"
+    prompt = npc_prompts(prov)[0]
+    assert shape_instruction(Shape.LONG, None, bounds=(16, 80), name="Горст") in prompt
+
+
+def test_sampling_is_reproducible_for_the_same_seed():
+    def run():
+        eng, *_ = _style_make(["— Так.", "— Ні, не піду.", "— Гаразд."],
+                              ["horst", "elza", "horst", PLAYER_FLOOR], ["normal"])
+        eng.turn("Добрий вечір.")
+        return [(n["shape"], n["beat"]) for n in eng.devlog if n["kind"] == "shape_sampled"]
+    a = run()
+    assert a and a == run()
+
+
+def test_no_beat_line_is_told_so_and_a_beat_written_anyway_is_stripped(monkeypatch):
+    import harness.pipeline as pl
+    monkeypatch.setattr(pl, "beat_wanted", lambda *a, **k: False)
+    monkeypatch.setattr(pl, "sample_shape", lambda w, r: Shape.SHORT)
+    eng, prov, _ = _style_make(["— Не знаю, — Горст почухав потилицю. — Спитай Ельзу."],
+                               ["horst", NOBODY], ["short"], present=(PLAYER, "horst"))
+    res = eng.turn("Хто знає?")
+    assert "No gesture this line" in npc_prompts(prov)[0]
+    assert res.utterances[0].payload["text"] == "— Не знаю. Спитай Ельзу."
+    assert any(n["kind"] == "beat_stripped" for n in eng.devlog)
+    assert "beat_stripped" in CODE_CHOICE_KINDS
+    assert not [e for e in eng.log.active([ACTION]) if e.payload.get("by") == "horst"]
+
+
+def test_beat_line_is_told_to_carry_one(monkeypatch):
+    import harness.pipeline as pl
+    monkeypatch.setattr(pl, "beat_wanted", lambda *a, **k: True)
+    eng, prov, _ = _style_make(["— Так, — Горст кивнув."], ["horst", NOBODY], ["short"],
+                               present=(PLAYER, "horst"))
+    eng.turn("Так?")
+    assert "one small action" in npc_prompts(prov)[0]
+
+
+def test_without_a_profile_the_deciders_shape_is_used_as_before():
+    eng, prov, _ = make(["— Так."], ["horst", NOBODY], ["word"], present=(PLAYER, "horst"))
+    eng.turn("Так?")
+    assert not any(n["kind"] == "shape_sampled" for n in eng.devlog)
+    assert shape_instruction(Shape.WORD, None, bounds=(1, 2), name="Горст") in npc_prompts(prov)[0]

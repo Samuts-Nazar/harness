@@ -513,6 +513,11 @@ GESTURE_FORM = (  # the gesture-only shape: the reply is the action itself, stor
     "Form: one short sentence in the third person about {name}, something anyone present could "
     "see or hear. No dash, no speech, no thoughts.")
 
+BEAT_NO = ("No gesture this line: only {name}'s spoken words, after the dash, with no action "
+           "or manner between the dashes.")
+BEAT_YES = ("This line carries one small action of {name}'s (a glance, a pause, a hand to "
+            "something), woven between the dashes as the books do.")
+
 NPC_LIMITS = (
     "You write only {name}: your own words and your own actions. Never another character's "
     "words or actions, and never anything the player character says, does, thinks or feels. "
@@ -574,15 +579,20 @@ class Style:
 
     def npc_instruction(self, prof: CharacterProfile, language: str | None,
                         shape: "Shape | None" = None,
-                        bounds: tuple[int, int] | None = None) -> str:
+                        bounds: tuple[int, int] | None = None, beat: bool | None = None) -> str:
         """`bounds`: the words the shape allows (`shape.word_bounds`); the caller fits the reply
-        to the same bounds. The language line appears once, at the end."""
+        to the same bounds. `beat`: the engine drew whether this line carries one small action
+        (True), none (False), or left it to the model (None). The language line appears once,
+        at the end."""
         from .shape import Shape, shape_instruction  # shape imports this module
         form = (GESTURE_FORM if shape is Shape.GESTURE else NPC_FORM).format(name=prof.name)
+        speaks = shape not in (Shape.GESTURE, Shape.SILENCE)
+        beat_line = ("" if beat is None or not speaks else
+                     (BEAT_YES if beat else BEAT_NO).format(name=prof.name) + "\n")
         return (f"Write {prof.name}'s next turn: what {prof.name} says and does in this moment.\n"
                 + (shape_instruction(shape, None, bounds=bounds, name=prof.name) + "\n"
                    if shape is not None else "")
-                + form + "\n" + NPC_LIMITS.format(name=prof.name)
+                + beat_line + form + "\n" + NPC_LIMITS.format(name=prof.name)
                 + (f"\nWrite in {language}." if language else ""))
 
     def npc_examples_section(self, situation: str) -> str:

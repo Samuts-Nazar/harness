@@ -300,11 +300,12 @@ class ContextBuilder:
             finish=lambda m, c=character, k=known_names: self.finish(m, c, k))
 
     def npc_instruction(self, prof: CharacterProfile, shape: Shape | None = None,
-                        bounds: tuple[int, int] | None = None) -> str:
+                        bounds: tuple[int, int] | None = None, beat: bool | None = None) -> str:
         """The closing instruction of an NPC call, with the response shape when one is given.
-        `bounds` are the words the shape allows; the engine fits the reply to the same bounds."""
+        `bounds` are the words the shape allows; the engine fits the reply to the same bounds.
+        `beat` (with a style): this line carries one small action (True) or none (False)."""
         if self.style is not None:
-            return self.style.npc_instruction(prof, self.language, shape, bounds)
+            return self.style.npc_instruction(prof, self.language, shape, bounds, beat)
         lang = f" Speak in {self.language}." if self.language else ""
         if shape is Shape.GESTURE:
             return (shape_instruction(shape, None, name=prof.name) + " Write it as one short "

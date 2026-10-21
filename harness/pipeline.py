@@ -4,6 +4,7 @@ scene entry, live-state perception, and regeneration of the per-character memory
 from __future__ import annotations
 
 import json
+import random
 import re
 import sqlite3
 import threading
@@ -71,7 +72,8 @@ from .settings import (
     DEFAULT_DIALOGUE, DEFAULT_NARRATION, DEFAULT_OUTPUT_LANGUAGE, DEFAULT_RECORD_LANGUAGE,
     MAX_EXCHANGE_LINES, MAX_SPEAKERS, NPC_REJECT_P,
 )
-from .shape import Shape, fit_to_shape, shape_prior, word_bounds
+from .shape import (SPEECH_SHAPES, Shape, beat_wanted, fit_to_shape, sample_shape, shape_prior,
+                    shape_weights, word_bounds)
 from .state import LiveState, StateChange, check_change, payload as change_payload
 from .streaming import InterruptHandle, StreamResult, run_stream
 from .style import (Style, beat_as_action, foreign_voice, manner_messages, parse_manner,
@@ -181,7 +183,8 @@ class _Launch:
     director: list[str] = field(default_factory=list)
     npcs: dict[str, str] = field(default_factory=dict)
     first: Future[_Captured] | None = None  # the first step, asked in a worker (parallel mode)
-    first_step: tuple[str, Shape] | None = None  # the first step, already answered (no narration)
+    # the first step, already answered (no narration): (floor, shape, the decider's shape dist)
+    first_step: tuple[str, Shape, dict[Shape, float]] | None = None
 
 
 @dataclass
@@ -295,6 +298,7 @@ class Engine:
         self.dialogue, self.world_profile = dialogue, world_profile
         self.shape_prior = shape_prior(world_profile)  # "" without a profile
         self.session_lines: list[str] = []  # the NPCs' delivered lines, for the dialogue report
+        self._draws = 0  # code draws of shapes and beats (main thread), for a seeded rng
         self.conn = conn or connect()
         self._owns_conn = conn is None
         self.provider, self.models, self.scene = provider, models, scene
@@ -1158,7 +1162,7 @@ class Engine:
     # -- the turn -------------------------------------------------------
     def _launch(self, out: NarratorOutput, player_text: str, speakers: Sequence[str] | None,
                 turn_events: list[Event], *, check: bool,
-                first_step: tuple[str, Shape] | None = None) -> _Launch:
+                first_step: tuple[str, Shape, dict[Shape, float]] | None = None) -> _Launch:
         """Prose mode: run the scene director (speakers and observable actions). Write the
         narration and action events, and (parallel mode) start the speech check and one chain per
         speaking NPC, each chain waiting for the lines of the NPCs before it so that it hears them.
@@ -1241,40 +1245,67 @@ class Engine:
         return [*director, *([g.apply(x) for x in extra] if g else extra)]
 
     def _decide_next(self, state: list[str], npcs: dict[str, str], narration: str,
-                     first: bool) -> tuple[str, Shape]:
-        """One exchange step (network only; safe in a worker). No decider: on the first step the
-        fallback speaker (silence would stall the scene), later the floor goes back to the
-        player."""
+                     first: bool) -> tuple[str, Shape, dict[Shape, float]]:
+        """One exchange step (network only; safe in a worker): (floor, shape, the decider's
+        distribution over shapes). No decider: on the first step the fallback speaker (silence
+        would stall the scene), later the floor goes back to the player."""
         try:
-            return decide_next(self.judge, state, npcs, self.shape_prior)
+            return decide_next(self.judge, state, npcs, self.shape_prior,  # type: ignore[return-value]
+                               with_dist=True)
         except JudgeError as e:
             kept = self._fallback_speakers(narration)[:1] if first else []
             self._note("director_unavailable", error=str(e), fallback=kept)
-            return (kept[0], Shape.NORMAL) if kept else (NOBODY, Shape.NORMAL)
+            return (kept[0], Shape.NORMAL, {}) if kept else (NOBODY, Shape.NORMAL, {})
 
-    def _without_narration(self, player_text: str) -> tuple[str, Shape] | None:
+    def _choose_shape(self, npc: str, shape: Shape, dist: dict[Shape, float],
+                      step: int) -> tuple[Shape, bool | None]:
+        """Main thread. With a world profile code samples the step's shape from the decider's
+        distribution blended with the profile and leaning against the session's gap
+        (`shape.shape_weights`), and draws whether a spoken line carries a beat from the
+        profile's `no_beat_share` (`shape.beat_wanted`; only with a style, None otherwise).
+        Without a profile: the decider's shape, the beat left to the model."""
+        prof = self.world_profile
+        if prof is None or not prof.length_bins or not dist:
+            return shape, None
+        rng = random.Random(f"{self.seed}|shape|{self._draws}")
+        self._draws += 1
+        names = self._name_words
+        weights = shape_weights(dist, prof, self.session_lines, names)
+        chosen = sample_shape(weights, rng)
+        beat = (beat_wanted(prof, self.session_lines, rng, names)
+                if chosen in SPEECH_SHAPES and self.style is not None else None)
+        self._note("shape_sampled", npc=npc, step=step, decider=shape.value, shape=chosen.value,
+                   beat=beat, weights={s.value: round(w, 3) for s, w in weights.items()})
+        return chosen, beat
+
+    def _without_narration(self, player_text: str
+                           ) -> tuple[str, Shape, dict[Shape, float]] | None:
         """Living mode: is the moment just talk? One batched call (the need for narration and the
         first exchange step, read without any narration). None: narrate as usual (the director
         says so, or is unavailable). Otherwise the first step, and the narrator is not called."""
         npcs = {c: self.ctx.describe(c) for c in self.scene.present if c != PLAYER}
         state = self.ctx.director_state(self.scene, player_text, "")
         try:
-            need, nxt, shape = decide_first_step(self.judge, self._exchange_state(state, []), npcs,
-                                           self.shape_prior)
+            need, nxt, shape, dist = decide_first_step(
+                self.judge, self._exchange_state(state, []), npcs, self.shape_prior,
+                with_dist=True)
         except JudgeError as e:
             self._note("director_unavailable", error=str(e), fallback="narrate")
             return None
         if need or nxt not in npcs:  # an empty turn (nobody, the player, no NPCs): narrate
             return None
         self._note("narration_skipped", first=nxt, shape=shape.value)
-        return nxt, shape
+        return nxt, shape, dist
 
-    def _shaped_line(self, prep: _NpcPrep, shape: Shape, bounds: tuple[int, int]) -> str:
+    def _shaped_line(self, prep: _NpcPrep, shape: Shape, bounds: tuple[int, int],
+                     beat: bool | None = None) -> str:
         """An NPC line told its shape, output-checked as every line, and fitted to the same
         bounds: far over them it is asked once more, then cut at a sentence boundary. For a
-        gesture the result is the action alone ("" when none came back)."""
+        gesture the result is the action alone ("" when none came back). `beat`: the line is
+        told to carry one small action (True) or none (False); a beat written anyway on a
+        no-beat line is cut (note `beat_stripped`)."""
         prof = self.profiles.get(prep.npc) or CharacterProfile(prep.npc, prep.npc)
-        prep = replace(prep, instruction=self.ctx.npc_instruction(prof, shape, bounds))
+        prep = replace(prep, instruction=self.ctx.npc_instruction(prof, shape, bounds, beat))
         text = self._npc_line(prep)
         names = self._name_words
         fitted, how = fit_to_shape(text, shape, bounds, names=names)
@@ -1288,6 +1319,11 @@ class Engine:
             if how == "trimmed":
                 self._note("shape_trimmed", npc=prep.npc, shape=shape.value, before=text,
                            after=fitted)
+        if beat is False and shape in SPEECH_SHAPES:
+            out = split_npc_output(fitted, names)
+            if out.has_dash and out.beats and out.speech:
+                self._note("beat_stripped", npc=prep.npc, before=fitted, beats=out.beats)
+                fitted = "— " + out.speech
         return fitted
 
     def _exchange(self, launch: _Launch, result: "TurnResult", turn_events: list[Event],
@@ -1324,12 +1360,13 @@ class Engine:
                 self._note("exchange_cap", steps=step)
                 return
             if step == 0 and launch.first_step is not None:
-                nxt, shape = launch.first_step
+                nxt, shape, dist = launch.first_step
             elif step == 0 and launch.first is not None:
-                nxt, shape = self._take(launch.first)
+                nxt, shape, dist = self._take(launch.first)
             else:
-                nxt, shape = self._decide_next(self._exchange_state(launch.director, lines),
-                                               npcs, launch.out.description, step == 0)
+                nxt, shape, dist = self._decide_next(
+                    self._exchange_state(launch.director, lines), npcs, launch.out.description,
+                    step == 0)
             if nxt == PLAYER_FLOOR:
                 result.stop_reason = "player_addressed"
                 return
@@ -1341,6 +1378,7 @@ class Engine:
                 self._note("same_speaker_stopped", npc=nxt, step=step + 1)
                 return
             last = nxt
+            shape, beat = self._choose_shape(nxt, shape, dist, step + 1)
             name = self.names.real(nxt)
             if shape is Shape.SILENCE:
                 self._note("silence", npc=nxt, step=step + 1)
@@ -1348,7 +1386,7 @@ class Engine:
                 lines.append(f"[{name} says nothing]")
                 continue
             prep = self._prep_npc(nxt)
-            text = self._shaped_line(prep, shape, word_bounds(shape, self.world_profile))
+            text = self._shaped_line(prep, shape, word_bounds(shape, self.world_profile), beat)
             if shape is Shape.GESTURE:
                 if not text:
                     self._note("silence", npc=nxt, step=step + 1, why="no action came back")
@@ -1427,7 +1465,7 @@ class Engine:
         `distance` to it on speech metrics only (a session has no narration paragraphs). None
         before the first line."""
         try:
-            prof = profile_of_lines(self.session_lines)
+            prof = profile_of_lines(self.session_lines, self._name_words)
         except ValueError:
             return None
         out: dict[str, Any] = prof.to_dict()

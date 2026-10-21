@@ -20,10 +20,10 @@ on a fragment of a scene (who takes the floor now, when silence is the right ans
 from __future__ import annotations
 
 import re
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 from .judge import Judge, Question, choice_q, yes_no_q
-from .shape import Shape
+from .shape import Shape, decider_dist
 
 NOBODY = "nobody"
 PLAYER_FLOOR = "player"  # the floor returns to the player (same id as models.PLAYER)
@@ -75,7 +75,7 @@ _SHAPES = {
     Shape.NORMAL: "a sentence or two",
     Shape.SHORT: "a short phrase or a short sentence",
     Shape.WORD: "a word or two",
-    Shape.LONG: "several sentences (rare: a story, an argument that needs it)",
+    Shape.LONG: "several sentences (an explanation, a story, an argument)",
     Shape.GESTURE: "no words, only a small visible action (a shrug, a look, a nod)",
     Shape.SILENCE: "nothing at all: they let it pass",
 }
@@ -118,43 +118,44 @@ def needs_narration_question() -> Question:
         "a question and its answer, needs none.", tag=NARRATION_TAG)
 
 
+def _step(got: Mapping[str, Any], npcs: Mapping[str, str]) -> tuple[str, Shape, dict[Shape, float]]:
+    nxt = str(got["next"].answer)
+    if nxt not in npcs and nxt != PLAYER_FLOOR:
+        nxt = NOBODY
+    j = got["shape"]
+    try:
+        shape = Shape(str(j.answer))
+    except ValueError:
+        shape = Shape.NORMAL
+    return nxt, shape, decider_dist(j.probabilities, shape.value, j.probability)
+
+
 def decide_first_step(judge: Judge, state: Sequence[str], npcs: Mapping[str, str],
-                      prior: str = "") -> tuple[bool, str, Shape]:
+                      prior: str = "", *, with_dist: bool = False) -> tuple[Any, ...]:
     """The start of a living turn in ONE batched call: (does the moment need narration, then the
     first exchange step as `decide_next` answers it). The state has no narration yet; when the
-    answer is yes the caller narrates and asks the first step again with the narration."""
+    answer is yes the caller narrates and asks the first step again with the narration.
+    `with_dist`: also the decider's distribution over the shapes (`shape.decider_dist`)."""
     qs = {"narration": needs_narration_question(),
           **(next_floor_questions(npcs, prior) if npcs else {})}
     got = judge.ask(state, qs)
     need = bool(got["narration"].answer)
     if not npcs:
-        return need, NOBODY, Shape.NORMAL
-    nxt = str(got["next"].answer)
-    if nxt not in npcs and nxt != PLAYER_FLOOR:
-        nxt = NOBODY
-    try:
-        shape = Shape(str(got["shape"].answer))
-    except ValueError:
-        shape = Shape.NORMAL
-    return need, nxt, shape
+        nxt, shape, dist = NOBODY, Shape.NORMAL, {}
+    else:
+        nxt, shape, dist = _step(got, npcs)
+    return (need, nxt, shape, dist) if with_dist else (need, nxt, shape)
 
 
 def decide_next(judge: Judge, state: Sequence[str], npcs: Mapping[str, str],
-                prior: str = "") -> tuple[str, Shape]:
+                prior: str = "", *, with_dist: bool = False) -> tuple[Any, ...]:
     """One exchange step: (an NPC id, `PLAYER_FLOOR` or `NOBODY`; the shape of the response).
     `npcs`: id -> how the director knows them (never the player). An unknown answer is nobody;
-    an unknown shape is normal."""
+    an unknown shape is normal. `with_dist`: also the decider's distribution over the shapes."""
     if not npcs:
-        return NOBODY, Shape.NORMAL
-    got = judge.ask(state, next_floor_questions(npcs, prior))
-    nxt = str(got["next"].answer)
-    if nxt not in npcs and nxt != PLAYER_FLOOR:
-        nxt = NOBODY
-    try:
-        shape = Shape(str(got["shape"].answer))
-    except ValueError:
-        shape = Shape.NORMAL
-    return nxt, shape
+        return (NOBODY, Shape.NORMAL, {}) if with_dist else (NOBODY, Shape.NORMAL)
+    nxt, shape, dist = _step(judge.ask(state, next_floor_questions(npcs, prior)), npcs)
+    return (nxt, shape, dist) if with_dist else (nxt, shape)
 
 
 ACTIONS_SYSTEM = "You list the observable actions in a passage of narration."

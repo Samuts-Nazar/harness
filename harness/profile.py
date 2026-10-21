@@ -50,8 +50,8 @@ def _bin(n: int) -> str:
     return "31+"
 
 
-def _line(para: str, idx: int) -> DialogueLine | None:
-    out = split_npc_output(para)
+def _line(para: str, idx: int, names: Sequence[str] = ()) -> DialogueLine | None:
+    out = split_npc_output(para, names)
     words = len(out.speech.split())
     if not words:
         return None
@@ -136,8 +136,10 @@ def profile_from_text(text: str, source: str) -> WorldProfile:
         source=source)
 
 
-def profile_of_lines(lines: Sequence[str]) -> WorldProfile:
-    dl = [x for i, t in enumerate(lines) if (x := _line(t, i))]
+def profile_of_lines(lines: Sequence[str], names: Sequence[str] = ()) -> WorldProfile:
+    """Engine lines measured like the corpus. `names`: known character names (and the first
+    words of their appearance labels), so a beat that names its actor is not counted as speech."""
+    dl = [x for i, t in enumerate(lines) if (x := _line(t, i, names))]
     if not dl:
         raise ValueError("no dialogue lines")
     return WorldProfile(**_core(dl), source="engine")
