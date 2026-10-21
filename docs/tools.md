@@ -255,3 +255,11 @@ Chosen by the task 7 bake-off on our own Ukrainian test set (`reports/bakeoff/SU
 - Role: style fine-tuning of an author. OpenAI fine-tuning of 4o/4.1 ends 2027-01-14 and `gpt-6-luna` cannot be fine-tuned; Together AI serverless LoRA is discontinued (dedicated endpoint only); Fireworks and Tinker train LoRA per token. No choice made; see `reports/research/21B_tone_leaks.md`.
 - Role: leak check. Claim splitting with `openai/gpt-6-luna` (about 0.00007 USD per line) caught 24 of 25 leaks but flagged 20 to 32 of 43 clean lines; not adopted. HHEM-2.3 does not list Ukrainian. `gpt-6-luna` accepts no temperature or min_p parameter (catalog `supported_parameters`).
 - Checked: 2026-10-21.
+## Decision models, task 21A (checked 2026-10-21)
+
+### Decision-model catalog and fine-tuning
+- Role: first-pass typed judgments and, if wanted, a tuned decider. Chosen: unchanged (`liquid/d1-ultra`, escalate below 0.8 to `openai/gpt-6-luna`).
+- Live catalog (`/api/v1/models?output_modalities=decisions`): 27 entries. New and untested: cloudflare/clef-flash (9B, Apache-2.0), clef, nace-ai/drex-v2.0, upstage/solar-decide(-flash), inception/mercury-decide (+ free), togethercomputer/tev1-4b-experimental, jaredpalmer/kev-4b, openai/gpt-6-luna-decisions (HTTP 502 refusal on violent scenes), microsoft/microsoft-decision-1 (weakest in the probe). `harness/policy.py` allows only five.
+- Fine-tuning: not offered for d1, Jev, pplx. Open recipes: Tev1 (MIT, 37,840 examples). Hosted LoRA SFT: Together 0.48 and Fireworks 0.50 USD per M training tokens up to 16B; OpenAI fine-tuning shutting down (jobs end 2027-01-06). OpenRouter hosts tuned models only via invite-only Private Models.
+- Local training on 8 GB: Unsloth 2026.10.7, bf16 LoRA 5 GB for Qwen3.5-2B, 10 GB for 4B; QLoRA not recommended for Qwen3.5. Speed on the 3070 not measured.
+- Sources: see `reports/research/21A_decisions.md`.
