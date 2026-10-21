@@ -11,6 +11,7 @@ import threading
 import time
 from typing import Any, Callable
 
+from harness.decisions import DecisionCount, aggregate
 from harness.models import PLAYER, format_time
 from harness.streaming import InterruptHandle
 
@@ -76,6 +77,7 @@ class Game:
             self.handle: InterruptHandle | None = None
             self.skip_narration = False
             self.debug: dict[str, Any] = {}
+            self.decision_log: list[tuple[str, DecisionCount]] = []  # (location, turn count)
             self.events = []
             self._panel = self._compute_panel()
             self.turn_start_seq = self.seq
@@ -302,7 +304,7 @@ class Game:
                 self._emit("retract", message=explain(failure), text=text)
                 return
             self._save_debug(marks, new_events, t0, first_word, report=eng.reports[-1],
-                             fast_s=fast_s, waited=waited)
+                             fast_s=fast_s, waited=waited, decisions=r.decisions)
             if world is not None:
                 self.debug = {**self.debug, "world": world.report(since)}
             self._panel = self._compute_panel()
@@ -325,10 +327,24 @@ class Game:
         self._emit("narr_end", cut=self.skip_narration)
         self.phase = "thinking"
 
+    def _decisions(self, turn: DecisionCount | None) -> dict[str, Any] | None:
+        """The turn's decision count with the running scene (same location) and session totals."""
+        if turn is None:
+            return None
+        where = self.eng.scene.location
+        self.decision_log.append((where, turn))
+        scene = []
+        for loc, d in reversed(self.decision_log):
+            if loc != where:
+                break
+            scene.append(d)
+        return {"turn": turn.as_dict(), "scene": aggregate(scene).as_dict(),
+                "session": aggregate(d for _, d in self.decision_log).as_dict()}
+
     def _save_debug(self, marks: dict[str, Any], new_events: list[dict[str, Any]], t0: float,
                     first_word: list[float], error: str | None = None,
                     report: dict[str, Any] | None = None, fast_s: float | None = None,
-                    waited: float = 0.0) -> None:
+                    waited: float = 0.0, decisions: DecisionCount | None = None) -> None:
         eng, rec, spend = self.eng, self.camp.recorder, self.camp.spend
         self.debug = {
             "events": new_events,
@@ -346,6 +362,7 @@ class Game:
             "repetition": (report or {}).get("repetition"),
             "names": (report or {}).get("names"),
             "parallel": eng.parallel,
+            "decisions": self._decisions(decisions),
         }
 
     def wait_idle(self, timeout: float = 30.0) -> None:

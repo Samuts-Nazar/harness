@@ -43,6 +43,8 @@ def test_vizima_turn_streams_and_the_slow_lane_settles(tmp_path):
     assert "turn_done" in types and types[-1] == "settled"
     assert g.debug["timing"]["slow_s"] >= 0 and g.debug["lanes"]["fast_s"] >= 0
     assert "world" in g.debug
+    dec = g.debug["decisions"]
+    assert dec["turn"]["total"] > 0 and dec["session"]["total"] == dec["scene"]["total"]
 
 
 def test_vizima_reopens_where_it_stopped(tmp_path):

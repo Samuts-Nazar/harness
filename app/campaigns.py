@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator
 
+from harness.decisions import full_role
 from harness.glossary import Glossary
 from harness.models import (
     ACTION, APPEARANCE, EQUIPMENT, INJURY, INTERNAL, NARRATION, PLAYER, UTTERANCE, CharacterProfile,
@@ -95,24 +96,7 @@ class Recorder:
 
     @staticmethod
     def role(messages: Messages) -> str:
-        sys = messages[0]["content"] if messages else ""
-        if "Rumour writer" in sys:
-            return "world: rumour"
-        if "narrator" in sys:
-            return "narrator"
-        if "fact extractor" in sys:
-            return "extractor"
-        if "character sheet" in sys:
-            return "setup: looks"
-        if "observable actions" in sys:
-            return "director: actions"
-        if "You help write characters" in sys:
-            return "manner notes"
-        if "translate" in sys.lower():
-            return "translator"
-        if sys.startswith("You are "):
-            return "npc: " + sys[8:].split(".")[0]
-        return "judge"
+        return full_role(messages)
 
     def complete(self, model: str, messages: Messages) -> str:
         role = self.role(messages)

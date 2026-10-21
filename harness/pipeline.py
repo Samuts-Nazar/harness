@@ -18,6 +18,7 @@ from .attitudes import Attitudes, Notices
 from .belief import BeliefFn, neutral_belief
 from .context import ContextBuilder, NpcView
 from .db import connect
+from .decisions import DecisionCount, count_since
 from .director import decide_speakers, parse_actions
 from .eventlog import EventLog
 from .extractor import Diff, DiffValidationError, parse_diff, validate_diff
@@ -191,6 +192,7 @@ class _Slow:
     messages: list[dict[str, str]]
     raw: Future[_Captured] | None = None
     fast_s: float = 0.0
+    marks: tuple[int, int, int] = (0, 0, 0)  # judgments, provider calls, devlog at turn start
 
 
 @dataclass
@@ -202,6 +204,7 @@ class TurnResult:
     actions: list[str] = field(default_factory=list)
     repetition: dict[str, Any] = field(default_factory=dict)  # see harness/repetition.py
     names: dict[str, Any] = field(default_factory=dict)  # glossary report of the turn
+    decisions: DecisionCount | None = None  # set when the slow lane settles (harness/decisions.py)
 
 
 class Engine:
@@ -1154,6 +1157,9 @@ class Engine:
             raise CampaignEnded("the player character is dead; the campaign is read-only")
         t_start = time.monotonic()
         waited = self._settle_for_next_turn()
+        calls = getattr(self.provider, "calls", None)
+        marks = (len(self.judgments.entries), len(calls) if isinstance(calls, list) else 0,
+                 len(self.devlog))
         if self.canon_guard is not None:
             self.canon_guard.refresh(self)
         for s in speakers or ():
@@ -1244,6 +1250,7 @@ class Engine:
             slow = _Slow(segments, sources, outcomes, turn_events, result, player_ev, sc.time,
                          self.ctx.extractor(sc, segments, [o.for_narrator() for o in outcomes]))
             slow.fast_s = time.monotonic() - t_start - waited
+            slow.marks = marks
         except Exception:
             if launch is not None:
                 for _, fut in launch.chains.values():
@@ -1314,6 +1321,8 @@ class Engine:
                 for hook in list(self.after_settle):
                     hook()
                 self.after_settle.clear()
+                slow.result.decisions = count_since(
+                    self, slow.player_event.id, slow.marks[0], slow.marks[1], slow.marks[2])
             except Exception as e:  # noqa: BLE001 - the turn is undone, the caller decides
                 sc.time = real_time
                 for ev in slow.turn_events:

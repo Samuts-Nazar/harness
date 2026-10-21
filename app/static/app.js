@@ -256,6 +256,14 @@ async function loadDebug() {
     ["вартість", "$" + d.cost.toFixed(4)],
     ...(d.error ? [["помилка", d.error]] : []),
   ]));
+  if (d.decisions) {
+    const fmt = (c) => `${c.total} (суджень ${c.judgments}, ескалацій ${c.escalations}, ` +
+      `викликів ${Object.entries(c.llm_calls_by_role).map(([k, n]) => k + " " + n).join(", ") || 0}, ` +
+      `рішень коду ${c.code_choices})`;
+    body.appendChild(section("Рішення", [
+      ["хід", fmt(d.decisions.turn)], ["сцена", fmt(d.decisions.scene)],
+      ["сесія", fmt(d.decisions.session)]]));
+  }
   if (d.repetition) {
     const r = d.repetition;
     body.appendChild(section("Повторюваність", [
