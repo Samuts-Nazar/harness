@@ -308,7 +308,8 @@ class ContextBuilder:
         lang = f" Speak in {self.language}." if self.language else ""
         if shape is Shape.GESTURE:
             return (shape_instruction(shape, None, name=prof.name) + " Write it as one short "
-                    f"sentence in the third person about {prof.name}: no words spoken." + lang)
+                    f"sentence in the third person about {prof.name}: no words spoken."
+                    + (f" Write in {self.language}." if self.language else ""))
         return (f"Say what {prof.name} says next, aloud and in character. Write only {prof.name}'s "
                 "own words as one continuous speech: no stage directions, no other characters' "
                 "lines."

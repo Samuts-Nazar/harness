@@ -29,6 +29,8 @@ NOBODY = "nobody"
 PLAYER_FLOOR = "player"  # the floor returns to the player (same id as models.PLAYER)
 FIRST_TAG, ALSO_TAG = "director_first", "director_also"
 NEXT_TAG, SHAPE_TAG = "director_next", "director_shape"
+# heads the lines of the exchange so far in the director's state (absent on the first step)
+EXCHANGE_HEADER = "This exchange so far, in order (the last line was just said):"
 
 
 def speaker_questions(npcs: Mapping[str, str]) -> dict[str, Question]:

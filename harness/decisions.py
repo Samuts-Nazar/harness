@@ -30,6 +30,7 @@ CODE_CHOICE_KINDS: set[str] = {
     "exchange_cap",            # the NPC exchange stopped at MAX_EXCHANGE_LINES (task LD-4)
     "silence",                 # an NPC step ended without words or action (chosen, or an empty gesture)
     "gesture",                 # an NPC step stored as an action only, no utterance
+    "same_speaker_stopped",    # the director picked the NPC of the step just taken: exchange ends
 }
 
 

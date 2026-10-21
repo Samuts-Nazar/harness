@@ -80,7 +80,7 @@ def test_exchange_stops_when_player_addressed():
     state = "\n".join(asks[1][0])
     assert "Чого тобі треба, чужинцю?" in state, "the director sees the line just said"
     assert ME in state, "and how the others see the player character"
-    assert "Рагнар" not in res.utterances[0].payload["text"]
+    assert "Рагнар" not in npc_prompts(prov)[0], "Horst does not know the player's name"
 
 
 def test_exchange_runs_npc_to_npc():
@@ -239,3 +239,68 @@ def test_exchange_log_is_the_same_in_parallel_mode():
                 for e in eng.log.active()]
 
     assert run(False) == run(True)
+
+
+# -- fix round 1 ---------------------------------------------------------------------------------
+def test_interrupt_between_steps_stops_before_the_next_ask():
+    """The player cuts in after line 1 is delivered, before step 2: nothing more is asked or said."""
+    eng, prov, judge = make(["Перший рядок.", "Другий рядок."], ["horst", "elza", NOBODY],
+                            ["short"])
+    h = InterruptHandle()
+
+    def on_word(npc, w):
+        if w == "рядок.":  # the last word of line 1: delivered whole, then the handle fires
+            h.request()
+
+    res = eng.turn("Слухаю.", handle=h, on_word=on_word)
+    assert [u.payload["text"] for u in res.utterances] == ["Перший рядок."]
+    assert res.interrupted and res.stop_reason == "interrupted"
+    assert len(next_asks(judge)) == 1 and len(npc_prompts(prov)) == 1
+    assert all(u.payload["text"] for u in res.utterances), "no empty utterance"
+    assert any(n["kind"] == "exchange_interrupted" for n in eng.devlog)
+
+
+def test_interrupt_before_a_gesture_step_writes_nothing():
+    eng, prov, judge = make(["Перший рядок."], ["horst", "elza", NOBODY],
+                            ["short", "gesture"])
+    h = InterruptHandle()
+    res = eng.turn("Слухаю.", handle=h, on_word=lambda n, w: h.request() if w == "рядок." else None)
+    assert len(res.utterances) == 1 and res.stop_reason == "interrupted"
+    assert [e for e in eng.log.active([ACTION]) if e.payload.get("by") == "elza"] == []
+    assert len(next_asks(judge)) == 1 and len(npc_prompts(prov)) == 1
+
+
+def test_same_npc_never_takes_two_steps_in_a_row():
+    lines = ["Раз.", "Два.", "Три."]
+    eng, prov, judge = make(lines, ["horst", "horst", "elza"], ["short"])
+    res = eng.turn("Слухаю.")
+    assert speakers(res) == ["horst"]
+    assert res.stop_reason == "nobody"
+    assert any(n["kind"] == "same_speaker_stopped" for n in eng.devlog)
+    assert "same_speaker_stopped" in CODE_CHOICE_KINDS
+
+
+def test_default_offline_judge_gives_one_line_then_the_player():
+    prov = FakeProvider(script={"narrator": ["Тиша."], "npc": [f"Рядок {i}." for i in range(8)],
+                                "extractor": ["none", diff()]})
+    eng = Engine(prov, PROFILES, Scene("Inn", (PLAYER, "horst", "elza"), time=0),
+                 models=ModelConfig(), narration="prose", record_language=None)
+    assert eng.dialogue == "living"
+    res = eng.turn("Добрий вечір.")
+    assert 1 <= len(res.utterances) <= 2 and res.stop_reason != "cap"
+
+
+def test_offline_app_stack_in_living_mode_gives_one_or_two_lines():
+    from app.stacks import fake_stack
+    from harness.style import Style
+
+    st = fake_stack()
+    prof = [CharacterProfile(PLAYER, "Рагнар", "Мандрівник.", appearance=ME),
+            CharacterProfile("horst", "Горст", "Староста."),
+            CharacterProfile("elza", "Ельза", "Вдова.")]
+    eng = Engine(st.provider, prof, Scene("Inn", (PLAYER, "horst", "elza"), time=0),
+                 models=st.models, judge=st.judge, style=Style.load("witcher", exemplars=False),
+                 dialogue="living")
+    for text in ("Добрий вечір.", "Що чути?", "Ну?"):
+        res = eng.turn(text)
+        assert 1 <= len(res.utterances) <= 2, (text, res.stop_reason, len(res.utterances))

@@ -19,7 +19,9 @@ from .belief import BeliefFn, neutral_belief
 from .context import ContextBuilder, NpcView
 from .db import connect
 from .decisions import DecisionCount, count_since
-from .director import NOBODY, PLAYER_FLOOR, decide_next, decide_speakers, parse_actions
+from .director import (
+    EXCHANGE_HEADER, NOBODY, PLAYER_FLOOR, decide_next, decide_speakers, parse_actions,
+)
 from .eventlog import EventLog
 from .extractor import Diff, DiffValidationError, parse_diff, validate_diff
 from .facts import FactStore
@@ -1073,8 +1075,7 @@ class Engine:
         line of this exchange so far. Main-thread data only, so the log never depends on timing."""
         who = (f"The player character is {self.ctx.describe(PLAYER)}. Someone who does not know "
                "the name addresses them by how they look or what they seem to be.")
-        extra = [who] + (["This exchange so far, in order (the last line was just said):\n"
-                          + "\n".join(lines)] if lines else [])
+        extra = [who] + ([EXCHANGE_HEADER + "\n" + "\n".join(lines)] if lines else [])
         g = self.glossary
         return [*director, *([g.apply(x) for x in extra] if g else extra)]
 
@@ -1118,12 +1119,27 @@ class Engine:
         (one batched judge call), the NPC's context is read fresh from the log (so it holds every
         line and name learned so far this turn), its line is generated, checked, fitted and
         delivered, and its events are written. Strictly sequential: each step depends on the
-        line before it."""
+        line before it.
+
+        Stops, checked in this order before each step: the player cut in (the handle fired while
+        the previous step was being prepared or delivered: nothing more is asked or written), the
+        cap. After the director's answer: the player's floor, nobody, or the NPC who took the
+        step just before (any step: line, gesture or silence). One NPC never takes two steps in a
+        row; it may speak again only after another NPC has taken a step in between. Such a pick
+        ends the exchange as "nobody" (note `same_speaker_stopped`): the speaker has had their
+        say and the floor goes back to the player."""
         sc, npcs = self.scene, launch.npcs
         lines: list[str] = []  # as the director reads them
         said: dict[str, int] = {}
         gestures = 0
+        last: str | None = None  # the NPC of the step just taken
         for step in range(MAX_EXCHANGE_LINES + 1):
+            if handle is not None and handle.requested:
+                if launch.first is not None and step == 0:
+                    launch.first.cancel()
+                result.stop_reason, result.interrupted = "interrupted", True
+                self._note("exchange_interrupted", steps=step)
+                return
             if step == MAX_EXCHANGE_LINES:
                 result.stop_reason = "cap"
                 self._note("exchange_cap", steps=step)
@@ -1139,6 +1155,11 @@ class Engine:
             if nxt == NOBODY or nxt not in npcs:
                 result.stop_reason = "nobody"
                 return
+            if nxt == last:
+                result.stop_reason = "nobody"
+                self._note("same_speaker_stopped", npc=nxt, step=step + 1)
+                return
+            last = nxt
             name = self.names.real(nxt)
             if shape is Shape.SILENCE:
                 self._note("silence", npc=nxt, step=step + 1)

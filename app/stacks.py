@@ -9,6 +9,7 @@ import threading
 from harness.judge import (
     DecisionJudge, EscalatingJudge, FakeJudge, FallbackJudge, LLMJudge,
 )
+from harness.director import EXCHANGE_HEADER, NOBODY, PLAYER_FLOOR
 from harness.pipeline import ModelConfig
 from harness.policy import DEFAULT_JUDGE_FIRST, FALLBACKS, Spend
 from harness.providers import Messages, OpenRouterProvider
@@ -140,9 +141,20 @@ def fake_judge() -> FakeJudge:
                       for f in _forms(n) if f and f in low)
         return hits[0][1] if hits else "nobody"
 
+    def next_floor(q, state):  # type: ignore[no-untyped-def]
+        """Living exchange: the first NPC the narration names speaks, then the player's turn."""
+        if any(str(x).startswith(EXCHANGE_HEADER) for x in state):
+            return PLAYER_FLOOR
+        narration = [x for x in state if str(x).startswith("Narration:")]
+        npcs = q.__class__(q.kind, q.text, {c: n for c, n in q.options.items()
+                                            if c not in (PLAYER_FLOOR, NOBODY)}, tag=q.tag)
+        got = first(npcs, narration)
+        return got if got != NOBODY else next(iter(npcs.options), NOBODY)
+
     return FakeJudge({
         "attitude_direction": "neutral", "relationship_magnitude": 0,
         "director_first": first,
+        "director_next": next_floor,
         "director_also": lambda q, st: any(
             f in " ".join(st).split("Narration:")[-1].lower()
             for f in _forms(q.text.split(" also ")[0].removeprefix("Would "))),
