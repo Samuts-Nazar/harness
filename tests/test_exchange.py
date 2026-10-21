@@ -671,3 +671,32 @@ def test_whole_description_marks_a_beat_not_its_first_word():
     assert "жінка ж бреше" in out.speech
     masked = "— Ні, — жінка в темній хустці відвела очі. — Іди."
     assert split_npc_output(masked, words).beats == ["жінка в темній хустці відвела очі."]
+
+
+# -- final review fix wave ------------------------------------------------------------------------
+def test_skipped_narration_first_step_never_draws_silence_or_gesture():
+    """A skipped-narration turn whose first step the decider calls silence still says something:
+    step 0 draws only speech shapes."""
+    eng, prov, _ = make(["— Ну?"], ["horst", NOBODY], ["silence"], present=(PLAYER, "horst"),
+                        rules={"director_narration": False})
+    res = eng.turn("Добрий вечір.")
+    assert any(n["kind"] == "narration_skipped" for n in eng.devlog)
+    assert [u.payload["text"] for u in res.utterances] == ["— Ну?"]
+    # with a profile too: the sampled shape of step 0 is a speech shape
+    eng, prov, _ = make(["— Ну?"], ["horst", NOBODY], ["gesture"], present=(PLAYER, "horst"),
+                        rules={"director_narration": False}, world_profile=_witcher())
+    res = eng.turn("Добрий вечір.")
+    note = next(n for n in eng.devlog if n["kind"] == "shape_sampled")
+    assert note["shape"] not in ("silence", "gesture") and res.utterances
+
+
+def test_skipped_narration_with_nothing_delivered_is_narrated():
+    """Safety net: an exchange that delivers nothing (the gesture came back empty) after a
+    skipped narration gets one narrator passage, so the player sees more than their own line."""
+    eng, prov, _ = make([], ["horst", NOBODY], ["short"], present=(PLAYER, "horst"),
+                        rules={"director_narration": False})
+    eng._shaped_line = lambda *a, **k: ""  # the NPC call gives nothing usable
+    res = eng.turn("Добрий вечір.")
+    assert res.narration == NARRATION
+    assert any(n["kind"] == "empty_exchange_narrated" for n in eng.devlog)
+    assert "empty_exchange_narrated" in CODE_CHOICE_KINDS

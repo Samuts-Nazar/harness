@@ -1256,13 +1256,22 @@ class Engine:
             return (kept[0], Shape.NORMAL, {}) if kept else (NOBODY, Shape.NORMAL, {})
 
     def _choose_shape(self, npc: str, shape: Shape, dist: dict[Shape, float],
-                      step: int) -> tuple[Shape, bool | None]:
+                      step: int, *, speak: bool = False) -> tuple[Shape, bool | None]:
         """Main thread. With a world profile code samples the step's shape from the decider's
         distribution blended with the profile and leaning against the session's gap
         (`shape.shape_weights`), and draws whether a spoken line carries a beat from the
         profile's `no_beat_share` (`shape.beat_wanted`; only with a style, None otherwise).
-        Without a profile: the decider's shape, the beat left to the model."""
+        Without a profile: the decider's shape, the beat left to the model. `speak`: the first
+        step of a turn whose narration was skipped; silence and gesture are left out of the
+        draw (a short line instead without a profile), so the turn is never empty."""
         prof = self.world_profile
+        if speak:
+            dist = {s: p for s, p in dist.items() if s in SPEECH_SHAPES}
+            if shape not in SPEECH_SHAPES:
+                self._note("first_step_speaks", npc=npc, decider=shape.value)
+                shape = Shape.SHORT
+            if not sum(dist.values()):
+                dist = {shape: 1.0} if dist or prof is not None else {}
         if prof is None or not prof.length_bins or not dist:
             return shape, None
         rng = random.Random(f"{self.seed}|shape|{self._draws}")
@@ -1294,6 +1303,21 @@ class Engine:
             return None
         self._note("narration_skipped", first=nxt, shape=shape.value)
         return nxt, shape, dist
+
+    def _narrate_empty(self, player_text: str, turn_events: list[Event],
+                       sources: dict[str, Event], segments: list[tuple[str, str]],
+                       result: "TurnResult") -> NarratorOutput:
+        """Safety net (main thread): the narration was skipped for an exchange that then
+        delivered nothing, so the player would see only their own line. One narrator passage is
+        written after the exchange (note `empty_exchange_narrated`)."""
+        self._note("empty_exchange_narrated")
+        out = self._narrate(player_text)
+        ev = self._event(NARRATION, [], {"text": out.description}, witnesses=[], notability=0.4)
+        turn_events.append(ev)
+        sources["narration"] = ev
+        segments.append(("narration", out.description))
+        result.narration = out.description
+        return out
 
     def _shaped_line(self, prep: _NpcPrep, shape: Shape, bounds: tuple[int, int],
                      beat: bool | None = None) -> str:
@@ -1376,7 +1400,8 @@ class Engine:
                 self._note("same_speaker_stopped", npc=nxt, step=step + 1)
                 return
             last = nxt
-            shape, beat = self._choose_shape(nxt, shape, dist, step + 1)
+            shape, beat = self._choose_shape(nxt, shape, dist, step + 1,
+                                             speak=step == 0 and launch.first_step is not None)
             name = self.names.real(nxt)
             if shape is Shape.SILENCE:
                 self._note("silence", npc=nxt, step=step + 1)
@@ -1676,6 +1701,12 @@ class Engine:
             result = TurnResult(out.description, actions=list(out.actions))
             if self._living(speakers):
                 self._exchange(launch, result, turn_events, sources, segments, handle, on_word)
+                if (first_step is not None and not result.interrupted
+                        and not any(u.payload.get("text", "").strip() for u in result.utterances)
+                        and not any(k == "gesture" for k, _, _ in result.exchange)):
+                    out = self._narrate_empty(model_text, turn_events, sources, segments, result)
+                    if on_narration is not None:
+                        on_narration(out.description)
             for npc in launch.speakers:  # classic, or a fixed list of speakers
                 if npc in launch.chains:
                     prep, fut = launch.chains[npc]

@@ -36,6 +36,8 @@ CODE_CHOICE_KINDS: set[str] = {
     "script_cut",              # the second answer too: the foreign runs were cut
     "shape_sampled",           # code drew the step's shape (and beat) against the world profile
     "beat_stripped",           # a no-beat line came back with a beat: the beat was cut
+    "first_step_speaks",       # a skipped-narration turn's first step: silence/gesture left out of the draw
+    "empty_exchange_narrated", # narration was skipped but nothing was delivered: one passage written
     "speaker_tidied",          # an NPC line's own-name prefix dropped / opening beat moved after the speech
 }
 
