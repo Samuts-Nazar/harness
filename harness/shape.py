@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Iterable
 
 from .style import split_npc_output
 
@@ -98,16 +98,17 @@ def _trim_speech(speech: str, hi: int) -> str:
 
 
 def fit_to_shape(text: str, shape: Shape, bounds: tuple[int, int], *,
-                 allow_trim: bool = False) -> tuple[str, str]:
+                 allow_trim: bool = False, names: Iterable[str] = ()) -> tuple[str, str]:
     """Fit an NPC line to its shape; returns (text, how), how in {"ok", "trimmed", "regenerate"}.
     Only the spoken part is counted. SILENCE -> empty; GESTURE -> beats only, as plain text with
     no dash (a reply with no dash at all is taken whole as the action; a dash reply without
     beats is speech: ask again, or silence once `allow_trim`). Speech over 1.5x the upper bound -> "regenerate"; the
     caller asks once more and then calls with `allow_trim=True`, which cuts the speech at a
-    sentence boundary (beats kept, as "— speech — beat.")."""
+    sentence boundary (beats kept, as "— speech — beat."). `names`: known character names for
+    `split_npc_output` (a piece naming one is a beat)."""
     if shape is Shape.SILENCE:
         return "", "ok"
-    out = split_npc_output(text)
+    out = split_npc_output(text, names)
     if shape is Shape.GESTURE:
         if out.beats:
             return " ".join(_ensure_end(b) for b in out.beats), "ok"

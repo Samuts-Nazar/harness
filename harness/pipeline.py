@@ -455,6 +455,18 @@ class Engine:
         return done
 
     @property
+    def _name_words(self) -> list[str]:
+        """Every word of every character's name, and the first word of how they look (a beat
+        shown to a player who does not know the name says «жінка в темній хустці»), for
+        `split_npc_output(names=...)`: a piece between dashes that names a character is a beat,
+        not speech."""
+        out = {w for p in self.profiles.values() for w in re.findall(r"[\w'’]+", p.name)
+               if len(w) > 2 and w[0].isupper()}
+        out |= {m.group(0) for p in self.profiles.values()
+                if (m := re.match(r"[\w'’]{3,}", p.appearance.strip()))}
+        return sorted(out)
+
+    @property
     def _npc_names(self) -> list[str]:
         return [p.name for c, p in self.profiles.items() if c != PLAYER] + [
             c for c in self.profiles if c != PLAYER]
@@ -875,7 +887,7 @@ class Engine:
         character has not learned is replaced there by what is seen. Spoken words stay literal."""
         if self.style is None or not self.names.mentions(text):
             return text
-        parsed = split_npc_output(text)
+        parsed = split_npc_output(text, self._name_words)
         if not parsed.has_dash:
             return text
         for beat in parsed.beats:
@@ -1240,14 +1252,15 @@ class Engine:
         prof = self.profiles.get(prep.npc) or CharacterProfile(prep.npc, prep.npc)
         prep = replace(prep, instruction=self.ctx.npc_instruction(prof, shape, bounds))
         text = self._npc_line(prep)
-        fitted, how = fit_to_shape(text, shape, bounds)
+        names = self._name_words
+        fitted, how = fit_to_shape(text, shape, bounds, names=names)
         if how == "regenerate":
             self._note("shape_regenerated", npc=prep.npc, shape=shape.value, text=text)
             fix = (f"Do not speak: write only the one small thing {prof.name} does."
                    if shape is Shape.GESTURE else
                    f"Your last reply was far too long: say at most {bounds[1]} words.")
             text = self._npc_line(prep, notes=[fix])
-            fitted, how = fit_to_shape(text, shape, bounds, allow_trim=True)
+            fitted, how = fit_to_shape(text, shape, bounds, allow_trim=True, names=names)
             if how == "trimmed":
                 self._note("shape_trimmed", npc=prep.npc, shape=shape.value, before=text,
                            after=fitted)
@@ -1320,7 +1333,8 @@ class Engine:
                     continue
                 for notice, _ in prep.mem.noticed:
                     turn_events.append(self.notices.mark_shown(notice, sc))
-                act = self._fix_names(beat_as_action(text, name), "npc_beat")
+                act = self._fix_names(beat_as_action(text, name, [self.names.label(nxt)]),
+                                      "npc_beat")
                 ev = self._event(ACTION_EVENT, [nxt], {"text": act, "by": nxt, "gesture": True},
                                  notability=0.3)
                 turn_events.append(ev)
@@ -1356,7 +1370,8 @@ class Engine:
         sr = run_stream(iter([text]), handle, cb, self.pace)
         if sr.spoken_text.strip():
             self.session_lines.append(sr.spoken_text)
-        parsed = split_npc_output(sr.spoken_text) if self.style is not None else None
+        parsed = (split_npc_output(sr.spoken_text, self._name_words) if self.style is not None
+                  else None)
         extra: dict[str, object] = (
             {"speech": parsed.speech} if parsed is not None and parsed.has_dash else {})
         ev = self._utterance(npc, sr.spoken_text, interrupted=sr.interrupted, **extra)
@@ -1368,7 +1383,8 @@ class Engine:
             else sr.spoken_text)
         if parsed is not None:  # the NPC's own beats, only the delivered part
             for beat in parsed.beats:
-                act = self._fix_names(beat_as_action(beat, self.ctx.name(npc)), "npc_beat")
+                act = self._fix_names(beat_as_action(beat, self.ctx.name(npc),
+                                                     [self.names.label(npc)]), "npc_beat")
                 if act:
                     turn_events.append(self._event(
                         ACTION_EVENT, [npc], {"text": act, "by": npc}, notability=0.3,
@@ -1728,7 +1744,7 @@ class Engine:
         already listed the acts, so this is the step after the first narration."""
         acts = [("", a) for a in launch.out.actions]
         acts += [(u.payload["speaker"], b) for u in result.utterances
-                 for b in ([] if self.style is None else split_npc_output(u.payload["text"]).beats)]
+                 for b in ([] if self.style is None else split_npc_output(u.payload["text"], self._name_words).beats)]
         acts += [(npc, t) for kind, npc, t in result.exchange if kind == "gesture"]
         got = self.outcome_judge.npc_acts(acts, unbounded=self.ctx.player_unlimited)
         done: list[Outcome] = []

@@ -488,3 +488,23 @@ def test_extractor_citing_display_name_with_repeat_suffix_maps_to_segment_key():
     assert len(res.fact_ids) == 2
     third = res.utterances[2].id
     assert [f.content for f in eng.facts.by_source_event(third)] == ["Horst tells Elza to go home"]
+
+
+def test_pipeline_parses_npc_lines_with_the_known_names():
+    """A beat with no verb the parser knows («Ельза знову до вікна») is still a beat because it
+    names a character (Task 11 `names=`): the speech payload and the NPC's action follow it."""
+    from harness.style import Style
+    line = "— Ні, — Ельза знову до вікна. — Іди геть."
+    eng, prov, _ = make([line], ["elza", NOBODY], ["short"], style=Style(), present=(PLAYER, "elza"),
+                        extractor=["none", "говорить тихо", diff()])
+    res = eng.turn("Ти підеш зі мною?")
+    assert res.utterances[0].payload["speech"] == "Ні. Іди геть."
+    acts = [e.payload["text"] for e in eng.log.active([ACTION]) if e.payload.get("by") == "elza"]
+    assert acts == ["Ельза знову до вікна."]
+
+
+def test_fit_to_shape_counts_speech_with_names():
+    from harness.shape import fit_to_shape
+    line = "— Ні, — Ельза знову до вікна і довго дивиться в темряву. — Іди."
+    assert fit_to_shape(line, Shape.WORD, (1, 2), names=["Ельза"])[1] == "ok"
+    assert fit_to_shape(line, Shape.WORD, (1, 2))[1] == "regenerate"

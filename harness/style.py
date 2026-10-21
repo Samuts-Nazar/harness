@@ -170,12 +170,17 @@ def split_npc_output(text: str, names: Iterable[str] = ()) -> NpcOutput:
     return NpcOutput(_speech_tail(joined) if joined else "", beats, True)
 
 
-def beat_as_action(beat: str, name: str) -> str:
+def beat_as_action(beat: str, name: str, aliases: Iterable[str] = ()) -> str:
     """A beat as one observable-action sentence naming the actor ("озирнувся, стишив голос" ->
-    "Горст озирнувся, стишив голос.")."""
+    "Горст озирнувся, стишив голос."). `aliases`: how the actor is shown to a player who does
+    not know the name (the appearance label); a beat that opens with one names the actor."""
     b = beat.strip().strip(",;:").strip()
     if not b:
         return ""
+    for a in sorted((a.strip() for a in aliases if a and a.strip()), key=len, reverse=True):
+        if b.lower().startswith(a.lower()) and (len(b) == len(a) or not b[len(a)].isalnum()):
+            b = name + b[len(a):]
+            break
     first = b.split(None, 1)
     if first and first[0].lower() in _PRON:
         b = name + (" " + first[1] if len(first) > 1 else "")
