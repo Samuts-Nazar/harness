@@ -209,6 +209,10 @@ class Game:
                         en.update(text=res.text, event=res.new_event)
                         en.pop("cut", None)
                 self._panel = self._compute_panel()
+            elif res.withdrawn:  # the line is gone and nothing replaces it: no empty bubble
+                self.transcript[:] = [en for en in self.transcript
+                                      if not (en.get("kind") == "npc" and en.get("event") == event)]
+                self._panel = self._compute_panel()
             self.debug = {**self.debug, "challenge": out,
                           "notes": self.debug.get("notes", []) + self.eng.devlog[-3:]}
             return out
