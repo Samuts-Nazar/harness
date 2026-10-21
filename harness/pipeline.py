@@ -65,7 +65,7 @@ from .policy import (
     DEFAULT_EXTRACTOR, DEFAULT_JUDGE_LLM, DEFAULT_NARRATOR, DEFAULT_NPC, FALLBACKS,
 )
 from .providers import Provider, ProviderError
-from .repetition import WINDOW as REPETITION_WINDOW, measure_turn
+from .repetition import WINDOW as REPETITION_WINDOW, measure_turn, sentences
 from .profile import WorldProfile, distance, profile_of_lines
 from .settings import (
     DEFAULT_DIALOGUE, DEFAULT_NARRATION, DEFAULT_OUTPUT_LANGUAGE, DEFAULT_RECORD_LANGUAGE,
@@ -107,6 +107,7 @@ class Challenge:
     regenerated: bool = False
     text: str = ""
     new_event: int | None = None
+    withdrawn: bool = False  # the line was removed and nothing replaced it (the NPC says nothing)
 
 
 class InterruptionError(RuntimeError):
@@ -1763,7 +1764,7 @@ class Engine:
             self._note("challenge_not_regenerated", event=event_id,
                        reason="not the last NPC line")
             return res
-        self._regenerate(ev, res)
+        self._regenerate(ev, res, explanation)
         return res
 
     def _find_channel(self, npc: str, text: str, explanation: str,
@@ -1785,17 +1786,80 @@ class Engine:
         by_key = {it.key: it for it in items}
         return by_key.get(str(j.answer))
 
-    def _regenerate(self, old: Event, res: "Challenge") -> None:
+    def _still_has(self, npc: str, texts: Sequence[str], old_text: str,
+                   explanation: str) -> list[bool]:
+        """Typed checks, one question per text in a single judge call: does it still assert or
+        allude to the disputed point (the player's explanation is the reference)?"""
+        ref = explanation or "the content the player disputed"
+        state = [f"Speaker: {self.names.real(npc)}", f"Disputed line: {old_text}",
+                 f"The player objects: {ref}"]
+        qs = {}
+        for i, t in enumerate(texts):
+            qs[str(i)] = yes_no_q(
+                "Does this line still assert, imply or allude to the disputed point, even in "
+                "other words?" + f"\nLine: {t}", tag="challenge_still_has")
+        if not qs:
+            return []
+        got = self.judge.ask(state, qs)
+        return [bool(got[str(i)].answer) for i in range(len(texts))]
+
+    def _regenerate_text(self, npc: str, old: Event, explanation: str) -> str | None:
+        """A replacement line with the disputed point verified gone: up to `check_retries`+1
+        candidates; if all still carry it, the sentences that carry it are dropped (logged). If
+        nothing safe is left (or the check cannot run) the line is withdrawn: None."""
+        old_text = old.payload["text"]
+        notes: list[str] = []
+        cands: list[str] = []
+        for _ in range(self.check_retries + 1):
+            text = self._npc_line(self._prep_npc(npc), notes=notes)
+            cands.append(text)
+            try:
+                present = self._still_has(npc, [text], old_text, explanation)[0]
+            except JudgeError as e:
+                self._note("challenge_check_unavailable", npc=npc, error=str(e))
+                return text
+            if not present:
+                if len(cands) > 1:
+                    self._note("challenge_removed_after_retry", npc=npc, tries=len(cands))
+                return text
+            self._note("challenge_still_present", npc=npc, text=text)
+            notes = ["Your previous try still touched on what the player objected to ("
+                     + (explanation or old_text) + "). Leave that point out entirely, in any "
+                     "wording."]
+        last = cands[-1]
+        parts = sentences(last)
+        try:
+            flags = self._still_has(npc, parts, old_text, explanation)
+            kept = [p for p, bad in zip(parts, flags) if not bad]
+            joined = " ".join(kept)
+            # an allusion can be spread over sentences: verify the remainder as a whole
+            if kept and self._still_has(npc, [joined], old_text, explanation)[0]:
+                kept = []
+        except JudgeError as e:
+            self._note("challenge_check_unavailable", npc=npc, error=str(e), stage="drop")
+            kept, joined = [], ""
+        if not kept:
+            self._note("challenge_line_withdrawn", npc=npc, text=last)
+            return None
+        self._note("challenge_sentences_dropped", npc=npc, before=last,
+                   dropped=[p for p, bad in zip(parts, flags) if bad])
+        return joined
+
+    def _regenerate(self, old: Event, res: "Challenge", explanation: str = "") -> None:
         """Replace the NPC line `old` by a new one generated with the correction in context. If
         generating fails the old text is put back (the log is append-only, so as a new event)."""
         npc = old.payload["speaker"]
         self.log.rollback(old.id, "model error: no channel")
         try:
-            text = self._npc_line(self._prep_npc(npc))
+            text = self._regenerate_text(npc, old, explanation)
         except Exception:
             self._utterance(npc, old.payload["text"], replaces=old.id, restored=True)
             self.refresh_memory()
             raise
+        if text is None:  # the point cannot be removed from this line: the NPC says nothing
+            self.refresh_memory()
+            res.withdrawn = True
+            return
         new = self._utterance(npc, text, replaces=old.id, regenerated=True)
         self._learn_from_speech(new, npc, text)
         try:

@@ -158,3 +158,68 @@ def test_knowledge_report_lists_what_each_character_knows_and_from_where():
     assert heard["source"] == PLAYER and heard["source_name"] == "Рагнар"
     assert not any(r["kind"] == "name" and "Рагнар" in r["text"] for r in rep), \
         "she never learned the stranger's name"
+
+
+def still_has(*bad):
+    """A removal judge: yes when the checked text contains any of `bad`."""
+    def rule(q, state):
+        line = q.text.split("\nLine: ", 1)[1].lower()
+        return any(b in line for b in bad)
+    return rule
+
+
+def _challenge(lines, rule):
+    eng, prov, line = play(FakeJudge({"knowledge_channel": "none", "challenge_still_has": rule}),
+                           npc_lines=lines)
+    out = eng.challenge_line(line.id, "Ґеральт ще нічого не робив, зуби ні до чого")
+    shown = [e.payload["text"] for e in eng.log.active([UTTERANCE]) if e.payload["speaker"] == "elza"]
+    return eng, out, shown
+
+
+def test_challenge_regeneration_verifies_removal():
+    eng, out, shown = _challenge(
+        ("Хто платитиме за зуби?", "Зуби вже не мої, але хтось заплатить.", "Сідай, поїж."),
+        still_has("зуб"))
+    assert out.regenerated and out.text == "Сідай, поїж." and shown == ["Сідай, поїж."]
+    assert [n["kind"] for n in eng.devlog].count("challenge_still_present") == 1
+
+
+def test_challenge_drops_sentence_when_all_fail():
+    eng, out, shown = _challenge(
+        ("Хто платитиме за зуби?", "Сідай. Зуби вже не мої.", "Зуби, кажу!",
+         "Ну і ну. Дивні зуби були. Пий."), still_has("зуб"))
+    assert out.regenerated and out.text == "Ну і ну. Пий." and shown == ["Ну і ну. Пий."]
+    assert [n["kind"] for n in eng.devlog].count("challenge_sentences_dropped") == 1
+
+
+def test_challenge_withdraws_the_line_when_nothing_safe_is_left():
+    eng, out, shown = _challenge(
+        ("Хто платитиме за зуби?", "Зуби!", "Мої зуби!", "Ох, зуби.", "Зуби? Зуби."),
+        still_has("зуб"))
+    assert out.withdrawn and not out.regenerated and out.text == "" and out.new_event is None
+    assert shown == [], "no empty line is left in the log"
+    assert [n["kind"] for n in eng.devlog].count("challenge_line_withdrawn") == 1
+    assert eng.log.active([CORRECTION])
+
+
+def test_challenge_rechecks_the_remainder_as_a_whole():
+    def rule(q, state):
+        line = q.text.split("\nLine: ", 1)[1]
+        return "зуб" in line.lower() or line == "Хто платитиме? Він знає чому."  # alluding as a whole
+    eng, out, shown = _challenge(
+        ("Хто платитиме за зуби?", "Хто платитиме за зуби? Він знає чому.",
+         "Зуби. Хто платитиме? Він знає чому.", "Зуби! Хто платитиме? Він знає чому."), rule)
+    assert out.withdrawn and shown == []
+
+
+def test_challenge_drop_stage_judge_error_withdraws():
+    state = {"n": 0}
+
+    def rule(q, st):
+        state["n"] += 1
+        if state["n"] > 3:
+            raise JudgeError("down")
+        return True
+    eng, out, shown = _challenge(("Зуби.", "Зуби?", "Зуби!", "Зуби…"), rule)
+    assert out.withdrawn and shown == []
+    assert "challenge_check_unavailable" in [n["kind"] for n in eng.devlog]

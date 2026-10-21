@@ -79,6 +79,12 @@ function showAnswer(block, ok, d) {
     spoil.addEventListener("click", () => { detail.hidden = !detail.hidden; });
     res.append(spoil, detail);
   } else if (d.verdict === "no_channel") {
+    if (d.withdrawn) {
+      block.remove();
+      res.textContent = "Він не міг цього знати: репліку прибрано, він промовчав.";
+      feed.appendChild(res);
+      return;
+    }
     if (d.regenerated) {
       const w = block.querySelector(".w"); if (w) w.textContent = d.text;
       block.classList.remove("cut");
