@@ -1,5 +1,58 @@
 # Living dialogue: live check (task LD-8)
 
+## Task 12 re-run (2026-10-22): after the fixes
+
+Same script, same units (`python -m experiments.dialogue.live_check run all`), spend **0.153 USD**
+(cap 0.40). The Task 8 units are kept in `campaigns/ld/before-task12/` (git-ignored). Both
+columns below are measured with **today's parser** (`profile_of_lines`, no names), so they are
+like for like; the Task 8 tables further down were measured with the parser before Task 11 and
+differ from the "before" column here (e.g. living >15 words: 0% then, 18-25% re-measured).
+
+What changed in the engine: code samples each step's shape from the decider's probabilities
+blended with the profile and leaning against the session's gap; the beat is a per-line draw from
+`no_beat_share` ("no gesture this line", a beat written anyway is cut); long/normal shapes name
+their lower bound; the extractor's `Горст~2` maps to `horst~2`; self-prefixes are dropped and a
+line opening with a beat is put in book form; foreign-script output is regenerated once, then cut.
+
+| unit | lines before / after | 1-3 words | over 15 words | median | lines with a beat | L1 to profile |
+|---|---|---|---|---|---|---|
+| **book profile** | 18669 | 21% | 39% | 11 | 41% | 0 |
+| living, session A | 44 / 21 | 2% -> **24%** | 18% -> **38%** | 9 -> **12** | 68% -> **33%** | 0.78 -> **0.36** |
+| living, session B | 32 / 18 | 3% -> **22%** | 25% -> **28%** | 8.5 -> **8** | 62% -> **44%** | 0.76 -> **0.41** |
+| living, pooled | 76 / 39 | 3% -> **23%** | 21% -> **33%** | 9 -> **12** | 66% -> **38%** | 0.77 -> **0.29** |
+| classic, session A | 20 / 18 | 0% -> 0% | 90% -> 78% | 27.5 -> 23.5 | 95% -> 89% | 1.03 -> 0.80 |
+| classic, session B | 20 / 20 | 0% -> 0% | 95% -> 95% | 26.5 -> 29 | 90% -> 95% | 1.13 -> 1.13 |
+| scene Rinde | 23 / 16 | 9% -> 25% | 0% -> 25% | 8 -> 10 | 100% -> 38% | 1.02 -> 0.53 |
+| scene Cintra | 16 / 17 | 19% -> 24% | 6% -> 24% | 5.5 -> 6 | 88% -> 41% | 0.85 -> 0.45 |
+| scene kings' council | 5 / 27 | 0% -> 26% | 0% -> 26% | 10 -> 7 | 100% -> 41% | 1.19 -> 0.52 |
+
+- The living sessions are now close to the profile on every speech number (pooled L1 0.29;
+  classic 0.80-1.13). The samples are small (18-27 lines per unit), so a single unit moves by
+  several points between runs.
+- **Fewer lines per inn session** (21 and 18 against 44 and 32): 16 of 20 turns in each session
+  ended with the player addressed after the first line (Task 8 A: 10 of 20, with 4 cap stops).
+  Not tuned here; the director's floor choice did not change, so this is likely the longer lines
+  inviting the player's answer. Worth watching in play.
+- Reference-scene medians stay well under the book's scenes (6-10 against 16-28): the session
+  tracks the *world* profile, not a scene's.
+- Slow-lane failures (`unknown source 'Горст~2'`): **0** in all units (Task 8: 5 and 2).
+- Script switch: 2 NPC answers with Gujarati letters were caught and regenerated (no cut needed);
+  `speaker_tidied` fired 1-2 times per living unit and 11-16 times per classic session (classic
+  lines usually opened with a beat).
+- Speed: living first word median 4.4 s (A) and 10.8 s (B); classic 8.2 and 9.3 s.
+- Offline simulation (`python -m experiments.dialogue.shape_sim 10 20`, fake decider and writer
+  modelled on the Task 8 behaviour): L1 0.92 -> 0.31 pooled, over 15 words 0% -> 26%, lines with
+  a beat 90% -> 39%.
+
+A/B regenerated (`python -m experiments.dialogue.make_ab`): 10 pairs from the new units, 1
+dropped (session A turn 3: the living side was empty, all silence), **9 pairs** in
+`app/static/ab_data.js`, key in `reports/dialogue/ab_key.json` (living on side A in 6). No pair
+had a script switch, a speaker prefix or a line opening with the speaker's own name or
+description. The caveats below still hold (sides from separate campaigns; classic sides open
+with narration, so the engines are easy to tell apart).
+
+## Task 8 (2026-10-21), as reported then
+
 Run on 2026-10-21 with the default live models (`ModelConfig.live()`, first-line decider with the
 0.8 escalation). Script: `experiments/dialogue/live_check.py`. Raw outputs and the cassette are in
 `/home/cock/projects/harness/campaigns/ld/` (git-ignored, not committed). Spend: **0.217 USD** of 0.60.

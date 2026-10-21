@@ -6,7 +6,7 @@ differ). Which side is which is shuffled with a fixed seed and written to
 reports/dialogue/ab_key.json (not shown).
 
 A pair is dropped when either side shows a detected glitch (`glitches`): letters of another
-script, a line that opens with a speaker prefix or with the speaker's own name or description
+script, an empty side, a line that opens with a speaker prefix or with the speaker's own name or description
 (the page puts the name before the line), or another character's script line inside a line.
 
     python -m experiments.dialogue.make_ab
@@ -49,6 +49,8 @@ def side(turn: dict) -> str:
 def glitches(turn: dict, looks: dict[str, str]) -> list[str]:
     """What would show as a glitch on the page; [] for a clean side."""
     out = [f"script: {r}" for r in foreign_runs(side(turn), "Ukrainian")]
+    if side(turn) == "(тиша)":
+        out.append("empty side: nothing said or narrated")
     for npc, text in _lines(turn):
         t = text.strip().lstrip("—– ").lower()
         own = [NAMES.get(npc, npc).lower()[:4], looks.get(npc, "").lower()]

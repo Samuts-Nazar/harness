@@ -16,21 +16,21 @@
  {
   "pair": 3,
   "session": "A",
-  "turn": 3,
-  "A": "classic",
-  "B": "living"
- },
- {
-  "pair": 4,
-  "session": "A",
   "turn": 4,
   "A": "living",
   "B": "classic"
  },
  {
-  "pair": 5,
+  "pair": 4,
   "session": "A",
   "turn": 5,
+  "A": "living",
+  "B": "classic"
+ },
+ {
+  "pair": 5,
+  "session": "B",
+  "turn": 1,
   "A": "living",
   "B": "classic"
  },
