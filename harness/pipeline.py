@@ -76,9 +76,8 @@ from .shape import (SPEECH_SHAPES, Shape, beat_wanted, fit_to_shape, sample_shap
                     shape_weights, word_bounds)
 from .state import LiveState, StateChange, check_change, payload as change_payload
 from .streaming import InterruptHandle, StreamResult, run_stream
-from .style import (Style, beat_as_action, foreign_voice, manner_messages, parse_manner,
-                    split_npc_output, tidy_speaker)
-from .style import cut_foreign, foreign_runs
+from .style import (Style, beat_as_action, cut_foreign, foreign_runs, foreign_voice,
+                    manner_messages, parse_manner, split_npc_output, tidy_speaker)
 
 ATTITUDE_MIN_NOTABILITY = 0.6  # only notable facts get attitude judgments (cost control)
 FALLBACK_LINE = "I don't know what to tell you."  # no longer shown: the least suspicious candidate is
@@ -1805,8 +1804,10 @@ class Engine:
         own: the world decides, then one short paragraph narrates only that. The director has
         already listed the acts, so this is the step after the first narration."""
         acts = [("", a) for a in launch.out.actions]
+        names = self._name_words
         acts += [(u.payload["speaker"], b) for u in result.utterances
-                 for b in ([] if self.style is None else split_npc_output(u.payload["text"], self._name_words).beats)]
+                 for b in ([] if self.style is None
+                           else split_npc_output(u.payload["text"], names).beats)]
         acts += [(npc, t) for kind, npc, t in result.exchange if kind == "gesture"]
         got = self.outcome_judge.npc_acts(acts, unbounded=self.ctx.player_unlimited)
         done: list[Outcome] = []
