@@ -158,3 +158,34 @@ def test_knowledge_report_lists_what_each_character_knows_and_from_where():
     assert heard["source"] == PLAYER and heard["source_name"] == "Рагнар"
     assert not any(r["kind"] == "name" and "Рагнар" in r["text"] for r in rep), \
         "she never learned the stranger's name"
+
+
+def still_has(*bad):
+    """A removal judge: yes when the checked text contains any of `bad`."""
+    def rule(q, state):
+        return any(b in s.lower() for s in state if s.startswith("Line:") for b in bad)
+    return rule
+
+
+def _challenge(lines, rule):
+    eng, prov, line = play(FakeJudge({"knowledge_channel": "none", "challenge_still_has": rule}),
+                           npc_lines=lines)
+    out = eng.challenge_line(line.id, "Ґеральт ще нічого не робив, зуби ні до чого")
+    shown = [e.payload["text"] for e in eng.log.active([UTTERANCE]) if e.payload["speaker"] == "elza"]
+    return eng, out, shown
+
+
+def test_challenge_regeneration_verifies_removal():
+    eng, out, shown = _challenge(
+        ("Хто платитиме за зуби?", "Зуби вже не мої, але хтось заплатить.", "Сідай, поїж."),
+        still_has("зуб"))
+    assert out.regenerated and out.text == "Сідай, поїж." and shown == ["Сідай, поїж."]
+    assert [n["kind"] for n in eng.devlog].count("challenge_still_present") == 1
+
+
+def test_challenge_drops_sentence_when_all_fail():
+    eng, out, shown = _challenge(
+        ("Хто платитиме за зуби?", "Сідай. Зуби вже не мої.", "Зуби, кажу!",
+         "Ну і ну. Дивні зуби були. Пий."), still_has("зуб"))
+    assert out.regenerated and out.text == "Ну і ну. Пий." and shown == ["Ну і ну. Пий."]
+    assert [n["kind"] for n in eng.devlog].count("challenge_sentences_dropped") == 1
