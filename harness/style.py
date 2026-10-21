@@ -23,10 +23,13 @@ import re
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import TYPE_CHECKING, Iterable, Sequence
 
 from .models import CharacterProfile
 from .providers import Messages
+
+if TYPE_CHECKING:
+    from .shape import Shape
 
 REPO = Path(__file__).resolve().parents[1]
 WORLDS = REPO / "worlds"
@@ -331,10 +334,11 @@ NPC_CORE = (
 NPC_FORM = (
     "Form, as the Ukrainian books write dialogue: a dash opens speech. Your own small physical "
     "business and manner go in between, in the third person, in the same paragraph "
-    "(\"— ..., — озирнувся {name}. — ...\"), or in a short clause before the dash. Use "
-    "one to three small beats, things anyone present could see or hear (a glance round, a "
-    "lowered voice, fidgeting, a spit, a pause, a hand to the purse). Not thoughts, not "
-    "explanations. Speech can be short, and sometimes it should be.")
+    "(\"— ..., — озирнувся {name}. — ...\"), or in a short clause before the dash, but only "
+    "when it earns its place: many lines have no gesture at all. When there is one, it is a "
+    "thing anyone present could see or hear (a glance round, a lowered voice, a spit, a pause, "
+    "a hand to the purse). Not thoughts, not explanations. Speech can be short, and "
+    "sometimes it should be. Answer the last thing said, not the whole situation.")
 
 NPC_LIMITS = (
     "You write only {name}: your own words and your own actions. Never another character's "
@@ -395,8 +399,12 @@ class Style:
         parts.append(self._sec("dialogue", "voices by class", "irony and subtext", "what it avoids"))
         return "\n\n".join(p for p in parts if p)
 
-    def npc_instruction(self, prof: CharacterProfile, language: str | None) -> str:
+    def npc_instruction(self, prof: CharacterProfile, language: str | None,
+                        shape: "Shape | None" = None) -> str:
+        from .shape import shape_instruction  # shape imports this module
         return (f"Write {prof.name}'s next turn: what {prof.name} says and does in this moment.\n"
+                + (shape_instruction(shape, language).replace("The character", prof.name) + "\n"
+                   if shape is not None else "")
                 + NPC_FORM.format(name=prof.name) + "\n" + NPC_LIMITS.format(name=prof.name)
                 + (f"\nWrite in {language}." if language else ""))
 

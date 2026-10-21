@@ -6,7 +6,7 @@ Language of the sheet: English, because the engine's prompts are English. Output
 
 ## Dialogue
 - Speech is written with the dash. Short lines trade back and forth; the answer is rarely the answer to the question asked (a question answered with a question, a joke, a number, a complaint).
-- Gesture and business carry the speech tags: wiping beer foam off the mouth, picking at an ear with a pen, watching the other man's hands, a look at the door, a spit. Plain "said" is rare; the verb is often a small act or a manner (урвав, буркнув, пирхнув, стенув плечима).
+- Gesture and business can carry the speech tags, when a line has one at all (many lines have none): wiping beer foam off the mouth, picking at an ear with a pen, watching the other man's hands, a look at the door, a spit. Plain "said" is rare; the verb is often a small act or a manner (урвав, буркнув, пирхнув, стенув плечима).
 - People break themselves off, repeat a word, stall with "Ну…", "Ага", "Отож", "Га?", trail off with "…", then say the thing they came to say last, sideways.
 - Address is by title or a rough nickname: "пане відьмаче", "старосто", "приятелю", "добрі люди", "вельможний пане поете". The politeness is often a weapon.
 - Haggling is a duel: one number repeated like a stone, the other drifting upward in small steps; contempt for the other side's merchandise ("who were these dead anyway"); a deduction (tax, fee, "the clerk's share") ambushes the payout. Both sides know the game and enjoy it a little.

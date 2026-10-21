@@ -25,6 +25,8 @@ CODE_CHOICE_KINDS: set[str] = {
     "state_change_dropped",    # an extractor state change the code refused
     "narrator_speech_stripped",  # speech cut out of the narration
     "narrator_bad_speakers",   # unknown speakers filtered from the narrator's list
+    "shape_regenerated",       # an NPC line far over its shape, asked again once
+    "shape_trimmed",          # still over after that: cut at a sentence boundary
 }
 
 
