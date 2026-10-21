@@ -169,3 +169,23 @@ def test_npc_system_never_says_narrator():
     # app/stacks.py's fake and the debug Recorder tell roles apart by words in the system prompt
     s = Style.load("witcher", exemplars=False)
     assert "narrator" not in s.npc_system(CharacterProfile("h", "Горст", "Староста.")).lower()
+
+
+# -- a dash inside speech is not a beat boundary ---------------------------------------------------
+INN = ("— Переконувати легко, пане. А платити за розбиті зуби хто буде? — корчмар потер мокрий "
+       "край стійки, глянув на двері й знизив голос. — Кімнати нема. «Старий Наракорт» — туди. "
+       "І пиво допийте тут.")
+
+
+def test_dash_inside_speech_stays_speech_and_the_real_beat_is_kept():
+    out = split_npc_output(INN)
+    assert out.beats == ["корчмар потер мокрий край стійки, глянув на двері й знизив голос."]
+    assert "«Старий Наракорт» — туди. І пиво допийте тут." in out.speech
+    assert out.speech.startswith("Переконувати легко, пане.")
+    assert "туди" not in " ".join(out.beats)
+
+
+def test_pronoun_and_verb_beats_still_count_and_non_beats_do_not():
+    assert split_npc_output("— Так. — Він кивнув. — Йди.").beats == ["Він кивнув."]
+    assert split_npc_output("— Іди — і не повертайся.").beats == []
+    assert split_npc_output("— Іди — і не повертайся.").speech == "Іди — і не повертайся."

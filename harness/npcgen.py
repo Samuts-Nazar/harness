@@ -19,9 +19,10 @@ taken from the books. The calendar is the placeholder of `harness/world/clock.py
 from __future__ import annotations
 
 import random
+import re
 import zlib
 from dataclasses import dataclass, field, replace
-from typing import Iterable, Sequence
+from typing import Callable, Iterable, Sequence
 
 from .models import CharacterProfile
 
@@ -237,13 +238,48 @@ class NpcSpec:
         return CharacterProfile(self.id, self.name, desc, appearance=appearance, core=self.core)
 
 
+_FEM = re.compile(r"\b(жінк\w*|дівч\w*|вона|її|стара\b|старенька|дочк\w*|матір|мати\b|"
+                  r"господиня|вдова|панна|пані|\w+ка\b|\w+иця\b|\w+ниця\b|\w+иня\b)", re.I)
+_MASC = re.compile(r"\b(чолов\w*|хлоп\w*|він|його|старий|дід\w*|син\b|батько|парубок|"
+                   r"господар|пан\b)", re.I)
+_FEM_NOT = {"кішка", "ложка", "дошка"}
+
+
+def infer_sex(*texts: str, role: bool = False) -> str | None:
+    """"m"/"f" from a role, description or appearance (Ukrainian gender words, pronouns, the
+    feminine -ка/-иця/-ниця forms of a trade; with `role` a lone masculine trade noun counts),
+    or None when the text does not say."""
+    given = [t for t in texts if t and t.strip()]
+    text = " ".join(given).lower()
+    if not text.strip():
+        return None
+    f = sum(1 for m in _FEM.findall(text) if m not in _FEM_NOT)
+    m = len(_MASC.findall(text))
+    if f == m:
+        # a lone trade noun (a consonant ending, no feminine form) is male
+        words = re.findall(r"[а-яіїєґ']+", text)
+        if role and not f and words and words[0][-1] not in "аяиіеєюї":
+            return "m"
+        return None
+    return "f" if f > m else "m"
+
+
 def generate_npc(seed: int | str, slot: str | int, *, culture: str, sex: str | None = None,
                  used: Iterable[str] = (), age: int | None = None, occupation: str | None = None,
-                 now_t: int = 0, id_prefix: str = "npc") -> NpcSpec:
+                 now_t: int = 0, id_prefix: str = "npc", description: str = "",
+                 appearance: str = "", sex_decider: Callable[[str], str | None] | None = None
+                 ) -> NpcSpec:
     """A whole non-canon NPC from tables. The same (seed, slot, culture, used) always gives the
-    same person. `used`: names already in the campaign (profiles, canon, glossary)."""
+    same person. `used`: names already in the campaign (profiles, canon, glossary). The name
+    is drawn from the table of the character's sex: `sex` if given, else read from the
+    occupation, description and appearance, else (once) from `sex_decider`, else seeded."""
     rng = _rng(seed, "npc", slot, culture)
-    sex = sex or rng.choice(("m", "f"))
+    rolled = rng.choice(("m", "f"))  # always drawn, so the rest of the person stays the same
+    sex = sex or infer_sex(description, appearance) or infer_sex(occupation or "", role=True)
+    if sex is None and sex_decider is not None:
+        ans = (sex_decider(f"{description} {appearance} {occupation or ''}".strip()) or "").lower()
+        sex = "f" if ans.startswith("f") else "m" if ans.startswith("m") else None
+    sex = sex or rolled
     name = pick_name(culture, sex, seed, slot, used)
     cid = f"{id_prefix}_{slot}"
     traits = tuple(rng.sample(TRAITS, 2))

@@ -59,6 +59,28 @@ def _is_tag(beat: str) -> bool:
     return 0 < len(words) <= 4 and any(w.startswith(_TAG_VERBS) for w in words)
 
 
+_PAST_END = ("в", "ла", "ли", "ло", "ться", "ить", "ає", "ed")  # "-ся" forms are caught below
+_REFLEXIVE = ("вся", "лася", "лося", "лися", "лась", "лось", "лись")  # not imperatives: "-йся"
+_STRONG_PAST = ("іг", "ік", "ріс", "ліз", "ніс", "ліг", "сів")  # irregular masculine pasts
+_IRREGULAR = {"потер", "втер", "витер", "обтер", "ліг", "сів", "виліз", "поліз", "заліз", "приніс",
+              "виніс", "поніс", "відніс", "зніс", "вліз", "помер", "здер", "задер", "запер", "відчинив", "був", "була", "було", "були"}
+_NOT_A_NARRATOR = {"я", "ми", "ти", "ви", "це", "то", "ось", "так", "ні", "тут", "там", "туди",
+                   "сюди", "його", "її", "їх", "мене", "тебе", "вас", "нас"}
+
+
+def _is_beat(piece: str) -> bool:
+    """Does a piece between dashes read as a narrated act? It starts with he/she/they, or has a
+    third-person verb (past tense, or "-ить/-ає/-ться") among its first four words. Anything
+    else (an adverb, a noun, an imperative) is the speech going on after a dash."""
+    words = re.findall(r"[\w']+", piece.lower())[:4]
+    if not words or words[0] in _NOT_A_NARRATOR:
+        return False
+    if words[0] in _PRON:
+        return True
+    return any(w in _IRREGULAR or (len(w) >= 4 and w.endswith(_PAST_END))
+               or (len(w) >= 5 and w.endswith(_REFLEXIVE + _STRONG_PAST)) for w in words)
+
+
 def _speech_tail(s: str) -> str:
     return re.sub(r"[,;:]\s*$", ".", s.strip())
 
@@ -83,16 +105,26 @@ def split_npc_output(text: str) -> NpcOutput:
         else:
             beats.append(para)
             continue
+        speech_closed = True  # nothing of this paragraph's speech yet
         for piece in pieces:
             piece = piece.strip()
             if not piece:
                 is_beat = not is_beat
                 continue
             if is_beat and len(piece.split()) <= 40:
+                if not _is_beat(piece):  # a dash inside the speech, not a narrated act
+                    if speech and not speech_closed:
+                        speech[-1] = f"{speech[-1]} — {piece}"
+                    else:
+                        speech.append(piece)
+                    speech_closed = False
+                    continue
                 if not _is_tag(piece):
                     beats.append(piece)
+                speech_closed = True
             else:
                 speech.append(piece)
+                speech_closed = False
             is_beat = not is_beat
     joined = ""
     for piece in speech:  # "..., — додав він. — Тут" : the comma was for the tag
