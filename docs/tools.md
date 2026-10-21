@@ -248,3 +248,12 @@ Chosen by the task 7 bake-off on our own Ukrainian test set (`reports/bakeoff/SU
 - Role: non-canon NPC names, traits, quirks, ages, natural death.
 - Chosen: own tables in `harness/npcgen.py`, Ukrainian, seeded (`zlib.crc32`), no library. Alternatives: a names library (not period- or world-appropriate), the model (homogeneity: 11 words in 88.3 percent of stories, 18B), the books' names (would reuse canon people).
 - Checked: 2026-10-20.
+
+## Decision models, task 21A (checked 2026-10-21)
+
+### Decision-model catalog and fine-tuning
+- Role: first-pass typed judgments and, if wanted, a tuned decider. Chosen: unchanged (`liquid/d1-ultra`, escalate below 0.8 to `openai/gpt-6-luna`).
+- Live catalog (`/api/v1/models?output_modalities=decisions`): 27 entries. New and untested: cloudflare/clef-flash (9B, Apache-2.0), clef, nace-ai/drex-v2.0, upstage/solar-decide(-flash), inception/mercury-decide (+ free), togethercomputer/tev1-4b-experimental, jaredpalmer/kev-4b, openai/gpt-6-luna-decisions (HTTP 502 refusal on violent scenes), microsoft/microsoft-decision-1 (weakest in the probe). `harness/policy.py` allows only five.
+- Fine-tuning: not offered for d1, Jev, pplx. Open recipes: Tev1 (MIT, 37,840 examples). Hosted LoRA SFT: Together 0.48 and Fireworks 0.50 USD per M training tokens up to 16B; OpenAI fine-tuning shutting down (jobs end 2027-01-06). OpenRouter hosts tuned models only via invite-only Private Models.
+- Local training on 8 GB: Unsloth 2026.10.7, bf16 LoRA 5 GB for Qwen3.5-2B, 10 GB for 4B; QLoRA not recommended for Qwen3.5. Speed on the 3070 not measured.
+- Sources: see `reports/research/21A_decisions.md`.
