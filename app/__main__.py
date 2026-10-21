@@ -5,6 +5,7 @@ import argparse
 
 import uvicorn
 
+from . import campaigns
 from .campaigns import CAMPAIGNS, open_campaign
 from .game import Game
 from .server import create_app
@@ -23,9 +24,13 @@ def main(argv: list[str] | None = None) -> None:
                          "inn: the old inn scene with Ragnar")
     ap.add_argument("--canon", default=None, help="canon store for vizima (default: "
                     "$HARNESS_CANON_DB or campaigns/canon/pilot_v3.db; none: no canon)")
+    ap.add_argument("--dialogue", choices=("living", "classic"), default="living",
+                    help="living: multi-line NPC exchanges, optional narration (default); "
+                         "classic: the old director (for A/B generation)")
     ap.add_argument("--budget", type=float, default=1.0, help="USD cap for a live session")
     a = ap.parse_args(argv)
 
+    campaigns.DIALOGUE = a.dialogue  # read when a campaign is opened
     stack = live_stack(a.budget) if a.live else fake_stack()
     root = a.campaigns or CAMPAIGNS
     if a.campaign == "vizima":

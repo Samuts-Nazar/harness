@@ -40,7 +40,8 @@ def sse(client: TestClient, after: int = 0) -> list[dict]:
     return out
 
 
-def test_turn_streams_narration_then_labelled_npc_lines():
+def test_turn_streams_narration_then_labelled_npc_lines(monkeypatch):
+    monkeypatch.setattr(_campaigns, "DIALOGUE", "classic")  # the classic director (A/B)
     g = make()
     c = TestClient(create_app(g))
     assert c.post("/api/turn", json={"text": "Я киваю Горсту."}).status_code == 202
@@ -69,14 +70,14 @@ def test_sse_resumes_after_seq():
     assert [e["seq"] for e in rest] == [e["seq"] for e in all_ev if e["seq"] > mid]
 
 
-def test_second_turn_rejected_while_running_and_empty_rejected():
+def test_empty_rejected_and_typing_during_a_turn_interrupts_then_runs():
     g = make(pace=0.02)
     c = TestClient(create_app(g))
     assert c.post("/api/turn", json={"text": "  "}).status_code == 400
     assert c.post("/api/turn", json={"text": "Один."}).status_code == 202
-    assert c.post("/api/turn", json={"text": "Два."}).status_code == 409
-    g.interrupt()
+    assert c.post("/api/turn", json={"text": "Два."}).status_code == 202  # cuts in, then runs
     g.wait_idle()
+    assert [t["text"] for t in g.transcript if t["kind"] == "player"] == ["Один.", "Два."]
     assert c.post("/api/turn", json={"text": "Три."}).status_code == 202
     g.wait_idle()
 

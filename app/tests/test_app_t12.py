@@ -44,7 +44,8 @@ def test_restart_continues_the_saved_campaign_and_new_button_starts_another(tmp_
     assert (tmp_path / name / "campaign.db").exists()  # the old one stays on disk
 
 
-def test_app_turn_runs_parallel_with_director_prose_and_reports_repetition():
+def test_app_turn_runs_parallel_with_director_prose_and_reports_repetition(monkeypatch):
+    monkeypatch.setattr(_campaigns, "DIALOGUE", "classic")  # the classic director (A/B)
     g = make()
     assert g.eng.parallel and g.eng.narration == "prose"
     g.start_turn("Дивлюсь на Горста.")
@@ -58,7 +59,8 @@ def test_app_turn_runs_parallel_with_director_prose_and_reports_repetition():
     assert "observable_actions" not in narr[1]["content"]  # no JSON contract on creative calls
 
 
-def test_narration_streams_before_the_first_npc_word_and_second_npc_hears_the_first():
+def test_narration_streams_before_the_first_npc_word_and_second_npc_hears_the_first(monkeypatch):
+    monkeypatch.setattr(_campaigns, "DIALOGUE", "classic")  # the classic director (A/B)
     g = make()
     for _ in range(3):  # the third scripted narration has both NPCs speaking
         g.start_turn("Кажу щось.")

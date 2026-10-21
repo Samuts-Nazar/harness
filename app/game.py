@@ -12,7 +12,7 @@ import time
 from typing import Any, Callable
 
 from harness.decisions import DecisionCount, aggregate, count_since
-from harness.models import PLAYER, format_time
+from harness.models import ACTION, PLAYER, UTTERANCE, format_time
 from harness.streaming import InterruptHandle
 
 from harness.outcome import CampaignEnded
@@ -53,7 +53,9 @@ class Game:
     def __init__(self, open_campaign: Callable[[bool], Campaign], pace: float = 0.25) -> None:
         """`open_campaign(new)`: the saved current campaign (new=False) or a fresh one."""
         self._open = open_campaign
-        self.pace = pace
+        self.base_pace = pace
+        self.pace = pace  # `skip()` sets it to 0 for the rest of the turn
+        self.start_lock = threading.Lock()  # one start_turn at a time (interrupt, wait, start)
         self.lock = threading.RLock()
         self.visible = threading.Event()
         self.visible.set()
@@ -151,24 +153,41 @@ class Game:
         (self.visible.set if visible else self.visible.clear)()
 
     # -- turn -------------------------------------------------------------------------------
-    def start_turn(self, text: str) -> None:
+    def start_turn(self, text: str, wait: float = 60.0) -> None:
+        """Start a turn. While one runs, the new text cuts in: the running turn is interrupted at
+        its current point, this waits until the player is free to read again (the slow lane may
+        go on), then the new turn starts."""
         text = text.strip()
         if not text:
             raise ValueError("empty input")
-        with self.lock:
-            if self.eng.ended:
-                raise Ended("the character is dead; the campaign is read-only")
-            # a turn may start while the slow lane of the last one still runs (it waits for it)
-            if self.phase != "idle" or self.challenging:
-                raise Busy("a turn is already running")
-            self.pending = text
-            self.phase = "thinking"
-            self.turn_start_seq = self.seq
-            self.events = []
-            self._emit("turn_start", text=text)
-            self.thread = threading.Thread(target=self._run, args=(text,), daemon=True)
-            self.threads = [t for t in self.threads if t.is_alive()] + [self.thread]
-            self.thread.start()
+        with self.start_lock:
+            with self.lock:
+                if self.eng.ended:
+                    raise Ended("the character is dead; the campaign is read-only")
+                if self.challenging:
+                    raise Busy("a challenge is running")
+                if self.phase != "idle":
+                    self.interrupt(any_phase=True)
+            end = time.monotonic() + wait
+            while self.phase != "idle":  # the interrupted turn finishes within a word or a step
+                if time.monotonic() > end:
+                    raise Busy("the running turn did not stop")
+                time.sleep(0.01)
+            with self.lock:
+                if self.eng.ended:
+                    raise Ended("the character is dead; the campaign is read-only")
+                self.pending = text
+                self.phase = "thinking"
+                self.pace = self.base_pace
+                self.handle = InterruptHandle()
+                self.skip_narration = False
+                self.turn_start_seq = self.seq
+                self.events = []
+                self._emit("turn_start", text=text)
+                self.thread = threading.Thread(target=self._run, args=(text, self.handle),
+                                               daemon=True)
+                self.threads = [t for t in self.threads if t.is_alive()] + [self.thread]
+                self.thread.start()
 
     # -- "how does he know that?" ------------------------------------------------------------
     def challenge(self, event: int, explanation: str = "") -> dict[str, Any]:
@@ -205,23 +224,39 @@ class Game:
             return {c: {"name": eng.profiles[c].name, "label": eng.names.label(c),
                         "items": eng.knowledge_report(c)} for c in eng.profiles}
 
-    def interrupt(self) -> str:
-        """The interrupt button. Returns what was interrupted."""
+    def interrupt(self, any_phase: bool = False) -> str:
+        """The interrupt button. Returns what was interrupted. `any_phase`: also while the world
+        is still thinking (typing a new text cuts the running turn wherever it is)."""
         with self.lock:
             if self.phase == "speaking" and self.handle is not None:
                 self.handle.request()
                 return "speech"
             if self.phase == "narrating":
                 self.skip_narration = True
+                if any_phase and self.handle is not None:
+                    self.handle.request()
                 return "narration"
+            if any_phase and self.phase == "thinking" and self.handle is not None:
+                self.handle.request()
+                self.skip_narration = True
+                return "turn"
             return "none"
+
+    def skip(self) -> bool:
+        """Tap to skip the pace: the rest of this turn's words arrive at once. Not an interrupt:
+        nothing is cut. The pace comes back with the next turn."""
+        with self.lock:
+            if self.phase == "idle":
+                return False
+            self.pace = 0
+            return True
 
     def _pace(self) -> None:
         self.visible.wait()  # nothing is "said" while the app is in the background
         if self.pace:
             time.sleep(self.pace)
 
-    def _run(self, text: str) -> None:
+    def _run(self, text: str, handle: InterruptHandle) -> None:
         eng, rec, spend = self.eng, self.camp.recorder, self.camp.spend
         t0 = time.monotonic()
         eng._settle_for_next_turn()  # the slow lane of the last turn, if it is still running
@@ -233,8 +268,7 @@ class Game:
         first_word: list[float] = []
         new_events: list[dict[str, Any]] = []
         entries: list[dict[str, Any]] = [{"kind": "player", "text": text}]
-        narr_words: list[str] = []
-        cur: dict[str, Any] = {"who": None}
+        cur: dict[str, Any] = {"who": None}  # the NPC whose block the next word extends
 
         def stamp() -> None:
             if not first_word:
@@ -243,13 +277,27 @@ class Game:
         def on_event(ev) -> None:  # type: ignore[no-untyped-def]
             new_events.append({"id": ev.id, "type": ev.type, "game_time": ev.game_time,
                                "payload": ev.payload, "participants": list(ev.participants)})
+            if ev.type == UTTERANCE:
+                cur["who"] = None  # the line is over: the next word starts a new block
+            elif ev.type == ACTION and ev.payload.get("gesture"):
+                # a gesture-only step of an NPC: shown as their action, in its place in the talk
+                who = ev.payload.get("by") or (ev.participants[0] if ev.participants else "")
+                name = eng.ctx.label(PLAYER, who)
+                act = eng.ctx.mask(PLAYER, str(ev.payload.get("text", ""))).strip()
+                if act:
+                    entries.append({"kind": "npc_act", "who": who, "name": name, "text": act})
+                    self._emit("npc_act", who=who, name=name, text=act)
+                cur["who"] = None
 
         def on_narration(narration: str) -> None:
-            self._stream_narration(narration, narr_words, stamp)
+            spoken: list[str] = []
+            self._stream_narration(narration, spoken, stamp)
+            if spoken:
+                entries.append({"kind": "narr", "text": " ".join(spoken)})
 
         def on_word(npc: str, w: str) -> None:
             self.visible.wait()
-            if cur["who"] != npc:
+            if cur["who"] != npc or entries[-1]["kind"] != "npc":
                 cur["who"] = npc
                 self.phase = "speaking"
                 name = eng.ctx.label(PLAYER, npc)  # a stranger stays "a stout grey-haired man"
@@ -258,20 +306,19 @@ class Game:
             stamp()
             entries[-1]["text"] = (entries[-1]["text"] + " " + w).strip()
             self._emit("word", who=npc, w=w)
-            if self.pace:
-                time.sleep(self.pace)
+            pace = self.pace  # a tap on the stream sets it to 0 mid-turn
+            if pace:
+                time.sleep(pace)
 
         world = getattr(self.camp, "world", None)
         since = max((e.id for e in eng.log.active()), default=0)
         unsubscribe = eng.log.subscribe(on_event)
-        self.handle = InterruptHandle()
-        self.skip_narration = False
         try:
             if world is not None:  # the world interprets the turn (trip, wait) and catches up
-                r = world.play(text, defer_slow=True, handle=self.handle, on_word=on_word,
+                r = world.play(text, defer_slow=True, handle=handle, on_word=on_word,
                                on_narration=on_narration).result
             else:
-                r = eng.turn(text, handle=self.handle, on_word=on_word, on_narration=on_narration,
+                r = eng.turn(text, handle=handle, on_word=on_word, on_narration=on_narration,
                              defer_slow=True)
         except BaseException as e:  # noqa: BLE001 - shown to the player, the input is kept
             self.phase = "idle"
@@ -282,26 +329,27 @@ class Game:
             return
         finally:
             unsubscribe()
-        if r.interrupted and entries[-1]["kind"] == "npc":
-            entries[-1]["cut"] = True
-        line_events = iter(u.id for u in r.utterances)
-        for en in entries:  # lets the player question a line afterwards ("how does he know?")
-            if en["kind"] == "npc":
-                en["event"] = next(line_events, None)
-        if narr_words:
-            entries.insert(1, {"kind": "narr", "text": " ".join(narr_words)})
+        # lines that were really delivered (a line cut before its first word has no block)
+        shown = [u for u in r.utterances if u.payload.get("text", "").strip()]
+        npc_entries = [en for en in entries if en["kind"] == "npc"]
+        for en, u in zip(npc_entries, shown):  # lets the player question a line afterwards
+            en["event"] = u.id
+            if u.payload.get("interrupted"):
+                en["cut"] = True
+        line_ids = [en["event"] for en in npc_entries if "event" in en]
+        cut_ids = [en["event"] for en in npc_entries if en.get("cut") and "event" in en]
         fast_s = round(time.monotonic() - t0, 2)
         with self.lock:
             self.transcript += entries
             self.phase = "idle"  # the player can read and type now; bookkeeping goes on below
             self._emit("turn_done", interrupted=r.interrupted, clock=self.clock(),
-                       panel=self._panel, lines=[u.id for u in r.utterances], settling=True)
+                       panel=self._panel, lines=line_ids, cut_lines=cut_ids, settling=True)
         # the slow lane: extraction, salience, attitudes, world catch-up (while the player reads)
         eng.settle()
         failure, eng.slow_failure = eng.slow_failure, None
         with self.lock:
             if failure is not None:
-                del self.transcript[len(self.transcript) - len(entries) - (1 if narr_words else 0):]
+                del self.transcript[len(self.transcript) - len(entries):]
                 self._save_debug(marks, new_events, t0, first_word, error=repr(failure)[:300])
                 self._emit("retract", message=explain(failure), text=text)
                 return
@@ -315,6 +363,8 @@ class Game:
                 self._emit("ended", chronicle=self.chronicle())
 
     def _stream_narration(self, text: str, spoken: list[str], stamp: Callable[[], None]) -> None:
+        if not text.strip():  # an empty narration is never a bubble
+            return
         self.phase = "narrating"
         self._emit("narr_start")
         for w in text.split():
@@ -324,8 +374,9 @@ class Game:
             stamp()
             spoken.append(w)
             self._emit("narr_word", w=w)
-            if self.pace:
-                time.sleep(self.pace)
+            pace = self.pace
+            if pace:
+                time.sleep(pace)
         self._emit("narr_end", cut=self.skip_narration)
         self.phase = "thinking"
 

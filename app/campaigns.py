@@ -213,9 +213,9 @@ def _pointer(root: Path) -> Path:
     return root / "current.txt"
 
 
-# The app shows NPC lines and not yet gesture-only turns, and merges two lines of one speaker in
-# a row: it stays on the classic director until it can show a living exchange (plan task 7).
-DIALOGUE = "classic"
+# "living": multi-line NPC exchanges, optional narration (default). "classic": the old director,
+# kept for A/B generation (`python -m app --dialogue classic`).
+DIALOGUE = "living"
 
 
 def open_campaign(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = False,

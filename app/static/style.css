@@ -41,16 +41,22 @@ button { cursor: pointer; }
 .npc .who { display: block; font-family: var(--sans); font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); }
 .npc[data-who="elza"] { border-color: var(--teal); }
 .npc[data-who="elza"] .who { color: var(--teal); }
+.npc.act { border-color: var(--line); font-style: italic; color: #cfc9bb; }
+.npc.act .who { font-style: normal; color: var(--muted); }
 .npc.cut::after { content: " — ✋ перебито"; font-family: var(--sans); font-size: 13px; color: var(--danger); }
 
 #errbar { margin: 0 12px 6px; padding: 10px 12px; border-radius: 10px; background: #3a1f20; border: 1px solid #6b3436; color: #ffd9d6; font-size: 14px; }
 
 #dock { border-top: 1px solid var(--line); background: var(--bg2); padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); }
 #dockBusy { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: var(--tap); color: var(--muted); }
-#dockBusy .btn { flex: 1; max-width: 60%; }
+#dockBusy .btn { flex: 1; max-width: 45%; }
+#dockBusy { margin-bottom: 8px; }
+.skip { flex: 1; min-height: var(--tap); padding: 0 10px; background: none; border: 1px dashed var(--line);
+  border-radius: 12px; color: var(--muted); font: 13px var(--sans); }
+.skip:active { background: var(--panel2); }
+#feed.busy { cursor: pointer; }
 #composer { display: flex; gap: 8px; align-items: flex-end; }
 #composer textarea { flex: 1; resize: none; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; min-height: 52px; max-height: 30vh; }
-#composer textarea:disabled { opacity: .5; }
 #composer .btn { height: 52px; }
 
 #debugPanel { position: absolute; top: 56px; left: 0; right: 0; bottom: 0; z-index: 20; background: #0b1214; border-top: 2px solid var(--teal); overflow-y: auto; padding: 10px 12px; font: 12.5px/1.45 ui-monospace, "DejaVu Sans Mono", monospace; }

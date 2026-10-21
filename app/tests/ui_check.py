@@ -1,5 +1,5 @@
-"""Playwright check at phone size (390x844) against the offline fake app: two turns, one
-interrupt, the debug view. Screenshots go to app/screenshots/.
+"""Playwright check at phone size (390x844) against the offline fake app: five turns (a living exchange with a
+gesture, tap to skip, typing to cut in, the interrupt button), the debug view. Screenshots go to app/screenshots/.
 
     nix develop --command python app/tests/ui_check.py
 """
@@ -93,17 +93,54 @@ def main() -> None:
         no_hscroll(page, "after the answer")
         shot(page, "04c-channel-answer")
 
-        # turn 2: interrupt the NPC mid-line
-        page.fill("#input", "Мовчки дивлюсь на Ельзу.")
+        # turn 2: a living exchange (Ельза, Горст's gesture, Ельза again). The skip hint is
+        # there while it is told; a tap on it delivers the rest at once, nothing is cut.
+        from harness.director import NEXT_TAG, SHAPE_TAG
+        stack.judge.rules[NEXT_TAG] = ["elza", "horst", "elza", "player"]
+        stack.judge.rules[SHAPE_TAG] = ["normal", "gesture", "normal"]
+        page.fill("#input", "Що ви обоє скажете?")
         page.click("#btnSend")
-        page.wait_for_selector(".npc[data-who=elza] .w:nth-child(4)")
-        before = page.locator(".npc[data-who=elza] .w").count()
+        page.wait_for_selector(".npc[data-who=elza] .w:nth-child(3)")
+        assert page.is_visible("#btnSkip") and "одразу" in page.inner_text("#btnSkip")
+        assert page.is_visible("#composer") and page.is_enabled("#input"), "input stays open"
+        shot(page, "05-exchange-skip-hint")
+        t0 = time.time()
+        page.click("#btnSkip")
+        page.wait_for_selector(".npc.act[data-who=horst]", timeout=60000)
+        page.wait_for_selector("#dockBusy[hidden]", state="attached", timeout=60000)
+        assert time.time() - t0 < 6, "a tap must deliver the rest at once"
+        assert page.locator(".npc[data-who=elza]:not(.act)").count() >= 2
+        assert page.locator(".npc.cut").count() == 0, "a skip is not an interrupt"
+        no_hscroll(page, "after the exchange")
+        shot(page, "05b-exchange-with-gesture")
+
+        # turn 3: type while the NPCs talk: it cuts in, then runs the new text
+        stack.judge.rules[NEXT_TAG] = ["horst", "elza", "horst", "player"]
+        stack.judge.rules[SHAPE_TAG] = ["normal"]
+        page.fill("#input", "Горсте, говори.")
+        page.click("#btnSend")
+        page.wait_for_selector(".npc[data-who=horst] .w:nth-child(4)")
+        mid = page.locator(".npc[data-who=horst] .w").count()
+        page.fill("#input", "Годі. Ельзо, а ти що скажеш?")
+        shot(page, "05c-typing-during-a-turn")
+        stack.judge.rules[NEXT_TAG] = ["elza", "player"]
+        page.click("#btnSend")
+        page.wait_for_function("document.querySelectorAll('.me').length >= 4", timeout=60000)
+        assert page.locator(".npc.cut").count() >= 1, "the typed text must cut the line in"
+        page.wait_for_selector("#dockBusy[hidden]", state="attached", timeout=60000)
+        assert page.locator(".me").last.inner_text().startswith("Годі")
+        assert page.input_value("#input") == "", "the typed text was sent, not kept"
+        shot(page, "05d-cut-in-by-typing")
+
+        # turn 4: the interrupt button still works
+        stack.judge.rules[NEXT_TAG] = ["horst", "elza", "player"]
+        page.fill("#input", "Мовчки дивлюсь на Горста.")
+        page.click("#btnSend")
+        page.wait_for_selector(".npc[data-who=horst] .w:nth-child(4)")
         page.click("#btnInterrupt")
-        page.wait_for_selector("#composer:not([hidden])", timeout=60000)
-        after = page.locator(".npc[data-who=elza] .w").count()
-        assert page.locator(".npc.cut").count() >= 1, "interrupted line must be marked"
-        assert after < 30 and after >= before, (before, after)
-        shot(page, "05-interrupted")
+        page.wait_for_selector("#dockBusy[hidden]", state="attached", timeout=60000)
+        assert page.locator(".npc.cut").count() >= 2, "interrupted line must be marked"
+        shot(page, "05e-interrupted")
 
         # character panel
         page.click("#btnChar")
@@ -129,13 +166,13 @@ def main() -> None:
         # reload keeps the story
         page.reload()
         page.wait_for_selector(".intro")
-        assert page.locator(".me").count() == 2
+        assert page.locator(".me").count() == 5
         shot(page, "08-after-reload")
         browser.close()
 
     server.should_exit = True
     assert not errors, errors
-    print("OK: 2 turns, 1 interrupt, character panel, debug view, reload; no console errors")
+    print("OK: 5 turns (exchange + gesture, skip, cut in by typing, interrupt), character panel, debug view, reload; no console errors")
 
 
 if __name__ == "__main__":

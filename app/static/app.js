@@ -1,7 +1,7 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
 const feed = $("feed");
-let tag = "", lastSeq = 0, es = null, turnEls = [], cur = null, busy = false, turnNpc = [];
+let tag = "", lastSeq = 0, es = null, turnEls = [], cur = null, busy = false, turnNpc = [], sending = 0;
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -28,6 +28,13 @@ function npcBlock(who, name, text, cut, event) {
   if (text) b.appendChild(el("span", "w", text));
   if (cut) b.classList.add("cut");
   if (event != null) addAsk(b, event);
+  return b;
+}
+
+function actBlock(who, name, text) {
+  const b = el("p", "npc act"); b.dataset.who = who;
+  b.appendChild(el("span", "who", name));
+  b.appendChild(el("span", "w", text));
   return b;
 }
 
@@ -82,15 +89,18 @@ function showAnswer(block, ok, d) {
   block.appendChild(res);
 }
 
+// the composer stays open during a turn: sending cuts in (the server interrupts, then runs it)
 function setBusy(on, phase) {
   busy = on;
   $("dockBusy").hidden = !on;
-  $("composer").hidden = on;
+  feed.classList.toggle("busy", on);
   const talk = phase === "narrating" || phase === "speaking";
   $("btnInterrupt").hidden = !talk;
+  $("btnSkip").hidden = !talk;
   $("busyText").textContent = talk ? "" : "Світ думає…";
   $("busyText").hidden = talk;
 }
+function skipPace() { if (busy) fetch("/api/skip", { method: "POST" }).catch(() => {}); }
 function setPanel(p) {
   $("charName").textContent = p.name;
   $("btnChar").textContent = p.name;
@@ -115,7 +125,8 @@ function render(state) {
   for (const t of state.transcript) {
     if (t.kind === "intro") add(el("p", "intro", t.text), false);
     else if (t.kind === "player") add(el("p", "me", t.text), false);
-    else if (t.kind === "narr") add(el("p", "narr", t.text), false);
+    else if (t.kind === "narr") { if (t.text && t.text.trim()) add(el("p", "narr", t.text), false); }
+    else if (t.kind === "npc_act") add(actBlock(t.who, t.name, t.text), false);
     else add(npcBlock(t.who, t.name, t.text, t.cut, t.event), false);
   }
   setPanel(state.panel);
@@ -125,25 +136,29 @@ function render(state) {
 
 const handlers = {
   turn_start(e) { turnEls = []; turnNpc = []; cur = null; add(el("p", "me", e.text)); },
-  narr_start() { cur = add(el("p", "narr")); setBusy(true, "narrating"); },
-  narr_word(e) { addWord(cur, e.w); },
+  narr_start() { cur = null; setBusy(true, "narrating"); },   // the bubble appears with its first word
+  narr_word(e) { if (!cur || !cur.classList.contains("narr")) cur = add(el("p", "narr")); addWord(cur, e.w); },
   narr_end() { setBusy(true, "thinking"); },
   speaker(e) { cur = add(npcBlock(e.who, e.name, "")); turnNpc.push(cur); setBusy(true, "speaking"); },
-  word(e) { addWord(cur, e.w); },
+  npc_act(e) { cur = add(actBlock(e.who, e.name, e.text)); },
+  word(e) { if (cur) addWord(cur, e.w); },
   turn_done(e) {
-    if (e.interrupted && cur && cur.classList.contains("npc")) cur.classList.add("cut");
     $("clock").textContent = e.clock + tag;
-    (e.lines || []).forEach((id, i) => { if (turnNpc[i]) addAsk(turnNpc[i], id); });
+    (e.lines || []).forEach((id, i) => {
+      if (!turnNpc[i]) return;
+      addAsk(turnNpc[i], id);
+      if ((e.cut_lines || []).includes(id)) turnNpc[i].classList.add("cut");
+    });
     setPanel(e.panel);
-    $("input").value = ""; syncSend();
-    setBusy(false); showError("");
+    if (!sending) setBusy(false);       // a text typed during the turn is already on its way
+    showError("");
     if (!$("debugPanel").hidden) loadDebug();
-    $("input").focus({ preventScroll: true });
   },
   error(e) {
     for (const n of turnEls) n.remove();
     turnEls = []; cur = null;
-    $("input").value = e.text; syncSend();
+    if (!$("input").value.trim()) $("input").value = e.text;   // keep what is being typed now
+    syncSend();
     setBusy(false); showError(e.message);
     if (!$("debugPanel").hidden) loadDebug();
   },
@@ -155,7 +170,8 @@ const handlers = {
   retract(e) {            // the bookkeeping of the turn failed after the player had read it
     for (const n of turnEls) n.remove();
     turnEls = []; cur = null;
-    $("input").value = e.text; syncSend();
+    if (!$("input").value.trim()) $("input").value = e.text;
+    syncSend();
     setBusy(false); showError(e.message);
   },
   ended(e) { showFinale(e.chronicle); },
@@ -207,13 +223,30 @@ $("input").addEventListener("keydown", (e) => {
 $("composer").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const text = $("input").value.trim();
-  if (!text || busy) return;
+  if (!text) return;
   showError("");
+  $("input").value = ""; syncSend();
+  sending++;
   setBusy(true, "thinking");
-  const r = await fetch("/api/turn", { method: "POST", body: JSON.stringify({ text }) });
-  if (!r.ok) { setBusy(false); const d = await r.json(); showError(d.error || "Помилка."); if (d.ended) load(); }
+  let r, d = {};
+  try {
+    r = await fetch("/api/turn", { method: "POST", body: JSON.stringify({ text }) });
+    if (!r.ok) d = await r.json();
+  } catch (err) { r = { ok: false }; d = { error: "Немає зв'язку." }; }
+  sending--;
+  if (!r.ok) {
+    if (!$("input").value.trim()) $("input").value = text;
+    syncSend();
+    if (!sending) setBusy(false);
+    showError(d.error || "Помилка.");
+    if (d.ended) load();
+  }
 });
 $("btnInterrupt").addEventListener("click", () => fetch("/api/interrupt", { method: "POST" }));
+$("btnSkip").addEventListener("click", skipPace);
+feed.addEventListener("click", (ev) => {   // a tap on the story skips the pace (not on its buttons)
+  if (!ev.target.closest("button, textarea, a, .askbox, .askres")) skipPace();
+});
 
 // panels
 $("btnChar").addEventListener("click", () => { $("charPanel").hidden = false; });
