@@ -58,6 +58,23 @@ slips such as «нічний виття» pass), so the remaining pairs are glit
 checks go. The caveats below still hold (sides from separate campaigns; classic sides open with
 narration, so the engines are easy to tell apart).
 
+### Scene cast latency on the Vizima campaign (final review)
+
+`python -m experiments.dialogue.cast_latency`: the app's default campaign (Vizima, «Під Лисом»,
+canon store `pilot_v3.db`), a new campaign per run, the same 5 scripted turns with the scene cast
+review on and off, live models. Spend 0.015 USD (cap 0.06). Raw data:
+`campaigns/ld/cast_latency.json` (git-ignored).
+
+| scene cast | first word, median | mean | max | people present, start -> end |
+|---|---|---|---|---|
+| on | 9.3 s | 10.2 s | 13.5 s | 4 -> 5 (one passer-by admitted, turn 4) |
+| off | 9.3 s | 10.0 s | 13.8 s | 4 -> 4 |
+
+With 5 turns per side no latency cost of the review shows (the medians are equal and the means
+0.2 s apart, well inside the turn-to-turn spread of 8-14 s). The review's list call runs after
+each narration, so it adds to the narrated turns only. Since this review the scene cast also
+admits at most 3 invented passers-by per scene and never admits a group («кілька возіїв»).
+
 ## Task 8 (2026-10-21), as reported then
 
 Run on 2026-10-21 with the default live models (`ModelConfig.live()`, first-line decider with the
