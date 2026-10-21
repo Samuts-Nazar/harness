@@ -161,3 +161,32 @@ def test_infer_sex_does_not_read_nouns_or_male_names_as_feminine():
     assert infer_sex("Високий чоловік, рука на перев'язі, шапка") == "m"
     assert infer_sex("Лука") is None
     assert infer_sex("Лука, він кульгає") == "m"
+
+
+def test_engine_asks_the_decider_once_when_sex_cannot_be_inferred(tmp_path):
+    """Task 12: one decider call for an NPC whose sex the text does not give; the answer is kept
+    in the profile (and in the saved setup)."""
+    e = eng()
+    e.judge.inner.rules["npc_sex"] = "f"
+    n0 = len(e.judge.inner.asked)
+    spec = e.fresh_npc("w1", "northern", description="перехожий без прикмет")
+    assert spec.sex == "f" and spec.name.split()[0] in NAMES["northern"][1]
+    assert len(e.judge.inner.asked) == n0 + 1
+    prof = e.add_npc(spec)
+    assert prof.sex == "f"
+    # the text says it: no call
+    e.fresh_npc("w2", "northern", appearance="висока жінка, вона усміхається")
+    # nothing to go on at all: no call (the seeded roll decides)
+    e.fresh_npc("w3", "northern")
+    assert len(e.judge.inner.asked) == n0 + 1
+
+
+def test_profile_sex_survives_reopening(tmp_path):
+    prov = FakeProvider(script={})
+    e = Engine.create_campaign("c", prov, PROFILES, Scene("Inn", (PLAYER,), 0), root=tmp_path,
+                               models=ModelConfig(), judge=FakeJudge({"npc_sex": "m"}),
+                               record_language=None)
+    prof = e.add_npc(e.fresh_npc("w1", "northern", description="перехожий без прикмет"))
+    e.close()
+    e2 = Engine.open_campaign("c", prov, root=tmp_path, models=ModelConfig(), judge=FakeJudge())
+    assert e2.profiles[prof.id].sex == "m"

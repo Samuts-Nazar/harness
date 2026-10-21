@@ -235,7 +235,8 @@ class NpcSpec:
         desc = description or (
             f"{self.name.split()[0]}, {self.occupation}, {self.vitals.age(0)} років. "
             f"{self.traits[0].capitalize()}.")
-        return CharacterProfile(self.id, self.name, desc, appearance=appearance, core=self.core)
+        return CharacterProfile(self.id, self.name, desc, appearance=appearance, core=self.core,
+                                sex=self.sex)
 
 
 _FEM = re.compile(r"\b(жінк\w*|дівч\w*|вона|її|старенька|дочк\w*|матір|господиня|вдова|панна|"
@@ -278,7 +279,7 @@ def generate_npc(seed: int | str, slot: str | int, *, culture: str, sex: str | N
     rng = _rng(seed, "npc", slot, culture)
     rolled = rng.choice(("m", "f"))  # always drawn, so the rest of the person stays the same
     sex = sex or infer_sex(description, appearance) or infer_sex(occupation or "", role=True)
-    if sex is None and sex_decider is not None:
+    if sex is None and sex_decider is not None and (description or appearance or occupation):
         ans = (sex_decider(f"{description} {appearance} {occupation or ''}".strip()) or "").lower()
         sex = "f" if ans.startswith("f") else "m" if ans.startswith("m") else None
     sex = sex or rolled

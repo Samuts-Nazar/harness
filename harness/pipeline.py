@@ -2047,10 +2047,23 @@ class Engine:
         is never one already in the campaign (cast, glossary names)."""
         extra = ([e.canonical for e in self.glossary.entries if e.kind == "person"]
                  if self.glossary else [])
+        kw.setdefault("sex_decider", self._decide_sex)
         spec = generate_npc(self.seed, slot, culture=culture,
                             used=[*taken_names(self.profiles.values(), extra)],
                             now_t=self.scene.time, **kw)
         return spec
+
+    def _decide_sex(self, about: str) -> str | None:
+        """One decider call for an NPC whose sex the text does not give (the answer is kept in
+        the profile by `add_npc`). None when the decider is unavailable."""
+        try:
+            return str(self.judge.ask([f"A new person in {self.scene.location}: {about}"], {
+                "sex": choice_q("Is this person a man or a woman?",
+                                {"m": "a man or a boy", "f": "a woman or a girl"},
+                                tag="npc_sex")})["sex"].answer)
+        except JudgeError as e:
+            self._note("npc_sex_unavailable", error=str(e)[:200])
+            return None
 
     def set_core(self, npc: str, core: str) -> None:
         """Set an NPC's immutable core once (a second, different core is refused)."""
@@ -2110,7 +2123,7 @@ class Engine:
     def _save_setup(self) -> None:
         with self.conn:
             for k, v in {
-                "profiles": [[p.id, p.name, p.description, p.manner, p.appearance, p.core]
+                "profiles": [[p.id, p.name, p.description, p.manner, p.appearance, p.core, p.sex]
                              for p in self.profiles.values()],
                 "settings": {"output_language": self.output_language,
                              "record_language": self.record_language,
