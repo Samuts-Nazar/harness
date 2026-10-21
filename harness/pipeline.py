@@ -20,7 +20,8 @@ from .context import ContextBuilder, NpcView
 from .db import connect
 from .decisions import DecisionCount, count_since
 from .director import (
-    EXCHANGE_HEADER, NOBODY, PLAYER_FLOOR, decide_first_step, decide_next, decide_speakers, parse_actions,
+    EXCHANGE_HEADER, NOBODY, PLAYER_FLOOR, decide_first_step, decide_next, decide_speakers,
+    parse_actions,
 )
 from .eventlog import EventLog
 from .extractor import Diff, DiffValidationError, parse_diff, validate_diff
@@ -1019,7 +1020,7 @@ class Engine:
         `first_step`: no narration this turn (empty `out`): nothing is written for it, and the
         exchange starts from the first step already answered."""
         speech = None
-        bare = not out.description
+        bare = first_step is not None
         if self.parallel and check:
             speech = self._submit(self._speech_judged, "\n".join(out.texts()))
         living = self._living(speakers)
@@ -1112,7 +1113,7 @@ class Engine:
         except JudgeError as e:
             self._note("director_unavailable", error=str(e), fallback="narrate")
             return None
-        if need:
+        if need or nxt not in npcs:  # an empty turn (nobody, the player, no NPCs): narrate
             return None
         self._note("narration_skipped", first=nxt, shape=shape.value)
         return nxt, shape
@@ -1459,7 +1460,7 @@ class Engine:
                 out = self._narrate(model_text, outcome=outcome)
                 launch = self._launch(out, model_text, speakers, turn_events, check=False)
 
-            if on_narration is not None and out.description:
+            if on_narration is not None and first_step is None:
                 on_narration(out.description)
             sources = {**{k: ev for k, ev in player_pairs}, **launch.sources}
             segments = [*[(k, ev.payload["text"]) for k, ev in player_pairs], *launch.segments]

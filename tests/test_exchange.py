@@ -359,8 +359,6 @@ def test_classic_mode_always_narrates_and_never_asks():
 
 
 def test_outcome_forces_narration():
-    from harness.outcome import OutcomeJudge  # noqa: F401  (the engine builds its own)
-
     eng, prov, judge = make(["Чого тобі?"], ["horst", PLAYER_FLOOR], ["short"], outcomes=True,
                             rules={"director_narration": False, "outcome_attempt": True})
     res = eng.turn("Б'ю Горста кулаком.")
@@ -396,3 +394,26 @@ def test_default_offline_judge_narrates_first_turn_then_usually_not():
     assert eng.turn("Добрий вечір.").narration == "Тиша."
     assert eng.turn("Що чути?").narration == ""
     assert len(narrator_calls(prov)) == 1
+
+
+def test_no_narration_but_nobody_to_answer_still_narrates():
+    for first in (NOBODY, PLAYER_FLOOR):
+        eng, prov, _ = make([], [first], ["short"], rules={"director_narration": False})
+        res = eng.turn("Так.")
+        assert res.narration == NARRATION and len(narrator_calls(prov)) == 1, first
+
+
+def test_no_narration_in_a_scene_without_npcs_still_narrates():
+    eng, prov, _ = make([], [NOBODY], ["short"], present=(PLAYER,),
+                        rules={"director_narration": False})
+    res = eng.turn("Дивлюсь у вікно.")
+    assert res.narration == NARRATION and len(narrator_calls(prov)) == 1
+
+
+def test_classic_launch_with_empty_narration_still_writes_the_narration_event():
+    from harness.narrator import NarratorOutput
+
+    eng, prov, _ = make([], [], [], dialogue="classic")
+    evs = []
+    launch = eng._launch(NarratorOutput(""), "Так.", None, evs, check=False)
+    assert [e.type for e in launch.events][0] == "narration" and "narration" in launch.sources

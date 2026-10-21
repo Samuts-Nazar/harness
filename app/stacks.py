@@ -4,11 +4,11 @@ from __future__ import annotations
 import json
 import os
 import re
-
 import threading
 
 from harness.judge import (
-    DecisionJudge, EscalatingJudge, FakeJudge, FallbackJudge, LLMJudge, fake_needs_narration,
+    DecisionJudge, EscalatingJudge, FakeJudge, FallbackJudge, LLMJudge,
+    fake_needs_narration,
 )
 from harness.director import EXCHANGE_HEADER, NOBODY, PLAYER_FLOOR
 from harness.pipeline import ModelConfig
