@@ -59,37 +59,73 @@ def _is_tag(beat: str) -> bool:
     return 0 < len(words) <= 4 and any(w.startswith(_TAG_VERBS) for w in words)
 
 
-_PAST_END = ("в", "ла", "ли", "ло", "ться", "ить", "ає", "ed")  # "-ся" forms are caught below
-_REFLEXIVE = ("вся", "лася", "лося", "лися", "лась", "лось", "лись")  # not imperatives: "-йся"
-_STRONG_PAST = ("іг", "ік", "ріс", "ліз", "ніс", "ліг", "сів")  # irregular masculine pasts
+_PRESENT_END = ("ить", "їть", "ається", "ється", "иться", "ться", "ає", "яє", "ує", "юєте", "оче",
+                "іче", "ече", "иче", "є")
+_PAST_END = ("ав", "ив", "ув", "ев", "яв", "ала", "ила", "ула", "ела", "яла", "али", "или", "ули",
+             "ели", "яли", "ало", "ило", "уло", "іла", "іли", "іло", "ед", "ed")
+_PAST_REFL = ("вся", "лася", "лося", "лися", "лась", "лось", "лись")  # not imperatives: "-йся"
+_PREFIXES = ("під", "по", "за", "на", "ви", "роз", "при", "від", "пере", "об", "с", "з", "у", "в")
 _IRREGULAR = {"потер", "втер", "витер", "обтер", "ліг", "сів", "виліз", "поліз", "заліз", "приніс",
-              "виніс", "поніс", "відніс", "зніс", "вліз", "помер", "здер", "задер", "запер", "відчинив", "був", "була", "було", "були"}
-_NOT_A_NARRATOR = {"я", "ми", "ти", "ви", "це", "то", "ось", "так", "ні", "тут", "там", "туди",
-                   "сюди", "його", "її", "їх", "мене", "тебе", "вас", "нас"}
+              "виніс", "поніс", "відніс", "зніс", "вліз", "помер", "здер", "задер", "запер",
+              "був", "була", "було", "були", "зник", "замовк", "змовк", "крикнув", "зберіг",
+              "втік", "підвів", "повів", "привів", "зрів", "вдарив"}
+_NOT_VERBS = {"школа", "стіл", "село", "тіло", "діло", "число", "чоло", "зло", "добро", "кров",
+              "любов", "мала", "хвиля", "скеля", "земля", "стріла", "кола", "вона", "ніколи"}
+_SPEAKERS = {"я", "ми", "ти", "ви", "мені", "мене", "тобі", "тебе", "нам", "нас", "вам", "вас"}
+_GERUND = ("ючи", "ячи", "ачи", "вши", "шись", "вшись")
 
 
-def _is_beat(piece: str) -> bool:
-    """Does a piece between dashes read as a narrated act? It starts with he/she/they, or has a
-    third-person verb (past tense, or "-ить/-ає/-ться") among its first four words. Anything
-    else (an adverb, a noun, an imperative) is the speech going on after a dash."""
-    words = re.findall(r"[\w']+", piece.lower())[:4]
-    if not words or words[0] in _NOT_A_NARRATOR:
+def _is_verb(w: str) -> bool:
+    """A third-person verb form (past or present), strict enough to leave nouns alone."""
+    if w in _NOT_VERBS:
         return False
-    if words[0] in _PRON:
+    if w in _IRREGULAR:
         return True
-    return any(w in _IRREGULAR or (len(w) >= 4 and w.endswith(_PAST_END))
-               or (len(w) >= 5 and w.endswith(_REFLEXIVE + _STRONG_PAST)) for w in words)
+    if len(w) >= 4 and (w.endswith(_PAST_END) or w.endswith(_PAST_REFL)):
+        return True
+    if len(w) >= 6 and w.endswith("ів") and re.search(r"[аеиіоуя][^аеиіоуяю]+ів$", w):
+        return True  # прошепотів, ревів (a genitive plural noun is rare this early in a piece)
+    if len(w) >= 5 and w.endswith(_PRESENT_END):
+        return True
+    # consonant-final past with a prefix: замовк, підвів, зник
+    return len(w) >= 5 and w.endswith(("вк", "ик", "ік", "ід", "ів")) and w.startswith(_PREFIXES)
+
+
+def _is_beat(piece: str, names: Iterable[str] = ()) -> bool:
+    """Does a piece between dashes read as a narrated act or a speech tag? It does if, with no
+    I/we/you before it, it starts with he/she/they, has a known name early, has a speech-tag
+    stem, or has a third-person verb among its first three words (or later, after a leading
+    participial clause). Anything else (an adverb, a noun, an imperative) is the speech going
+    on after a dash."""
+    words = re.findall(r"[\w']+", piece.lower())[:8]
+    if not words:
+        return False
+    known = {n.lower() for n in names if n}
+    gerund = any(w.endswith(_GERUND) for w in words[:3])
+    for i, w in enumerate(words):
+        if w in _SPEAKERS or (i == 0 and w in {"це", "то", "ось", "так", "ні", "тут", "там"}):
+            return False
+        if w in _PRON and i == 0:
+            return True
+        if w in known and i < 3:
+            return True
+        if w.startswith(_TAG_VERBS) and len(w) > 3:
+            return True
+        if _is_verb(w) and (i <= 2 or gerund):
+            return True
+    return False
 
 
 def _speech_tail(s: str) -> str:
     return re.sub(r"[,;:]\s*$", ".", s.strip())
 
 
-def split_npc_output(text: str) -> NpcOutput:
+def split_npc_output(text: str, names: Iterable[str] = ()) -> NpcOutput:
     """Separate speech from the NPC's own beats in book-style dialogue. In a paragraph that
     starts with a dash the pieces between dashes alternate speech, beat, speech, ...; a paragraph
     that starts without a dash begins with a beat. A text with no dash at all is plain speech
-    (the old form). A piece longer than 40 words is never a beat (a dash inside a speech)."""
+    (the old form). A piece longer than 40 words is never a beat (a dash inside a speech). `names`: known
+    character names, which mark a piece as a beat."""
     text = text.strip()
     if not re.search(r"(?:^|\s)[—–](?:\s|$)", text):
         return NpcOutput(text, [], False)
@@ -112,7 +148,7 @@ def split_npc_output(text: str) -> NpcOutput:
                 is_beat = not is_beat
                 continue
             if is_beat and len(piece.split()) <= 40:
-                if not _is_beat(piece):  # a dash inside the speech, not a narrated act
+                if not _is_beat(piece, names):  # a dash inside the speech, not a narrated act
                     if speech and not speech_closed:
                         speech[-1] = f"{speech[-1]} — {piece}"
                     else:

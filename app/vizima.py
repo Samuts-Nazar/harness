@@ -101,7 +101,7 @@ def open_vizima(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = False
 def _populate_without_canon(eng: Engine) -> None:
     """No canon store: the same tavern with the code-made people only."""
     for slot, occ, _home, look, _goal in pilot.EXTRA_CAST:
-        eng.add_npc(eng.fresh_npc(slot, "northern", occupation=occ), appearance=look)
+        eng.add_npc(eng.fresh_npc(slot, "northern", occupation=occ, appearance=look), appearance=look)
     ids = pilot.canon_extra_ids()
     eng.acquaint(ids["guard"], ids["drunk"])
     for c in (ids["guard"], ids["drunk"], "player"):

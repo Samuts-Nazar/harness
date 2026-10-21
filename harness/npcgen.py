@@ -238,11 +238,11 @@ class NpcSpec:
         return CharacterProfile(self.id, self.name, desc, appearance=appearance, core=self.core)
 
 
-_FEM = re.compile(r"\b(жінк\w*|дівч\w*|вона|її|стара\b|старенька|дочк\w*|матір|мати\b|"
-                  r"господиня|вдова|панна|пані|\w+ка\b|\w+иця\b|\w+ниця\b|\w+иня\b)", re.I)
-_MASC = re.compile(r"\b(чолов\w*|хлоп\w*|він|його|старий|дід\w*|син\b|батько|парубок|"
-                   r"господар|пан\b)", re.I)
-_FEM_NOT = {"кішка", "ложка", "дошка"}
+_FEM = re.compile(r"\b(жінк\w*|дівч\w*|вона|її|старенька|дочк\w*|матір|господиня|вдова|панна|"
+                  r"пані)\b", re.I)
+_MASC = re.compile(r"\b(чолов\w*|хлоп\w*|він|його|старий|дід\w*|син|батько|парубок|"
+                   r"господар|пан)\b", re.I)
+_FEM_TRADE = ("ка", "иця", "ниця", "иня")  # корчмарка, ткаля...: only for an occupation noun
 
 
 def infer_sex(*texts: str, role: bool = False) -> str | None:
@@ -253,11 +253,13 @@ def infer_sex(*texts: str, role: bool = False) -> str | None:
     text = " ".join(given).lower()
     if not text.strip():
         return None
-    f = sum(1 for m in _FEM.findall(text) if m not in _FEM_NOT)
+    f = len(_FEM.findall(text))
     m = len(_MASC.findall(text))
     if f == m:
         # a lone trade noun (a consonant ending, no feminine form) is male
         words = re.findall(r"[а-яіїєґ']+", text)
+        if role and words and words[0].endswith(_FEM_TRADE):
+            return "f"
         if role and not f and words and words[0][-1] not in "аяиіеєюї":
             return "m"
         return None

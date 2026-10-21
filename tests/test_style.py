@@ -189,3 +189,29 @@ def test_pronoun_and_verb_beats_still_count_and_non_beats_do_not():
     assert split_npc_output("— Так. — Він кивнув. — Йди.").beats == ["Він кивнув."]
     assert split_npc_output("— Іди — і не повертайся.").beats == []
     assert split_npc_output("— Іди — і не повертайся.").speech == "Іди — і не повертайся."
+
+
+@pytest.mark.parametrize("line, speech, has_beat", [
+    ("— Не знаю, — каже Горст. — Йди.", "Не знаю. Йди.", False),   # a bare tag is dropped
+    ("— Не знаю, — шепоче Горст. — Йди.", "Не знаю. Йди.", True),
+    ("— Ні, — замовк корчмар. — Йди.", "Ні. Йди.", True),
+    ("— Ні, — Корчмар, не підводячи очей, відповів. — Йди.", "Ні. Йди.", True),
+    ("— Ні, — стоїть він. — Іди.", "Ні. Іди.", True),
+])
+def test_common_tags_and_beats_are_not_swallowed(line, speech, has_beat):
+    out = split_npc_output(line)
+    assert out.speech == speech
+    assert bool(out.beats) is has_beat
+
+
+def test_first_person_clause_and_nouns_are_speech():
+    out = split_npc_output("— Ні, — сказав Геральт. — Вчора ми ходили до міста, — Йди.")
+    assert out.beats == []
+    assert "ми ходили" in out.speech and out.speech.endswith("Йди.")
+    assert split_npc_output("— Так — кров на руках.").beats == []
+    assert split_npc_output("— Так — школа за рогом.").beats == []
+    assert split_npc_output("— Так, — Горст, мовчки, відвернувся. — Все.", ["Горст"]).beats
+
+
+def test_names_mark_a_beat():
+    assert split_npc_output("— Так. — Горст і Мірра. — Все.", ["Горст"]).beats == ["Горст і Мірра."]

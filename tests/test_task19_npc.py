@@ -8,9 +8,8 @@ from harness.glossary import Glossary
 from harness.judge import FakeJudge
 from harness.models import PLAYER, CharacterProfile, Scene
 from harness.npcgen import (
-    infer_sex,
     CULTURES, LIFESPAN, NAMES, YEAR_MIN, generate_npc, make_vitals, pick_name, taken_names,
-    with_core,
+    infer_sex, with_core,
 )
 from harness.pipeline import Engine, ModelConfig
 from harness.providers import FakeProvider
@@ -138,10 +137,9 @@ def test_a_male_role_never_gets_a_female_table_name(slot):
 
 
 def test_sex_is_inferred_from_description_or_appearance_and_asked_once_when_unknown():
-    from harness.npcgen import infer_sex
     assert infer_sex("Високий чоловік з сивою бородою") == "m"
     assert infer_sex("Молода жінка, вона носить хустку") == "f"
-    assert infer_sex("корчмарка") == "f"
+    assert infer_sex("корчмарка", role=True) == "f"
     assert infer_sex("міський вартовий", role=True) == "m"
     assert infer_sex("людина") is None
     f = generate_npc(3, 1, culture="northern", appearance="висока жінка, вона усміхається")
@@ -157,3 +155,9 @@ def test_sex_is_inferred_from_description_or_appearance_and_asked_once_when_unkn
     e = generate_npc(3, 3, culture="northern", description="перехожий без прикмет",
                      sex_decider=decider)
     assert e.sex == "f" and len(asked) == 1
+
+
+def test_infer_sex_does_not_read_nouns_or_male_names_as_feminine():
+    assert infer_sex("Високий чоловік, рука на перев'язі, шапка") == "m"
+    assert infer_sex("Лука") is None
+    assert infer_sex("Лука, він кульгає") == "m"
