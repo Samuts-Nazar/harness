@@ -103,7 +103,19 @@ def world_names(eng: Any, common: Iterable[str] = ()) -> set[str]:
              for w in re.findall(r"[\w'’-]{4,}", c)}
     for (text,) in eng.conn.execute("SELECT content FROM facts"):  # campaign and canon
         out |= names_in(text)
-    return out - COMMON - skip
+    return out - COMMON - skip - lowercase_stems(eng)
+
+
+def lowercase_stems(eng: Any) -> set[str]:
+    """Stems of words that also occur in lowercase somewhere in the log or the facts: a word that
+    is sometimes written without a capital ("вона", "тільки" at the start of a sentence) is not a
+    name."""
+    texts = [t for (t,) in eng.conn.execute("SELECT content FROM facts")]
+    texts += [e.payload.get("text", "") for e in eng.log.active([UTTERANCE, NARRATION, ACTION])]
+    out: set[str] = set()
+    for t in texts:
+        out |= {w[:STEM] for w in re.findall(r"(?<![\w'’-])[a-zа-яіїєґ][\w'’-]{3,}", t)}
+    return out
 
 
 def _known_stems(eng: Any, who: str, at_time: int, upto_event: int) -> set[str]:

@@ -354,6 +354,10 @@ class ContextBuilder:
             tail += outcome + "\n"
         tail += "Narrate what happens next."
         if self.narration == "prose":
+            # the full rules sit in the system message (cacheable); the one that models break most
+            # often is repeated here, at the end, where it is read last
+            tail += (" Plain prose only: no quotation marks and no dialogue dashes; nobody but "
+                     "the player speaks in your text, NPC lines are written elsewhere.")
             rules = (
                 "Write the narration as plain prose and nothing else: no JSON, no lists, no "
                 "headings, no markup. Its length and shape follow the moment (a glance can be a "
