@@ -20,6 +20,7 @@ from harness.models import (
     Scene,
 )
 from harness.pipeline import Engine, ModelConfig
+from harness.profile import load_profile
 from harness.providers import Messages, Provider
 from harness.state import StateChange, StateError
 
@@ -231,7 +232,7 @@ def open_campaign(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = Fal
     if name and not new and Engine.campaign_exists(name, root):
         eng = Engine.open_campaign(name, rec, root=root, models=stack.models, judge=stack.judge,
                                    glossary=glossary, style=Style.load("witcher"),
-                                   dialogue=DIALOGUE)
+                                   dialogue=DIALOGUE, world_profile=load_profile("witcher"))
     else:
         name = name if (new and name) else time.strftime("inn-%Y%m%d-%H%M%S")
         while Engine.campaign_exists(name, root):
@@ -242,7 +243,7 @@ def open_campaign(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = Fal
             name, rec, profiles(traits.label if traits and traits.label else PLAYER_LOOK),
             Scene(TITLE, ("horst", "elza"), START_TIME), root=root,
             models=stack.models, judge=stack.judge, glossary=glossary,
-            style=Style.load("witcher"), dialogue=DIALOGUE)
+            style=Style.load("witcher"), dialogue=DIALOGUE, world_profile=load_profile("witcher"))
         eng.acquaint("horst", "elza")  # neighbours: they know each other by name
         for text, knowers in SEEDS:
             eng.facts.add_canon(text, knowers=[(k, "told") for k in knowers])

@@ -81,8 +81,10 @@ _SHAPES = {
 }
 
 
-def next_floor_questions(npcs: Mapping[str, str]) -> dict[str, Question]:
-    """The batch for one exchange step: `next` (an NPC, the player, or nobody) and `shape`."""
+def next_floor_questions(npcs: Mapping[str, str], prior: str = "") -> dict[str, Question]:
+    """The batch for one exchange step: `next` (an NPC, the player, or nobody) and `shape`.
+    `prior`: a line about the world's usual reply length (`shape.shape_prior`), added to the
+    shape question; none without a loaded profile."""
     options = {
         **dict(npcs),
         PLAYER_FLOOR: "the player character: someone has just addressed them (by name, by how "
@@ -102,7 +104,7 @@ def next_floor_questions(npcs: Mapping[str, str]) -> dict[str, Question]:
         "shape": choice_q(
             "If a character takes the floor now, how much do they say? Think of the character "
             "and their mood, of what was just said and the pace of the talk: in books most "
-            "replies in a quick exchange are short.",
+            "replies in a quick exchange are short." + (f" {prior}" if prior else ""),
             {s.value: d for s, d in _SHAPES.items()}, tag=SHAPE_TAG),
     }
 
@@ -116,12 +118,13 @@ def needs_narration_question() -> Question:
         "a question and its answer, needs none.", tag=NARRATION_TAG)
 
 
-def decide_first_step(judge: Judge, state: Sequence[str], npcs: Mapping[str, str]
-                      ) -> tuple[bool, str, Shape]:
+def decide_first_step(judge: Judge, state: Sequence[str], npcs: Mapping[str, str],
+                      prior: str = "") -> tuple[bool, str, Shape]:
     """The start of a living turn in ONE batched call: (does the moment need narration, then the
     first exchange step as `decide_next` answers it). The state has no narration yet; when the
     answer is yes the caller narrates and asks the first step again with the narration."""
-    qs = {"narration": needs_narration_question(), **(next_floor_questions(npcs) if npcs else {})}
+    qs = {"narration": needs_narration_question(),
+          **(next_floor_questions(npcs, prior) if npcs else {})}
     got = judge.ask(state, qs)
     need = bool(got["narration"].answer)
     if not npcs:
@@ -136,14 +139,14 @@ def decide_first_step(judge: Judge, state: Sequence[str], npcs: Mapping[str, str
     return need, nxt, shape
 
 
-def decide_next(judge: Judge, state: Sequence[str], npcs: Mapping[str, str]
-                ) -> tuple[str, Shape]:
+def decide_next(judge: Judge, state: Sequence[str], npcs: Mapping[str, str],
+                prior: str = "") -> tuple[str, Shape]:
     """One exchange step: (an NPC id, `PLAYER_FLOOR` or `NOBODY`; the shape of the response).
     `npcs`: id -> how the director knows them (never the player). An unknown answer is nobody;
     an unknown shape is normal."""
     if not npcs:
         return NOBODY, Shape.NORMAL
-    got = judge.ask(state, next_floor_questions(npcs))
+    got = judge.ask(state, next_floor_questions(npcs, prior))
     nxt = str(got["next"].answer)
     if nxt not in npcs and nxt != PLAYER_FLOOR:
         nxt = NOBODY

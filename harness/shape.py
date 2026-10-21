@@ -46,6 +46,15 @@ def word_bounds(shape: Shape, profile: "WorldProfile | None") -> tuple[int, int]
     return _DEFAULT[shape]
 
 
+def shape_prior(profile: "WorldProfile | None") -> str:
+    """A prior line for the director's shape question, from the world's numbers ("" without a
+    profile)."""
+    if profile is None or not profile.length_bins:
+        return ""
+    pct = round(100 * (profile.length_bins.get("1", 0.0) + profile.length_bins.get("2-3", 0.0)))
+    return f"In this world about {pct}% of replies are 1-3 words."
+
+
 _INSTR = {
     Shape.SILENCE: "{name} says nothing this turn and does nothing worth noting.",
     Shape.GESTURE: "{name} does not speak this turn: write only one small action, no words.",

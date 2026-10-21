@@ -143,10 +143,15 @@ def profile_of_lines(lines: Sequence[str]) -> WorldProfile:
     return WorldProfile(**_core(dl), source="engine")
 
 
-def distance(a: WorldProfile, b: WorldProfile) -> dict[str, float]:
-    out = {k: abs(getattr(a, k) - getattr(b, k)) for k in (
-        "median_words", "question_share", "no_beat_share", "narration_between_share",
-        "narration_median_words", "speaker_run_mean")}
+SPEECH_METRICS = ("median_words", "question_share", "no_beat_share")
+NARRATION_METRICS = ("narration_between_share", "narration_median_words", "speaker_run_mean")
+
+
+def distance(a: WorldProfile, b: WorldProfile, *, speech_only: bool = False) -> dict[str, float]:
+    """Absolute differences per metric. `speech_only`: leave out the narration and speaker-run
+    metrics (an engine session has no narration paragraphs, so they would only show noise)."""
+    keys = SPEECH_METRICS if speech_only else SPEECH_METRICS + NARRATION_METRICS
+    out = {k: abs(getattr(a, k) - getattr(b, k)) for k in keys}
     out["length_bins_l1"] = sum(abs(a.length_bins.get(k, 0.0) - b.length_bins.get(k, 0.0))
                                 for k in BINS)
     return out

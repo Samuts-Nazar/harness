@@ -361,6 +361,7 @@ class Game:
             "cost": round(getattr(spend, "total", 0.0) - marks["cost"], 6),
             "error": error,
             "repetition": (report or {}).get("repetition"),
+            "dialogue": eng.dialogue_report(),
             "names": (report or {}).get("names"),
             "parallel": eng.parallel,
             "decisions": self._decisions(

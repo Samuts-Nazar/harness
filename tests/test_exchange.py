@@ -417,3 +417,59 @@ def test_classic_launch_with_empty_narration_still_writes_the_narration_event():
     evs = []
     launch = eng._launch(NarratorOutput(""), "Так.", None, evs, check=False)
     assert [e.type for e in launch.events][0] == "narration" and "narration" in launch.sources
+
+
+# -- the engine uses the world profile (living dialogue, task 6) -------------------------------
+def _witcher():
+    from harness.profile import load_profile
+    p = load_profile("witcher")
+    assert p is not None
+    return p
+
+
+def test_distance_speech_only_leaves_out_narration_metrics():
+    from harness.profile import distance
+    p = _witcher()
+    e = __import__("harness.profile", fromlist=["x"]).profile_of_lines(["— Ні.", "— Так, піду."])
+    full, sp = distance(e, p), distance(e, p, speech_only=True)
+    assert "speaker_run_mean" in full and "narration_median_words" in full
+    assert set(sp) == {"median_words", "question_share", "no_beat_share", "length_bins_l1"}
+
+
+def test_shape_question_prior_comes_from_the_profile():
+    p = _witcher()
+    pct = round(100 * (p.length_bins["1"] + p.length_bins["2-3"]))
+    from harness.shape import shape_prior
+    assert shape_prior(p) == f"In this world about {pct}% of replies are 1-3 words."
+    assert shape_prior(None) == ""
+    npcs = {"horst": "Горст"}
+    with_prior = next_floor_questions(npcs, shape_prior(p))["shape"].text
+    assert f"about {pct}% of replies" in with_prior
+    assert "% of replies" not in next_floor_questions(npcs)["shape"].text
+
+
+def test_engine_asks_with_prior_only_when_a_profile_is_loaded():
+    for prof in (_witcher(), None):
+        eng, prov, judge = make(["— Так."], ["horst", PLAYER_FLOOR], ["word"],
+                                world_profile=prof)
+        eng.turn("Добрий вечір.", speakers=None)
+        texts = [qs["shape"].text for _, qs in next_asks(judge)]
+        assert texts and all(("% of replies" in t) == (prof is not None) for t in texts)
+
+
+def test_session_profile_in_debug():
+    eng, prov, judge = make(["— Так.", "— Ні, не піду.", "— Гаразд."], ["horst", "elza", "horst", PLAYER_FLOOR],
+                            ["word"], world_profile=_witcher())
+    assert eng.dialogue_report() is None
+    eng.turn("Добрий вечір.", speakers=None)
+    rep = eng.dialogue_report()
+    assert rep is not None and "median_words" in rep and rep["n_lines"] >= 1
+    assert set(rep["distance"]) == {"median_words", "question_share", "no_beat_share",
+                                    "length_bins_l1"}
+
+
+def test_session_profile_without_world_profile_has_no_distance():
+    eng, *_ = make(["— Так."], ["horst", PLAYER_FLOOR], ["word"])
+    eng.turn("Добрий вечір.", speakers=None)
+    rep = eng.dialogue_report()
+    assert rep["median_words"] >= 1 and rep["distance"] is None

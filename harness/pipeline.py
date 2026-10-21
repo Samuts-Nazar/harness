@@ -66,12 +66,12 @@ from .policy import (
 )
 from .providers import Provider, ProviderError
 from .repetition import WINDOW as REPETITION_WINDOW, measure_turn
-from .profile import WorldProfile
+from .profile import WorldProfile, distance, profile_of_lines
 from .settings import (
     DEFAULT_DIALOGUE, DEFAULT_NARRATION, DEFAULT_OUTPUT_LANGUAGE, DEFAULT_RECORD_LANGUAGE,
     MAX_EXCHANGE_LINES, MAX_SPEAKERS, NPC_REJECT_P,
 )
-from .shape import Shape, fit_to_shape, word_bounds
+from .shape import Shape, fit_to_shape, shape_prior, word_bounds
 from .state import LiveState, StateChange, check_change, payload as change_payload
 from .streaming import InterruptHandle, StreamResult, run_stream
 from .style import Style, beat_as_action, foreign_voice, manner_messages, parse_manner, split_npc_output
@@ -290,6 +290,8 @@ class Engine:
         if dialogue not in ("living", "classic"):
             raise ValueError(f"dialogue must be 'living' or 'classic', not {dialogue!r}")
         self.dialogue, self.world_profile = dialogue, world_profile
+        self.shape_prior = shape_prior(world_profile)  # "" without a profile
+        self.session_lines: list[str] = []  # the NPCs' delivered lines, for the dialogue report
         self.conn = conn or connect()
         self._owns_conn = conn is None
         self.provider, self.models, self.scene = provider, models, scene
@@ -1096,7 +1098,7 @@ class Engine:
         fallback speaker (silence would stall the scene), later the floor goes back to the
         player."""
         try:
-            return decide_next(self.judge, state, npcs)
+            return decide_next(self.judge, state, npcs, self.shape_prior)
         except JudgeError as e:
             kept = self._fallback_speakers(narration)[:1] if first else []
             self._note("director_unavailable", error=str(e), fallback=kept)
@@ -1109,7 +1111,8 @@ class Engine:
         npcs = {c: self.ctx.describe(c) for c in self.scene.present if c != PLAYER}
         state = self.ctx.director_state(self.scene, player_text, "")
         try:
-            need, nxt, shape = decide_first_step(self.judge, self._exchange_state(state, []), npcs)
+            need, nxt, shape = decide_first_step(self.judge, self._exchange_state(state, []), npcs,
+                                           self.shape_prior)
         except JudgeError as e:
             self._note("director_unavailable", error=str(e), fallback="narrate")
             return None
@@ -1239,6 +1242,8 @@ class Engine:
             turn_events.append(self.notices.mark_shown(notice, sc))
         cb = (lambda w, n=npc: on_word(n, w)) if on_word else None
         sr = run_stream(iter([text]), handle, cb, self.pace)
+        if sr.spoken_text.strip():
+            self.session_lines.append(sr.spoken_text)
         parsed = split_npc_output(sr.spoken_text) if self.style is not None else None
         extra: dict[str, object] = (
             {"speech": parsed.speech} if parsed is not None and parsed.has_dash else {})
@@ -1263,6 +1268,20 @@ class Engine:
             turn_events += self._record_interruption(ev, sr)
             result.interrupted = True
         return sr
+
+    def dialogue_report(self) -> dict[str, Any] | None:
+        """The session's NPC speech measured like the world profile (debug view): the rolling
+        `profile_of_lines` over every delivered line plus, when the world has a profile, its
+        `distance` to it on speech metrics only (a session has no narration paragraphs). None
+        before the first line."""
+        try:
+            prof = profile_of_lines(self.session_lines)
+        except ValueError:
+            return None
+        out: dict[str, Any] = prof.to_dict()
+        out["distance"] = (distance(prof, self.world_profile, speech_only=True)
+                           if self.world_profile is not None else None)
+        return out
 
     def _discard(self, launch: _Launch) -> None:
         """The narration was rejected after the chains had started: forget it all."""

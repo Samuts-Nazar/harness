@@ -16,6 +16,7 @@ from harness.canon.retrieve import Canon
 from harness.glossary import Glossary
 from harness.models import Scene
 from harness.pipeline import Engine
+from harness.profile import load_profile
 from harness.style import Style
 from harness.world import pilot
 from harness.world.pilot import CANON_PLAYER, START_TIME
@@ -65,7 +66,8 @@ def open_vizima(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = False
             embedder = OpenRouterEmbedder("qwen/qwen3-embedding-8b")
         canon = Canon(store, embedder)
     kw = dict(models=stack.models, judge=stack.judge, glossary=Glossary.for_world("witcher"),
-              style=Style.load("witcher"), dialogue="classic")  # see app.campaigns.DIALOGUE
+              style=Style.load("witcher"), dialogue="classic",
+              world_profile=load_profile("witcher"))  # see app.campaigns.DIALOGUE
     reopened = bool(name) and not new and Engine.campaign_exists(name, root)
     if reopened:
         eng = Engine.open_campaign(name, rec, root=root, **kw)  # type: ignore[arg-type]

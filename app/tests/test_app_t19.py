@@ -88,3 +88,12 @@ def test_scene_totals_attribute_a_turn_to_its_starting_location(tmp_path):
     g._decisions(one, "inn")
     out = g._decisions(one, "road")  # a turn that began on the road, wherever it ended
     assert out["scene"]["judgments"] == 1 and out["session"]["judgments"] == 3
+
+
+def test_vizima_debug_has_the_session_dialogue_profile(tmp_path):
+    g = make(tmp_path)
+    g.start_turn("Сідаю біля стійки й замовляю пива.")
+    g.wait_idle(20)
+    d = g.debug["dialogue"]
+    assert d is None or ("median_words" in d and "length_bins_l1" in d["distance"])
+    assert g.eng.world_profile is not None and g.eng.shape_prior
