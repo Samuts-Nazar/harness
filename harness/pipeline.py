@@ -74,7 +74,8 @@ from .settings import (
 from .shape import Shape, fit_to_shape, shape_prior, word_bounds
 from .state import LiveState, StateChange, check_change, payload as change_payload
 from .streaming import InterruptHandle, StreamResult, run_stream
-from .style import Style, beat_as_action, foreign_voice, manner_messages, parse_manner, split_npc_output
+from .style import (Style, beat_as_action, foreign_voice, manner_messages, parse_manner,
+                    split_npc_output, tidy_speaker)
 
 ATTITUDE_MIN_NOTABILITY = 0.6  # only notable facts get attitude judgments (cost control)
 FALLBACK_LINE = "I don't know what to tell you."  # no longer shown: the least suspicious candidate is
@@ -845,6 +846,12 @@ class Engine:
         for _ in range(self.check_retries + 1):
             text = self._fix_names(
                 clean_npc_line(self._complete("npc", prep.messages(heard, notes))), "npc_line")
+            # without a style there is no book form: only a self-prefix is dropped
+            tidy = tidy_speaker(text, [self.names.real(prep.npc), self.names.label(prep.npc)],
+                                self._name_words, book_form=self.style is not None)
+            if tidy != text:
+                self._note("speaker_tidied", npc=prep.npc, before=text, after=tidy)
+                text = tidy
             why = (foreign_voice(text, self.ctx.name(prep.npc),
                                  [p.name for p in self.profiles.values()])
                    if self.style is not None else None)

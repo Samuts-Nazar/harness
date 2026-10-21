@@ -207,6 +207,51 @@ def foreign_voice(text: str, own: str, others: Iterable[str]) -> str | None:
     return None
 
 
+def tidy_speaker(text: str, own: Iterable[str], names: Iterable[str] = (), *,
+                 book_form: bool = True) -> str:
+    """Two glitches of an NPC call, fixed in its own output. `own`: the speaker's name and how
+    they are shown (appearance label); `names`: known character names (a piece naming one is a
+    beat).
+
+    - A leading "<own name or label>:" prefix (a script line for oneself, or the appearance used
+      as one) is dropped.
+    - A line that opens with a beat before the first dash ("Ельза потерла край фартуха. — А
+      якщо...?") gets the book form, speech first and the beat after it ("— А якщо...? — Ельза
+      потерла край фартуха."), so a label shown before the line is never followed by the
+      speaker's own name or description.
+    Anything else is returned unchanged. `book_form=False`: only the prefix is dropped."""
+    t = text.strip()
+    owns = sorted({o.strip() for o in own if o and o.strip()}, key=len, reverse=True)
+    stripped = True
+    while stripped:
+        stripped = False
+        for o in owns:
+            m = re.match(rf"{re.escape(o)}\s*:\s*", t, re.IGNORECASE)
+            if m and t[m.end():].strip():
+                t, stripped = t[m.end():].strip(), True
+                break
+    if not book_form or not t or t[0] in DASHES:
+        return t
+    m = re.search(r"\s[—–]\s", t)
+    if m is None:
+        return t
+    beat, rest = t[: m.start()].strip(), t[m.end():].strip()
+    known = [*names, *(w for o in owns for w in o.split()[:1])]
+    if not beat or not rest or len(beat.split()) > 40 or not _is_beat(beat, known):
+        return t
+    beat = beat.rstrip(",;: ")
+    beat = beat if beat[-1] in ".!?…" else beat + "."
+    rest = rest if rest[-1] in ".!?…" else rest + "."
+    first = re.match(r"[\w'’]+", beat)
+    proper = first is not None and first.group(0) in set(names) | {o.split()[0] for o in owns
+                                                                   if o[:1].isupper()}
+    if rest[-1] != "." and not proper:  # "— Скільки? — кремезний сивий чоловік ..."
+        beat = beat[0].lower() + beat[1:]
+    elif rest[-1] == ".":
+        beat = beat[0].upper() + beat[1:]
+    return f"— {rest} — {beat}"
+
+
 # ---------------------------------------------------------------------------------------------
 # Assistant-isms
 # ---------------------------------------------------------------------------------------------

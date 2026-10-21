@@ -32,6 +32,7 @@ CODE_CHOICE_KINDS: set[str] = {
     "gesture",                 # an NPC step stored as an action only, no utterance
     "narration_skipped",       # the director said the moment is just talk: no narrator call
     "same_speaker_stopped",    # the director picked the NPC of the step just taken: exchange ends
+    "speaker_tidied",          # an NPC line's own-name prefix dropped / opening beat moved after the speech
 }
 
 

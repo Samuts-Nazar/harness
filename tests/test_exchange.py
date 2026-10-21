@@ -508,3 +508,31 @@ def test_fit_to_shape_counts_speech_with_names():
     line = "— Ні, — Ельза знову до вікна і довго дивиться в темряву. — Іди."
     assert fit_to_shape(line, Shape.WORD, (1, 2), names=["Ельза"])[1] == "ok"
     assert fit_to_shape(line, Shape.WORD, (1, 2))[1] == "regenerate"
+
+
+def test_tidy_speaker_strips_own_label_prefix_and_opens_with_speech():
+    from harness.style import tidy_speaker
+    own = ["Горст", "кремезний сивий чоловік"]
+    # a description used as a speaker prefix
+    assert tidy_speaker("кремезний сивий чоловік: — Двадцять крон. Не більше.", own) == \
+        "— Двадцять крон. Не більше."
+    # the name repeated after the label: the line opens with the speech, the beat follows it
+    assert tidy_speaker("Ельза: Ельза потерла край фартуха. — А якщо вернеться не весь?",
+                        ["Ельза", "жінка в темній хустці"], ["Ельза"]) == \
+        "— А якщо вернеться не весь? — Ельза потерла край фартуха."
+    assert tidy_speaker("Горст переклав очі на меч. — Скільки?", own, ["Горст"]) == \
+        "— Скільки? — Горст переклав очі на меч."
+    # untouched: book-form lines, another character's name, plain speech
+    for t in ("— Ні, — Горст сплюнув. — Не піду.", "Ні. Не піду.", "Ельзо, йди додому."):
+        assert tidy_speaker(t, own, ["Горст"]) == t
+
+
+def test_npc_line_with_own_prefix_is_tidied_in_the_engine():
+    from harness.style import Style
+    line = "Горст: Горст переклав очі на меч. — Скільки?"
+    eng, prov, _ = make([line], ["horst", NOBODY], ["short"], style=Style(),
+                        present=(PLAYER, "horst"), extractor=["none", "говорить тихо", diff()])
+    res = eng.turn("Я візьмуся.")
+    text = res.utterances[0].payload["text"]
+    assert text.startswith("— Скільки?") and "Горст:" not in text
+    assert res.utterances[0].payload["speech"] == "Скільки?"
