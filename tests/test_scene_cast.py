@@ -305,3 +305,28 @@ def test_vague_mentions_are_not_taken_for_a_present_person():
     assert not _same_look("жінка", "жінка з ринку")
     assert _same_look("кремезного сивого корчмаря", "кремезний сивий корчмар")
     assert _same_look("жінка з ринку", "жінка з ринку")
+
+
+# -- final review: groups are not admitted, passers-by are capped per scene ----------------------
+def test_group_mentions_are_not_admitted():
+    eng, prov, judge, cal = make(["Біля дверей галасують кілька возіїв, а з ними двоє наймитів."],
+                                 ["кілька возіїв\nдвоє наймитів\nгурт прочан"])
+    eng.turn("*Озираюсь.*")
+    assert eng.scene.present == (PLAYER, "horst")
+    skipped = [n["mention"] for n in eng.devlog if n["kind"] == "scene_cast_group_skipped"]
+    assert skipped == ["кілька возіїв", "двоє наймитів", "гурт прочан"]
+
+
+def test_passers_by_are_capped_per_scene():
+    from harness.decisions import CODE_CHOICE_KINDS
+    from harness.scene_cast import MAX_PASSERS_BY
+    assert MAX_PASSERS_BY == 3
+    eng, prov, judge, cal = make(
+        ["Увійшли худий хлопчик, стара жінка, високий вояк і рудий парубок."],
+        ["худий хлопчик\nстара жінка\nвисокий вояк\nрудий парубок"])
+    eng.turn("*Озираюсь.*")
+    new = [c for c in eng.scene.present if c not in (PLAYER, "horst")]
+    assert len(new) == 3
+    capped = [n["mention"] for n in eng.devlog if n["kind"] == "scene_cast_cap"]
+    assert capped == ["рудий парубок"]
+    assert {"scene_cast_cap", "scene_cast_group_skipped"} <= CODE_CHOICE_KINDS

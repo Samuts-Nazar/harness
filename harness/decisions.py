@@ -38,6 +38,8 @@ CODE_CHOICE_KINDS: set[str] = {
     "beat_stripped",           # a no-beat line came back with a beat: the beat was cut
     "first_step_speaks",       # a skipped-narration turn's first step: silence/gesture left out of the draw
     "empty_exchange_narrated", # narration was skipped but nothing was delivered: one passage written
+    "scene_cast_group_skipped", # a narrated group of people is not admitted as a speaker
+    "scene_cast_cap",          # no more invented passers-by in this scene
     "speaker_tidied",          # an NPC line's own-name prefix dropped / opening beat moved after the speech
 }
 

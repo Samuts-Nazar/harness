@@ -13,7 +13,8 @@ decides) and decides for each:
 - a canon person: the canon calendar (`CastSource.whereabouts`) says where they are at this time;
   elsewhere means drift; no canon event near this time: a typed plausibility judgment;
 - anyone else is an invented passer-by: a generated NPC (harness/npcgen.py) whose label is how
-  the narration showed them.
+  the narration showed them; at most `MAX_PASSERS_BY` in a scene, and a group («кілька
+  возіїв») is never admitted (notes `scene_cast_cap`, `scene_cast_group_skipped`).
 
 Drift rejects the narration with a note for the narrator; the others are admitted by the engine
 (`Engine.enter_scene`), so they can speak and the director can choose them. A person is shown by
@@ -36,6 +37,18 @@ if TYPE_CHECKING:
 
 HERE, ELSEWHERE, UNKNOWN = "here", "elsewhere", "unknown"
 MAX_PEOPLE = 4  # a narration that brings in more is listed only this far
+MAX_PASSERS_BY = 3  # invented passers-by admitted into one scene at most (the cast must not swell)
+# a mention of several people («кілька возіїв», «двоє наймитів», «гурт прочан») is a crowd, not a
+# person who could speak: not admitted
+_GROUP = re.compile(
+    r"\b(?:кілька|декілька|кількоро|кількох|багато|двоє|троє|четверо|п'ятеро|п’ятеро|шестеро|"
+    r"група|групк\w*|гурт\w*|натовп\w*|юрб\w*|ватаг\w*|компані\w*|люди|людей|"
+    r"several|some|group|crowd|band|people|two|three|four)\b", re.IGNORECASE)
+
+
+def is_group(mention: str) -> bool:
+    """A mention of several people, not one person."""
+    return bool(_GROUP.search(mention))
 
 LIST_PROMPT = """Below is a passage of narration from a role-playing game, and the people who are in the scene now.
 
@@ -255,6 +268,14 @@ class SceneCast:
                     "; where they are now is not known")
                 ask[f"p{i}"] = self._plausible_q(name, about, eng)
                 pending[f"p{i}"] = Admission("known", m, cid=cid)
+                continue
+            if is_group(m):
+                eng._note("scene_cast_group_skipped", mention=m)
+                continue
+            walkins = sum(1 for c in sc.present if c.startswith("npc_walkin")) + sum(
+                1 for a in rv.admit if a.kind == "passer_by")
+            if walkins >= MAX_PASSERS_BY:
+                eng._note("scene_cast_cap", mention=m, cap=MAX_PASSERS_BY)
                 continue
             adm = Admission("passer_by", m, label=m)
             ask[f"s{i}"] = choice_q(f"Is the person described as «{m}» a man or a woman?",
