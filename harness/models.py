@@ -82,6 +82,7 @@ class CharacterProfile:
     appearance: str = ""  # what an observer sees of them (short, in the output language). A
     # character with an appearance is referred to by it until the viewer has learned the name;
     # one without is known by name to everyone.
+    core: str = ""  # task 19: immutable core (voice, drives, values), set once and shown verbatim
 
 
 @dataclass

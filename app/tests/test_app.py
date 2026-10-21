@@ -46,7 +46,7 @@ def test_turn_streams_narration_then_labelled_npc_lines():
     assert c.post("/api/turn", json={"text": "Я киваю Горсту."}).status_code == 202
     evs = sse(c)
     types = [e["type"] for e in evs]
-    assert types[0] == "turn_start" and types[-1] == "turn_done"
+    assert types[0] == "turn_start" and types[-2:] == ["turn_done", "settled"]
     assert types.index("narr_start") < types.index("narr_end") < types.index("speaker")
     speaker = next(e for e in evs if e["type"] == "speaker")
     assert speaker["who"] == "horst" and speaker["name"] == "Горст"

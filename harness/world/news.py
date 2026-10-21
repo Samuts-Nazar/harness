@@ -16,6 +16,8 @@ Event types written by the world (all derived state comes from them):
 - WORLD_MOVE      the player went somewhere or waited: payload {kind, from, to, minutes}
 - WORLD_TICK      the world was advanced to a time: payload {to}
 - WORLD_ARRIVAL   an authority's men reached the place the player is at: {reaction, text}
+- WORLD_TRAIL    men of a "seek the person" order reached a place and found nobody (or the person):
+                  payload {reaction, place, hop, next, eta, over, text}
 - CANON_EXECUTED  a scheduled canon event happened (or was changed): payload {canon_id, outcome}
 """
 from __future__ import annotations
@@ -27,6 +29,7 @@ WORLD_NEWS, NEWS_DELIVERY, NEWS_VERSION, NEWS_HEARD = (
 WORLD_REACTION, OFFSCREEN_UPDATE, WORLD_MOVE, WORLD_TICK, CANON_EXECUTED, WORLD_ARRIVAL = (
     "world_reaction", "offscreen_update", "world_move", "world_tick", "canon_executed",
     "world_arrival")
+WORLD_TRAIL = "world_trail"  # men looking for a person reached a place: found nobody / next place
 THREAD_RESOLVED, PERIOD_SUMMARY = "thread_resolved", "period_summary"
 
 NEWS_MIN_NOTABILITY = 0.65  # a fact below this stays with its witnesses

@@ -7,6 +7,7 @@ import json
 import re
 import sqlite3
 import threading
+import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -50,6 +51,10 @@ from .narrator import (
     NarrationError, NarratorOutput, clean_npc_line, has_dash_speech, has_quotes, has_speaker_line,
     parse_narration,
     strip_speech,
+)
+from .npcgen import NpcSpec, VitalsBook, generate_npc, taken_names, with_core
+from .outcome import (
+    CHARACTER_DEATH, FAILS, CampaignEnded, Outcome, OutcomeJudge, record_death, record_outcome,
 )
 from .perception import ACTION, DESCRIPTION, SPEECH, perceivers
 from .policy import (
@@ -172,6 +177,23 @@ class _Job:
 
 
 @dataclass
+class _Slow:
+    """The slow lane of one turn (task 19): extraction and everything derived from it. The
+    network call (`raw`) may already run in a worker; every write happens in `Engine.settle`, in
+    a fixed order, on one thread at a time."""
+    segments: list[tuple[str, str]]
+    sources: dict[str, Event]
+    outcomes: list[Outcome]
+    turn_events: list[Event]
+    result: "TurnResult"
+    player_event: Event
+    time: int  # the scene time the turn's facts carry
+    messages: list[dict[str, str]]
+    raw: Future[_Captured] | None = None
+    fast_s: float = 0.0
+
+
+@dataclass
 class TurnResult:
     narration: str
     utterances: list[Event] = field(default_factory=list)
@@ -210,11 +232,16 @@ class Engine:
         hear_each_other: bool = True,
         style: Style | None = None,
         player_unlimited: bool = False,
+        outcomes: bool = False,
+        seed: int | str = 0,
     ) -> None:
         """`player_unlimited` (task 17): the player's declared acts happen as declared; the
         narrator and the extractor must not soften them. `parallel`: run the independent calls of a turn concurrently. None (default): only if
         the provider says it is thread-safe (`parallel_ok`); fake providers are not, so tests
-        stay deterministic. `npc_reject_p`: an NPC line is rejected at suspicion >= this.
+        stay deterministic. `outcomes` (task 19): the world judges whether the player's attempt
+        works before the narrator writes (harness/outcome.py); `player_unlimited` is the campaign
+        flag `player_unbounded` (the player's own acts always happen, only reactions are judged).
+        `npc_reject_p`: an NPC line is rejected at suspicion >= this.
         `output_language`: language of narration and NPC speech (player-facing).
         `record_language`: language the extractor writes records in (None: the model's choice).
         `narration`: "prose" (narrator returns free text; speakers and observable actions come
@@ -247,10 +274,19 @@ class Engine:
         self.narration, self.glossary, self.max_speakers = narration, glossary, max_speakers
         self.hear_each_other = hear_each_other
         self.style = style
+        self.outcomes_on = outcomes
+        self.seed = seed  # makes non-canon NPCs reproducible (harness/npcgen.py)
+        self.vitals = VitalsBook()
+        self.outcome_judge = OutcomeJudge(self)
         self.canon_guard: Any = None   # harness.canon.play.CanonGuard: narrated output that contradicts canon is regenerated
         self._fixes: list[dict[str, str]] = []  # glossary replacements of the running turn
         self._fixes_lock = threading.Lock()
         self._tl = threading.local()
+        self._slow: _Slow | None = None  # the slow lane of the last turn, not yet applied
+        self._slow_lock = threading.RLock()
+        self.slow_failure: BaseException | None = None
+        self.after_settle: list[Callable[[], None]] = []  # run after the slow lane (the world)
+        self.lane_stats: list[dict[str, Any]] = []  # per turn: fast, slow and wait seconds
         self._pool: ThreadPoolExecutor | None = None
         self.devlog: list[dict[str, Any]] = []  # engine-side events for the debug view
         self.reports: list[dict[str, Any]] = []  # per turn: repetition and name reports
@@ -270,11 +306,20 @@ class Engine:
                                   record_language=record_language, glossary=glossary,
                                   narration=narration, names=self.names, style=style,
                                   player_unlimited=player_unlimited)
+        self.ctx.outcomes = outcomes
         self.memory = (MemoryWriter(self.campaign_dir / "memory", self.deriver, self.log,
                                     self.profiles, self.agents) if self.campaign_dir else None)
         self._save_scene()
 
     # -- helpers --------------------------------------------------------
+    @property
+    def ended(self) -> bool:
+        """The player character is dead: the campaign is read-only."""
+        return bool(self.log.active([CHARACTER_DEATH]))
+
+    def _scene_header_omniscient(self) -> str:
+        return self.ctx._scene_header(self.scene)
+
     def _note(self, kind: str, **info: Any) -> None:
         buf = getattr(self._tl, "notes", None)  # a worker collects its notes; the main thread merges
         (self.devlog if buf is None else buf).append({"kind": kind, **info})
@@ -447,7 +492,8 @@ class Engine:
         return text
 
     def _narrate(self, player_text: str,
-                 on_candidate: Callable[[NarratorOutput], bool] | None = None) -> NarratorOutput:
+                 on_candidate: Callable[[NarratorOutput], bool] | None = None,
+                 outcome: Outcome | None = None) -> NarratorOutput:
         """Narrator output (free prose, or the task 3 JSON). NPC speech is rejected and
         regenerated (at most `narrate_retries` times); after that the speech is stripped and
         logged. `on_candidate(out)` replaces the judge check: it gets a candidate that passed the
@@ -457,7 +503,8 @@ class Engine:
         sc = self.scene
         raw, parsed = "", None
         for attempt in range(self.narrate_retries + 1):
-            raw = self._complete("narrator", self.ctx.narrator(sc, player_text)).strip()
+            raw = self._complete("narrator", self.ctx.narrator(
+                sc, player_text, outcome.for_narrator() if outcome else None)).strip()
             if self.narration == "prose":
                 text = self._prose_of(raw)
                 if not text:
@@ -692,22 +739,31 @@ class Engine:
             cap = fut.result()
             if cap.error is not None:
                 raise cap.error
-            heard.append(self.ctx.heard_line(prep.npc, npc, cap.value))
+            # no database read in a worker: use the name-registry snapshot taken in `_prep_npc`
+            known = npc == prep.npc or not self.names.hidden(npc) or npc in prep.known_names
+            who = self.names.real(npc) if known else self.names.label(npc)
+            heard.append(f"{who}: {cap.value}")
         return self._npc_line(prep, heard)
 
     # -- extraction -----------------------------------------------------
-    def _extract(self, segments: list[tuple[str, str]]) -> Diff:
-        messages = self.ctx.extractor(self.scene, segments)
+    def _extract(self, segments: list[tuple[str, str]], outcomes: Sequence[Outcome] = (), *,
+                 messages: list[dict[str, str]] | None = None,
+                 first_raw: str | None = None) -> Diff:
+        if messages is None:
+            messages = self.ctx.extractor(self.scene, segments,
+                                          [o.for_narrator() for o in outcomes])
         sources = {k for k, _ in segments}
         sc = self.scene
         everyone = set(self.profiles) | set(sc.present) | set(sc.outside)
         last: Exception | None = None
         for _ in range(self.extract_retries + 1):
-            raw = self._complete("extractor", messages)
+            raw, first_raw = (first_raw, None) if first_raw is not None else (
+                self._complete("extractor", messages), None)
             try:
                 diff = validate_diff(self._ids_for_names(self._fix_tree(parse_diff(raw))),
                                      present=sc.present, sources=sources,
-                                     state=self.live.snapshot(), characters=everyone)
+                                     state=self.live.snapshot(), characters=everyone,
+                                     texts=dict(segments))
                 for d in diff.dropped:
                     self._note("state_change_dropped", **d)
                 return diff
@@ -718,7 +774,7 @@ class Engine:
     @staticmethod
     def _segment_kind(key: str) -> tuple[str, str | None]:
         """(perception kind, speaker) of an extractor segment key."""
-        if key == "narration":
+        if key.startswith("narration"):  # "narration", "narration~2" (a resolution paragraph)
             return DESCRIPTION, None
         if key.startswith("action") and key[6:].isdigit():
             return ACTION, None
@@ -1077,8 +1133,11 @@ class Engine:
         handle: InterruptHandle | None = None,
         on_word: Callable[[str, str], None] | None = None,
         on_narration: Callable[[str], None] | None = None,
+        defer_slow: bool = False,
     ) -> TurnResult:
-        """Run one turn. In prose mode the scene director names who speaks next (`speakers`
+        """Run one turn. `defer_slow` (task 19, fast/slow lane): return as soon as the player has
+        everything to read; extraction, salience, attitudes and the other bookkeeping run while the
+        player reads (`settle()`), and the next turn waits for them only if they are still running. In prose mode the scene director names who speaks next (`speakers`
         overrides it); in json mode the narrator does. `on_word(speaker, word)` receives the
         delivered words; a handle fired from inside it interrupts live. `on_narration(text)` is
         called once with the accepted narration, before the first NPC word (it may block to pace
@@ -1091,6 +1150,10 @@ class Engine:
         verdict that rejects the narration throws the started chains away and the narrator is
         called again. Event writes never leave this thread, so the log does not depend on timing."""
         sc = self.scene
+        if self.ended:
+            raise CampaignEnded("the player character is dead; the campaign is read-only")
+        t_start = time.monotonic()
+        waited = self._settle_for_next_turn()
         if self.canon_guard is not None:
             self.canon_guard.refresh(self)
         for s in speakers or ():
@@ -1107,6 +1170,15 @@ class Engine:
             player_ev = player_pairs[0][1]
             turn_events.extend(ev for _, ev in player_pairs)
             self._learn_from_player(player_pairs)
+            outcome: Outcome | None = None
+            if self.outcomes_on:  # the world judges the attempt before any prose (task 19)
+                judged = self.outcome_judge.player(model_text, unbounded=self.ctx.player_unlimited)
+                if judged is not None:
+                    outcome, oev = record_outcome(self, judged, player_ev)
+                    turn_events.append(oev)
+                    if outcome.died:
+                        turn_events.append(record_death(self, outcome, player_ev))
+            outcomes = [outcome] if outcome else []
 
             if self.parallel:
                 def on_candidate(out: NarratorOutput) -> bool:
@@ -1119,11 +1191,11 @@ class Engine:
                     launch = cand
                     return True
 
-                out = self._narrate(model_text, on_candidate)
+                out = self._narrate(model_text, on_candidate, outcome)
                 if launch is None:  # speech stripped after the retries: nothing left to check
                     launch = self._launch(out, model_text, speakers, turn_events, check=False)
             else:
-                out = self._narrate(model_text)
+                out = self._narrate(model_text, outcome=outcome)
                 launch = self._launch(out, model_text, speakers, turn_events, check=False)
 
             if on_narration is not None:
@@ -1166,7 +1238,12 @@ class Engine:
                     result.interrupted = True
                     break
 
-            result.fact_ids = self._commit(self._extract(segments), sources)
+            if self.outcomes_on and not result.interrupted:
+                outcomes += self._resolve_npc_acts(launch, result, turn_events, sources, segments,
+                                                   on_narration)
+            slow = _Slow(segments, sources, outcomes, turn_events, result, player_ev, sc.time,
+                         self.ctx.extractor(sc, segments, [o.for_narrator() for o in outcomes]))
+            slow.fast_s = time.monotonic() - t_start - waited
         except Exception:
             if launch is not None:
                 for _, fut in launch.chains.values():
@@ -1182,12 +1259,132 @@ class Engine:
                 launch.chains[n][1].cancel()
             if unused:
                 self._note("chains_unused_after_interruption", npcs=unused)
-        self._turn_report(player_ev.id, result)
-        for u in result.utterances:
-            self.agents.promote(u.payload["speaker"], sc)
         sc.time += self.minutes_per_turn
-        self.refresh_memory()
+        with self._slow_lock:
+            self._slow = slow
+            if defer_slow and self.parallel:
+                slow.raw = self._submit(self._complete, "extractor", slow.messages)
+        if not defer_slow:
+            self.settle()
+            if self.slow_failure is not None:
+                err, self.slow_failure = self.slow_failure, None
+                raise err
         return result
+
+    # -- the slow lane ---------------------------------------------------------------------
+    def _settle_for_next_turn(self) -> float:
+        """The next turn starts: finish the previous slow lane (it may already be done). Returns
+        the seconds this turn waited for it; recorded in `lane_stats`."""
+        t0 = time.monotonic()
+        with self._slow_lock:  # blocks while another thread is applying the slow lane
+            pending = self._slow is not None
+            self.settle()
+        waited = time.monotonic() - t0
+        if self.lane_stats and (pending or waited > 0.05):
+            self.lane_stats[-1].update(waited_s=round(waited, 3), needed=waited > 0.05)
+        return waited
+
+    def settle(self) -> bool:
+        """Apply the slow lane of the last turn: extraction, facts, state changes, salience,
+        attitudes, the turn report, agent promotion, memory files, then the hooks in
+        `after_settle` (the world). Idempotent, one thread at a time, always in this order, so the
+        event log does not depend on timing. A failure rolls the whole turn back and is left in
+        `slow_failure` (it is not raised here, because the caller may be the next turn)."""
+        with self._slow_lock:
+            slow = self._slow
+            if slow is None:
+                return False
+            self._slow = None
+            t0 = time.monotonic()
+            sc = self.scene
+            real_time = sc.time
+            sc.time = slow.time  # the facts of the turn carry the time of the turn
+            try:
+                first = self._take(slow.raw) if slow.raw is not None else None
+                diff = self._extract(slow.segments, slow.outcomes, messages=slow.messages,
+                                     first_raw=first)
+                slow.result.fact_ids = self._commit(diff, slow.sources)
+                self._turn_report(slow.player_event.id, slow.result)
+                for u in slow.result.utterances:
+                    self.agents.promote(u.payload["speaker"], sc)
+                self._prefetch()
+                sc.time = real_time
+                self.process_natural_deaths()
+                self.refresh_memory()
+                for hook in list(self.after_settle):
+                    hook()
+                self.after_settle.clear()
+            except Exception as e:  # noqa: BLE001 - the turn is undone, the caller decides
+                sc.time = real_time
+                for ev in slow.turn_events:
+                    self.log.rollback(ev.id, "turn failed")
+                sc.time = slow.time  # the turn's minutes did not happen
+                self.after_settle.clear()
+                self.refresh_memory()
+                self.slow_failure = e
+                self._note("slow_lane_failed", error=repr(e)[:200])
+            self.lane_stats.append({"fast_s": round(slow.fast_s, 3),
+                                    "slow_s": round(time.monotonic() - t0, 3),
+                                    "waited_s": 0.0, "needed": False})
+            return True
+
+    def _prefetch(self) -> None:
+        """Work for the next turn that does not depend on what the player will write: the manner
+        notes of whoever is in the scene (one cheap call, once per NPC)."""
+        for npc in self.scene.present:
+            if npc != PLAYER:
+                self._ensure_manner(npc)
+
+    def _resolve_npc_acts(self, launch: "_Launch", result: "TurnResult", turn_events: list[Event],
+                          sources: dict[str, Event], segments: list[tuple[str, str]],
+                          on_narration: Callable[[str], None] | None) -> list[Outcome]:
+        """Acts of NPCs toward the player (attack, theft, arrest) are judged like the player's
+        own: the world decides, then one short paragraph narrates only that. The director has
+        already listed the acts, so this is the step after the first narration."""
+        acts = [("", a) for a in launch.out.actions]
+        acts += [(u.payload["speaker"], b) for u in result.utterances
+                 for b in ([] if self.style is None else split_npc_output(u.payload["text"]).beats)]
+        got = self.outcome_judge.npc_acts(acts, unbounded=self.ctx.player_unlimited)
+        done: list[Outcome] = []
+        for o in got:
+            o2, ev = record_outcome(self, o, turn_events[0] if turn_events else None)
+            turn_events.append(ev)
+            if o2.died:
+                turn_events.append(record_death(self, o2, ev))
+            done.append(o2)
+            para = self._resolution_paragraph(o2)
+            if para:
+                nev = self._event(NARRATION, [], {"text": para}, witnesses=[], notability=0.4,
+                                  cause_id=ev.id)
+                turn_events.append(nev)
+                key = f"narration~{len(done) + 1}"
+                sources[key] = nev
+                segments.append((key, para))
+                result.narration = result.narration + "\n\n" + para
+                if on_narration is not None:
+                    on_narration(para)
+        return done
+
+    def _resolution_paragraph(self, o: Outcome) -> str:
+        sc = self.scene
+        user = (self.ctx._scene_header(sc, PLAYER) + "\n\n" + o.for_narrator()
+                + "\n\nWrite one to three sentences that narrate only how this resolves, from the "
+                "player character's point of view. No speech, no quotation marks, no dialogue "
+                "dashes."
+                + (f" Write in {self.output_language}." if self.output_language else ""))
+        for _ in range(2):
+            try:
+                text = self._prose_of(self._complete("narrator", self.ctx.finish([
+                    {"role": "system", "content": "You are the narrator of a role-playing game. "
+                     "Write vivid prose."},
+                    {"role": "user", "content": user}], PLAYER))).strip()
+            except ProviderError as e:
+                self._note("resolution_unavailable", error=str(e))
+                return ""
+            text = self._fix_names(text, "narration")
+            if text and not has_speaker_line(text, self._npc_names) and not has_dash_speech(text):
+                return self.names.mask(PLAYER, text)
+        return ""
 
     # -- interruption ---------------------------------------------------
     def _record_interruption(self, spoken_ev: Event, sr: StreamResult) -> list[Event]:
@@ -1340,6 +1537,66 @@ class Engine:
         self.refresh_memory()
         res.regenerated, res.text, res.new_event = True, text, new.id
 
+    # -- long-run NPCs (task 19) -----------------------------------------------------------
+    def add_npc(self, spec: NpcSpec, *, description: str = "", appearance: str = "") -> CharacterProfile:
+        """A generated NPC joins the cast: profile with its immutable core, vitals for aging and
+        natural death. The id and the name must be new."""
+        if spec.id in self.profiles:
+            raise ValueError(f"{spec.id!r} already exists")
+        used = taken_names(self.profiles.values())
+        if spec.name.lower() in used:
+            raise ValueError(f"the name {spec.name!r} is already in the campaign")
+        prof = spec.profile(description, appearance)
+        self.profiles[spec.id] = prof
+        self.vitals.register(spec.vitals)
+        if self._owns_conn:
+            self._save_setup()
+        return prof
+
+    def fresh_npc(self, slot: str | int, culture: str, **kw: Any) -> NpcSpec:
+        """A non-canon NPC from the code tables, seeded by the campaign seed and `slot`; the name
+        is never one already in the campaign (cast, glossary names)."""
+        extra = ([e.canonical for e in self.glossary.entries if e.kind == "person"]
+                 if self.glossary else [])
+        spec = generate_npc(self.seed, slot, culture=culture,
+                            used=[*taken_names(self.profiles.values(), extra)],
+                            now_t=self.scene.time, **kw)
+        return spec
+
+    def set_core(self, npc: str, core: str) -> None:
+        """Set an NPC's immutable core once (a second, different core is refused)."""
+        self.profiles[npc] = with_core(self.profiles[npc], core)
+        if self._owns_conn:
+            self._save_setup()
+
+    def dead(self) -> set[str]:
+        return {e.payload["character"] for e in self.log.active(["npc_death"])}
+
+    def process_natural_deaths(self, now_t: int | None = None) -> list[Event]:
+        """Natural deaths due by `now_t` (code, from the vitals tables): the person leaves the
+        scene, a fact records it for those who were with them, the model only narrates it later."""
+        now = self.scene.time if now_t is None else now_t
+        out: list[Event] = []
+        for v in self.vitals.due(now, self.dead()):
+            who = self.profiles.get(v.character)
+            if who is None:
+                continue
+            ev = self.log.append(
+                "npc_death", game_time=v.death_t if v.death_t <= now else now,
+                location=self.scene.location, participants=[v.character], witnesses=[],
+                notability=0.4, payload={"character": v.character, "age": v.age(v.death_t),
+                                         "cause": "natural", "text": f"{who.name} died of old age"})
+            knowers = [(c, WITNESSED, None) for c in self.scene.present
+                       if v.character in self.scene.present and c != v.character]
+            self.facts.add_campaign(f"{who.name} died of natural causes at the age of "
+                                    f"{v.age(v.death_t)}", source_event_id=ev.id,
+                                    game_time=ev.game_time, location=self.scene.location,
+                                    notability=0.4, knowers=knowers)
+            if v.character in self.scene.present:
+                self.leave_scene(v.character, stay_nearby=False)
+            out.append(ev)
+        return out
+
     # -- off-screen -----------------------------------------------------
     def advance_offscreen(self, minutes: int) -> None:
         start = self.scene.time
@@ -1364,13 +1621,15 @@ class Engine:
     def _save_setup(self) -> None:
         with self.conn:
             for k, v in {
-                "profiles": [[p.id, p.name, p.description, p.manner, p.appearance]
+                "profiles": [[p.id, p.name, p.description, p.manner, p.appearance, p.core]
                              for p in self.profiles.values()],
                 "settings": {"output_language": self.output_language,
                              "record_language": self.record_language,
                              "narration": self.narration,
                              "minutes_per_turn": self.minutes_per_turn,
-                             "player_unlimited": self.ctx.player_unlimited},
+                             "player_unlimited": self.ctx.player_unlimited,
+                             "outcomes": self.outcomes_on, "seed": self.seed},
+                "vitals": self.vitals.to_json(),
             }.items():
                 self.conn.execute("INSERT OR REPLACE INTO campaign_meta (key, value) VALUES (?,?)",
                                   (k, json.dumps(v)))
@@ -1417,6 +1676,7 @@ class Engine:
         for k, v in meta.get("settings", {}).items():
             kw.setdefault(k, v)
         eng = cls(provider, kw.pop("profiles", profiles), scene, conn=conn, campaign_dir=d, **kw)
+        eng.vitals = VitalsBook.from_json(meta.get("vitals", []))
         eng._owns_conn = True
         eng.refresh_memory()
         return eng

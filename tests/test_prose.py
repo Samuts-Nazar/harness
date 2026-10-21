@@ -89,7 +89,7 @@ def script():
 def test_narrator_prompt_asks_for_prose_not_json_and_reply_is_stored_as_is():
     eng, prov = prose_engine(script(), judge=director_judge("innkeeper", also=("Dandelion",)))
     res = eng.turn("Hello.")
-    p = calls(prov, "narrator")[0][1]["content"]
+    p = "\n".join(m["content"] for m in calls(prov, "narrator")[0])
     assert "JSON" in p and "no JSON" in p and "observable_actions" not in p and "speakers" not in p
     assert res.narration == "The fire pops and the innkeeper wipes a mug."
     assert [u.payload["speaker"] for u in res.utterances] == ["innkeeper", "bard"]

@@ -182,6 +182,8 @@ class Spend:
 
     def __init__(self, cap: float | None = None) -> None:
         self.total, self.cap, self.calls = 0.0, cap, 0
+        # prompt-cache numbers reported by OpenRouter (usage.prompt_tokens_details)
+        self.prompt_tokens = self.cached_tokens = self.cache_write_tokens = 0
         self._lock = threading.Lock()
 
     def check(self) -> None:
@@ -192,3 +194,13 @@ class Spend:
         with self._lock:
             self.calls += 1
             self.total += float((usage or {}).get("cost") or 0)
+            u = usage or {}
+            det = u.get("prompt_tokens_details") or {}
+            self.prompt_tokens += int(u.get("prompt_tokens") or 0)
+            self.cached_tokens += int(det.get("cached_tokens") or 0)
+            self.cache_write_tokens += int(det.get("cache_write_tokens") or 0)
+
+    def cache_hit_rate(self) -> float:
+        """Share of prompt tokens that were read from the provider's cache."""
+        with self._lock:
+            return self.cached_tokens / self.prompt_tokens if self.prompt_tokens else 0.0

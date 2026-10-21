@@ -326,7 +326,7 @@ class CanonPlay:
         cid = self.made.get(entity) or self.ensure_character(eng, entity)
         stored = self._stored_background(eng, cid, entity)
         denied = self._denied(eng, cid)
-        b = background(self.canon, entity, topic, judge=judge, as_of=self.start.start_t + eng.scene.time, phrase=phrase,
+        b = background(self.canon, entity, topic, judge=judge, as_of=self.start.to_story_t(eng.scene.time), phrase=phrase,
                        stored=stored, denied=denied)
         if b is None:
             if not any(_tokens(topic) & _tokens(d) for d in denied):

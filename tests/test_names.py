@@ -101,8 +101,9 @@ def test_the_narrator_context_is_the_player_characters_view():
 
 def test_glossary_line_does_not_offer_names_the_viewer_does_not_know():
     eng, _ = make({}, glossary=Glossary.for_world("witcher"))
-    sys_n = eng.ctx.narrator(eng.scene, "I wait.")[0]["content"]
-    sys_h = eng.ctx.character("horst", eng.scene)[0]["content"]
+    # the glossary line now sits at the tail of the prompt (cache-friendly), so read all of it
+    sys_n = "\n".join(m["content"] for m in eng.ctx.narrator(eng.scene, "I wait."))
+    sys_h = "\n".join(m["content"] for m in eng.ctx.character("horst", eng.scene))
     assert "Горст" not in sys_n and "Ельза" not in sys_n
     assert "Рагнар" not in sys_h and "Ельза" in sys_h
 

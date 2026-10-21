@@ -78,7 +78,7 @@ def test_context_is_rendered_through_the_glossary_and_lists_names():
     eng.turn("Я показую Kaer Morhen на мапі.")
     npc = [m for mod, m in prov.calls if mod == "npc"][0]
     assert "Горст fears the mill at Каер Морен." in npc[1]["content"]
-    assert "Horst" not in npc[1]["content"] and "exactly in these forms" in npc[0]["content"]
+    assert "Horst" not in npc[1]["content"] and "exactly in these forms" in npc[-1]["content"]
     ext = [m for mod, m in prov.calls if mod == "extractor"][-1]
     assert "stay in Ukrainian" in ext[1]["content"]
 

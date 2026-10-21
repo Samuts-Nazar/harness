@@ -42,6 +42,7 @@ LINES = {
         "скільки йому заплатили за твою голову, відьмаку.",
     ],
 }
+GENERIC_LINES = ["Гм. Чого тобі, чужинцю?", "Я вже все сказав. Іди своєю дорогою."]
 LOOKS = {  # what the offline stack "reads" from a character file when there is one
     "label": "юнак із золотими очима та мечем",
     "observable": [{"category": "appearance", "item": "golden eyes"},
@@ -100,9 +101,10 @@ class FakeUk:
                         "state_changes": [CHANGES[i]] if i < len(CHANGES) else []}
                 return json.dumps(diff, ensure_ascii=False)
             name = sys[8:].split(".")[0]
+            lines = LINES.get(name, GENERIC_LINES)  # any other cast (the Vizima campaign)
             i = self.lines.get(name, 0)
             self.lines[name] = i + 1
-            return LINES[name][i % len(LINES[name])]
+            return lines[i % len(lines)]
 
     def stream(self, model, messages):  # type: ignore[no-untyped-def]
         yield self.complete(model, messages)
@@ -161,7 +163,11 @@ def live_stack(budget: float = 0.25) -> Stack:
     if not key:
         raise SystemExit("--live needs OPENROUTER_API_KEY (env or .env)")
     spend = Spend(budget)
-    provider = OpenRouterProvider(key, spend=spend)
+    import uuid
+
+    # one session id per run: OpenRouter routes the whole session to the same endpoint, so the
+    # prompt cache of the long, stable prompt prefix is hit (task 19)
+    provider = OpenRouterProvider(key, spend=spend, session_id=f"harness-{uuid.uuid4().hex[:16]}")
     models = ModelConfig.live()
     first = FallbackJudge(DecisionJudge(key, DEFAULT_JUDGE_FIRST, spend=spend),
                           DecisionJudge(key, FALLBACKS["judge_first"], spend=spend))
