@@ -180,3 +180,17 @@ def test_a_broken_answer_from_the_model_keeps_the_plain_seeds(tmp_path):
         "hidden": [{"category": "appearance", "item": "golden eyes"},
                    {"category": "injury", "item": "scar"}]}))
     assert t.observable == [("appearance", "golden eyes")] and t.hidden == [("injury", "scar")]
+
+
+def test_challenge_withdrawn_line_leaves_no_empty_bubble():
+    stack = fake_stack()
+    g = make(stack)
+    c = TestClient(create_app(g))
+    c.post("/api/turn", json={"text": "Що сталося на млині?"})
+    g.wait_idle()
+    ev = next(e for e in g.transcript if e["kind"] == "npc")["event"]
+    stack.judge.rules["knowledge_channel"] = "none"
+    stack.judge.rules["challenge_still_has"] = True  # every candidate and sentence carries it
+    r = c.post("/api/challenge", json={"event": ev, "explanation": "не міг знати"}).json()
+    assert r["verdict"] == "no_channel" and r["withdrawn"] and not r["regenerated"]
+    assert not [e for e in c.get("/api/state").json()["transcript"] if e["kind"] == "npc"]

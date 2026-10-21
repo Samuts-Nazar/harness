@@ -376,9 +376,28 @@ class FakeJudge(Judge):
         return Judgment((q.lo + hi) / 2 if a is None else float(a), backend="fake")
 
 
+def fake_next_floor(q: Question, state: Sequence[str]) -> str:
+    """Offline exchange director: the first NPC takes the first step, then the floor goes back
+    to the player (one line per turn, never a monologue to the cap)."""
+    from .director import EXCHANGE_HEADER, PLAYER_FLOOR  # director imports this module
+
+    if any(str(x).startswith(EXCHANGE_HEADER) for x in state):
+        return PLAYER_FLOOR
+    return next(iter(q.options))
+
+
+def fake_needs_narration(q: Question, state: Sequence[str]) -> bool:
+    """Offline: narrate the first turn of a scene (nothing said or done yet), then usually not."""
+    recent = [x for x in state if str(x).startswith("Recent:")]
+    return not recent or len(str(recent[0]).splitlines()) <= 2  # header + the player's own line
+
+
 def default_fake_judge() -> FakeJudge:
-    """Offline default: no leaks, no speech, not salient, neutral attitudes."""
-    return FakeJudge({"attitude_direction": "neutral", "relationship_magnitude": 0})
+    """Offline default: no leaks, no speech, not salient, neutral attitudes; in a living
+    exchange one NPC line, then the player."""
+    return FakeJudge({"attitude_direction": "neutral", "relationship_magnitude": 0,
+                      "director_next": fake_next_floor,
+                      "director_narration": fake_needs_narration})
 
 
 class StubJudge(FakeJudge):

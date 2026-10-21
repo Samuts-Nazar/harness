@@ -13,12 +13,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator
 
+from harness.decisions import full_role
 from harness.glossary import Glossary
 from harness.models import (
     ACTION, APPEARANCE, EQUIPMENT, INJURY, INTERNAL, NARRATION, PLAYER, UTTERANCE, CharacterProfile,
     Scene,
 )
 from harness.pipeline import Engine, ModelConfig
+from harness.profile import load_profile
 from harness.providers import Messages, Provider
 from harness.state import StateChange, StateError
 
@@ -95,24 +97,7 @@ class Recorder:
 
     @staticmethod
     def role(messages: Messages) -> str:
-        sys = messages[0]["content"] if messages else ""
-        if "Rumour writer" in sys:
-            return "world: rumour"
-        if "narrator" in sys:
-            return "narrator"
-        if "fact extractor" in sys:
-            return "extractor"
-        if "character sheet" in sys:
-            return "setup: looks"
-        if "observable actions" in sys:
-            return "director: actions"
-        if "You help write characters" in sys:
-            return "manner notes"
-        if "translate" in sys.lower():
-            return "translator"
-        if sys.startswith("You are "):
-            return "npc: " + sys[8:].split(".")[0]
-        return "judge"
+        return full_role(messages)
 
     def complete(self, model: str, messages: Messages) -> str:
         role = self.role(messages)
@@ -186,6 +171,16 @@ class Campaign:
             if e.type == NARRATION:
                 out.append({"kind": "narr", "text": e.payload["text"]})
                 continue
+            if e.type == ACTION and e.payload.get("gesture"):
+                # a gesture-only step of an NPC, shown as their action (as the live path does)
+                by = e.payload.get("by") or (e.participants[0] if e.participants else "")
+                names = self.engine.names
+                text = (names.mask(PLAYER, str(e.payload.get("text", "")), before=e.id)
+                        if names else str(e.payload.get("text", ""))).strip()
+                if text:
+                    out.append({"kind": "npc_act", "who": by, "text": text,
+                                "name": self.engine.ctx.label(PLAYER, by, e.id)})
+                continue
             if e.type == ACTION and e.payload.get("actor") != PLAYER:
                 continue  # observable actions of narration are not shown as such
             who = e.payload.get("speaker", e.payload.get("actor"))
@@ -228,6 +223,11 @@ def _pointer(root: Path) -> Path:
     return root / "current.txt"
 
 
+# "living": multi-line NPC exchanges, optional narration (default). "classic": the old director,
+# kept for A/B generation (`python -m app --dialogue classic`).
+DIALOGUE = "living"
+
+
 def open_campaign(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = False,
                   name: str | None = None, data_file: Path | str | None = None) -> Campaign:
     """Continue the current campaign, or start a new one (`new=True`, or none exists yet)."""
@@ -241,7 +241,8 @@ def open_campaign(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = Fal
         name = cur.read_text().strip()
     if name and not new and Engine.campaign_exists(name, root):
         eng = Engine.open_campaign(name, rec, root=root, models=stack.models, judge=stack.judge,
-                                   glossary=glossary, style=Style.load("witcher"))
+                                   glossary=glossary, style=Style.load("witcher"),
+                                   dialogue=DIALOGUE, world_profile=load_profile("witcher"))
     else:
         name = name if (new and name) else time.strftime("inn-%Y%m%d-%H%M%S")
         while Engine.campaign_exists(name, root):
@@ -252,7 +253,7 @@ def open_campaign(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = Fal
             name, rec, profiles(traits.label if traits and traits.label else PLAYER_LOOK),
             Scene(TITLE, ("horst", "elza"), START_TIME), root=root,
             models=stack.models, judge=stack.judge, glossary=glossary,
-            style=Style.load("witcher"))
+            style=Style.load("witcher"), dialogue=DIALOGUE, world_profile=load_profile("witcher"))
         eng.acquaint("horst", "elza")  # neighbours: they know each other by name
         for text, knowers in SEEDS:
             eng.facts.add_canon(text, knowers=[(k, "told") for k in knowers])

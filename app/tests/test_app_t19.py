@@ -43,6 +43,8 @@ def test_vizima_turn_streams_and_the_slow_lane_settles(tmp_path):
     assert "turn_done" in types and types[-1] == "settled"
     assert g.debug["timing"]["slow_s"] >= 0 and g.debug["lanes"]["fast_s"] >= 0
     assert "world" in g.debug
+    dec = g.debug["decisions"]
+    assert dec["turn"]["total"] > 0 and dec["session"]["total"] == dec["scene"]["total"]
 
 
 def test_vizima_reopens_where_it_stopped(tmp_path):
@@ -76,3 +78,22 @@ def test_vizima_on_the_real_canon_store(tmp_path):
     assert "velerad" in eng.profiles and eng.profiles["velerad"].name == "Велерад"
     assert any(f for f in eng.facts.visible_to("velerad", eng.scene.time, store="canon"))
     assert set(g.camp.world.collectives) == {"vizim_townsfolk", "vizim_guards", "velerad", "foltest"}
+
+
+def test_scene_totals_attribute_a_turn_to_its_starting_location(tmp_path):
+    from harness.decisions import DecisionCount
+    g = make(tmp_path)
+    one = DecisionCount(1, 0, {}, 0)
+    g._decisions(one, "inn")
+    g._decisions(one, "inn")
+    out = g._decisions(one, "road")  # a turn that began on the road, wherever it ended
+    assert out["scene"]["judgments"] == 1 and out["session"]["judgments"] == 3
+
+
+def test_vizima_debug_has_the_session_dialogue_profile(tmp_path):
+    g = make(tmp_path)
+    g.start_turn("Сідаю біля стійки й замовляю пива.")
+    g.wait_idle(20)
+    d = g.debug["dialogue"]
+    assert d is None or ("median_words" in d and "length_bins_l1" in d["distance"])
+    assert g.eng.world_profile is not None and g.eng.shape_prior

@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any, Callable, Sequence
 
 from ..facts import _tokens
 from ..judge import Judge, JudgeError
-from ..models import HEARD, SCRIPTED, TOLD, WITNESSED, CharacterProfile
+from ..models import HEARD, SCRIPTED, TOLD, WITNESSED, CharacterProfile, format_time
 from .api import Background, CanonCampaign, EventVerdict, Knower, ScheduledEvent
 from .retrieve import Canon
 
@@ -386,6 +386,103 @@ class CanonPlay:
 
     def guard(self, judge: Judge) -> CanonGuard:
         return CanonGuard(self.canon, judge, offset=self.start.offset)
+
+
+# ---- who can be in a scene (living dialogue task 9) --------------------------------------------
+NEAR_MINUTES = 240   # a canon event this close in time to now says where its people are
+
+
+class CanonCast:
+    """The canon calendar for `harness.scene_cast.SceneCast`: which canon person a narration names,
+    where canon puts them at a time, and their engine character (a profile from canon, with what they
+    knew at the start). `places`: canon place entity -> world place id; an unmapped place is compared
+    with the scene's location by name."""
+
+    def __init__(self, play: CanonPlay, *, places: dict[str, str] | None = None,
+                 near: int = NEAR_MINUTES) -> None:
+        self.play, self.places, self.near = play, dict(places or {}), near
+
+    @property
+    def canon(self) -> Canon:
+        return self.play.canon
+
+    def identify(self, mention: str) -> str | None:
+        with self.canon._lock:
+            for ent in self.canon._mentioned(mention):
+                r = self.canon.con.execute("SELECT type FROM entity WHERE id=?", (ent,)).fetchone()
+                if r is not None and r["type"] == "person":
+                    return ent
+        return None
+
+    def cid(self, entity: str) -> str:
+        return self.play.made.get(entity) or cid_of(entity)
+
+    def _is_here(self, place: str | None, place_name: str, here_place: str | None, here_name: str) -> bool:
+        if place is not None and place in self.places and here_place is not None:
+            return self.places[place] == here_place
+        return bool(here_name) and place_name.strip().lower() == here_name.strip().lower()
+
+    def whereabouts(self, entity: str, t: int, here_place: str | None, here_name: str) -> "Whereabouts":
+        """Where canon puts the person at campaign time `t`: the canon event with them that is nearest
+        in time (within `near` minutes) and has a place. None near: the interval they are in, between the
+        last known canon place before now and the next one after; both elsewhere is ELSEWHERE (lodged
+        there), both here is HERE, anything else UNKNOWN with what is known (for a plausibility judgment)."""
+        from ..scene_cast import ELSEWHERE, HERE, UNKNOWN, Whereabouts
+        st = self.play.start.to_story_t(t)
+        with self.canon._lock:
+            rows = self.canon.con.execute(
+                "SELECT r.t_from, r.place, c.day, c.gist_uk, r.body FROM canon_participant p "
+                "JOIN record r ON r.id=p.event_id JOIN canon_event c ON c.id=r.id "
+                "WHERE p.entity=? AND r.place IS NOT NULL AND r.t_from BETWEEN ? AND ? "
+                "ORDER BY ABS(r.t_from - ?), r.t_from", (entity, st - self.near, st + self.near, st)).fetchall()
+            if not rows:   # nothing near now: the interval between the last known place and the next
+                q = ("SELECT r.t_from, r.place FROM canon_participant p JOIN record r ON r.id=p.event_id "
+                     "WHERE p.entity=? AND r.place IS NOT NULL AND r.t_from {} ? ORDER BY r.t_from {} LIMIT 1")
+                last = self.canon.con.execute(q.format("<=", "DESC"), (entity, st)).fetchone()
+                nxt = self.canon.con.execute(q.format(">", "ASC"), (entity, st)).fetchone()
+                lname = self.canon.name(last["place"]) if last is not None else ""
+                nname = self.canon.name(nxt["place"]) if nxt is not None else ""
+        if not rows:
+            if last is None and nxt is None:
+                return Whereabouts(UNKNOWN)
+            here = [x is not None and self._is_here(x["place"], nm, here_place, here_name)
+                    for x, nm in ((last, lname), (nxt, nname))]
+            who = self.canon.name(entity)
+            if last is not None and nxt is not None and not any(here):
+                return Whereabouts(ELSEWHERE, f"canon has {who} lodged at {lname} since {format_time(last['t_from'])} "
+                                              f"(story time), next at {nname} at {format_time(nxt['t_from'])}")
+            if last is not None and nxt is not None and all(here):
+                return Whereabouts(HERE, f"canon has {who} here from {format_time(last['t_from'])} "
+                                         f"to {format_time(nxt['t_from'])}")
+            parts = ([f"last seen in canon at {lname}, {round((st - last['t_from']) / 60)} h before now"]
+                     if last is not None else []) + (
+                [f"next in canon at {nname}, {round((nxt['t_from'] - st) / 60)} h after now"] if nxt is not None else [])
+            return Whereabouts(UNKNOWN, "; ".join(parts))
+        with self.canon._lock:
+            r = rows[0]
+            pname = self.canon.name(r["place"])
+        if self._is_here(r["place"], pname, here_place, here_name):
+            return Whereabouts(HERE, f"canon has them here on story day {r['day']}")
+        hours = round(abs(r["t_from"] - st) / 60, 1)
+        when = "now" if hours == 0 else f"{hours} h {'later' if r['t_from'] > st else 'earlier'}"
+        return Whereabouts(ELSEWHERE, f"canon has {self.canon.name(entity)} at {pname} ({when}: "
+                                      f"{(r['gist_uk'] or r['body'])[:120]})")
+
+    def describe(self, entity: str) -> str:
+        p = self.canon.profile(entity) or {}
+        return "; ".join(x for x in (p.get("name"), p.get("who"), p.get("role"), p.get("standing")) if x) \
+            or self.canon.name(entity)
+
+    def admit(self, eng: "Engine", entity: str) -> str:
+        """The engine character (created once from canon); canon people of the campaign who met them
+        before the start know them by name (a reopened campaign has the profile already)."""
+        if entity not in self.play.made and cid_of(entity) in eng.profiles:
+            self.play.made[entity] = cid_of(entity)
+        cid = self.play.ensure_character(eng, entity)
+        for other, ocid in list(self.play.made.items()):
+            if other != entity and ocid in eng.profiles and self.play._acquainted(entity, other):
+                eng.acquaint(cid, ocid, how="canon")
+        return cid
 
 
 def what_knows(eng: "Engine", character: str) -> list[dict[str, Any]]:

@@ -59,3 +59,20 @@ def price_catalog():
     policy.set_catalog(json.loads((Path(__file__).parent / "fixtures" / "catalog.json").read_text()))
     yield
     policy.set_catalog(None)
+
+
+# Modules whose fake judges script the task 12 director ("director_first" / "director_also",
+# at most MAX_SPEAKERS). They are the classic-mode regression suite: run unchanged with
+# `dialogue="classic"` as the engine default (living dialogue, task LD-4). Every other module runs
+# with the real default, "living"; tests/test_exchange.py covers the living exchange loop.
+CLASSIC_DIRECTOR_MODULES = {
+    "test_prose", "test_task19_turn", "test_glossary_repetition", "test_style", "test_decisions",
+    "test_eval_sessions",
+}
+
+
+@pytest.fixture(autouse=True)
+def classic_director_default(request, monkeypatch):
+    if request.module.__name__ in CLASSIC_DIRECTOR_MODULES:
+        monkeypatch.setitem(Engine.__init__.__kwdefaults__, "dialogue", "classic")
+    yield

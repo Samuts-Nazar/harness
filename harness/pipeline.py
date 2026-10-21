@@ -4,6 +4,7 @@ scene entry, live-state perception, and regeneration of the per-character memory
 from __future__ import annotations
 
 import json
+import random
 import re
 import sqlite3
 import threading
@@ -18,7 +19,11 @@ from .attitudes import Attitudes, Notices
 from .belief import BeliefFn, neutral_belief
 from .context import ContextBuilder, NpcView
 from .db import connect
-from .director import decide_speakers, parse_actions
+from .decisions import DecisionCount, count_since
+from .director import (
+    EXCHANGE_HEADER, NOBODY, PLAYER_FLOOR, decide_first_step, decide_next, decide_speakers,
+    parse_actions,
+)
 from .eventlog import EventLog
 from .extractor import Diff, DiffValidationError, parse_diff, validate_diff
 from .facts import FactStore
@@ -61,14 +66,18 @@ from .policy import (
     DEFAULT_EXTRACTOR, DEFAULT_JUDGE_LLM, DEFAULT_NARRATOR, DEFAULT_NPC, FALLBACKS,
 )
 from .providers import Provider, ProviderError
-from .repetition import WINDOW as REPETITION_WINDOW, measure_turn
+from .repetition import WINDOW as REPETITION_WINDOW, measure_turn, sentences
+from .profile import WorldProfile, distance, profile_of_lines
 from .settings import (
-    DEFAULT_NARRATION, DEFAULT_OUTPUT_LANGUAGE, DEFAULT_RECORD_LANGUAGE, MAX_SPEAKERS,
-    NPC_REJECT_P,
+    DEFAULT_DIALOGUE, DEFAULT_NARRATION, DEFAULT_OUTPUT_LANGUAGE, DEFAULT_RECORD_LANGUAGE,
+    MAX_EXCHANGE_LINES, MAX_SPEAKERS, NPC_REJECT_P,
 )
+from .shape import (SPEECH_SHAPES, Shape, beat_wanted, fit_to_shape, sample_shape, shape_prior,
+                    shape_weights, word_bounds)
 from .state import LiveState, StateChange, check_change, payload as change_payload
 from .streaming import InterruptHandle, StreamResult, run_stream
-from .style import Style, beat_as_action, foreign_voice, manner_messages, parse_manner, split_npc_output
+from .style import (Style, beat_as_action, cut_foreign, foreign_runs, foreign_voice,
+                    manner_messages, parse_manner, split_npc_output, tidy_speaker)
 
 ATTITUDE_MIN_NOTABILITY = 0.6  # only notable facts get attitude judgments (cost control)
 FALLBACK_LINE = "I don't know what to tell you."  # no longer shown: the least suspicious candidate is
@@ -101,6 +110,7 @@ class Challenge:
     regenerated: bool = False
     text: str = ""
     new_event: int | None = None
+    withdrawn: bool = False  # the line was removed and nothing replaced it (the NPC says nothing)
 
 
 class InterruptionError(RuntimeError):
@@ -148,10 +158,11 @@ class _NpcPrep:
     view: NpcView
     known_names: frozenset[str] = frozenset()  # snapshot of the names this NPC knows
     player_known: frozenset[str] = frozenset()  # and the player character's
+    instruction: str | None = None  # the closing instruction with a response shape (living mode)
 
     def messages(self, heard: Sequence[str] = (),
                  notes: Sequence[str] = ()) -> list[dict[str, str]]:
-        return self.view.messages(heard, notes)
+        return self.view.messages(heard, notes, self.instruction)
 
     def check_prefix(self, heard: Sequence[str] = ()) -> str:
         return self.view.check_prefix(heard)  # judge state up to "Line: "
@@ -167,6 +178,12 @@ class _Launch:
     speech: Future[_Captured] | None = None
     heard: dict[str, list[str]] = field(default_factory=dict)
     chains: dict[str, tuple[_NpcPrep, Future[_Captured]]] = field(default_factory=dict)
+    # living mode: what the exchange director reads, fixed before the narration is written
+    director: list[str] = field(default_factory=list)
+    npcs: dict[str, str] = field(default_factory=dict)
+    first: Future[_Captured] | None = None  # the first step, asked in a worker (parallel mode)
+    # the first step, already answered (no narration): (floor, shape, the decider's shape dist)
+    first_step: tuple[str, Shape, dict[Shape, float]] | None = None
 
 
 @dataclass
@@ -191,6 +208,7 @@ class _Slow:
     messages: list[dict[str, str]]
     raw: Future[_Captured] | None = None
     fast_s: float = 0.0
+    marks: tuple[int, int, int] = (0, 0, 0)  # judgments, provider calls, devlog at turn start
 
 
 @dataclass
@@ -202,6 +220,13 @@ class TurnResult:
     actions: list[str] = field(default_factory=list)
     repetition: dict[str, Any] = field(default_factory=dict)  # see harness/repetition.py
     names: dict[str, Any] = field(default_factory=dict)  # glossary report of the turn
+    decisions: DecisionCount | None = None  # set when the slow lane settles (harness/decisions.py)
+    # why the NPCs stopped talking: "player_addressed", "nobody", "cap" or "interrupted" (living
+    # mode); classic mode sets only "interrupted"
+    stop_reason: str = ""
+    # living mode, in order: ("line", npc, delivered text), ("gesture", npc, the action as the
+    # player sees it) or ("silence", npc, "")
+    exchange: list[tuple[str, str, str]] = field(default_factory=list)
 
 
 class Engine:
@@ -234,6 +259,8 @@ class Engine:
         player_unlimited: bool = False,
         outcomes: bool = False,
         seed: int | str = 0,
+        dialogue: str = DEFAULT_DIALOGUE,
+        world_profile: WorldProfile | None = None,
     ) -> None:
         """`player_unlimited` (task 17): the player's declared acts happen as declared; the
         narrator and the extractor must not soften them. `parallel`: run the independent calls of a turn concurrently. None (default): only if
@@ -254,9 +281,23 @@ class Engine:
         `style`: Sapkowski-style prompts and exemplars (harness/style.py). With it an NPC line may
         carry the NPC's own beats ("— ..., — озирнувся Горст. — ..."): the line is stored whole, its
         spoken part in `payload['speech']`, and each beat as an observable action of that NPC; a
-        profile without manner notes gets them from a cheap model once."""
+        profile without manner notes gets them from a cheap model once.
+        `dialogue` (living dialogue, task LD-4): "living" (default): in prose mode, when the turn
+        does not fix `speakers`, the scene director picks one step at a time who takes the floor
+        next and the shape of that response, and NPCs may answer each other, until the player is
+        addressed, nobody speaks, `MAX_EXCHANGE_LINES` steps, or an interrupt. "classic": the
+        task 12 director (a first speaker and who also speaks, at most `max_speakers`). Explicit
+        `speakers` and the json narrator's list are spoken as given in both modes.
+        `world_profile`: the world's dialogue numbers (harness/profile.py); the shapes' word
+        bounds follow its length bins."""
         if narration not in ("prose", "json"):
             raise ValueError(f"narration must be 'prose' or 'json', not {narration!r}")
+        if dialogue not in ("living", "classic"):
+            raise ValueError(f"dialogue must be 'living' or 'classic', not {dialogue!r}")
+        self.dialogue, self.world_profile = dialogue, world_profile
+        self.shape_prior = shape_prior(world_profile)  # "" without a profile
+        self.session_lines: list[str] = []  # the NPCs' delivered lines, for the dialogue report
+        self._draws = 0  # code draws of shapes and beats (main thread), for a seeded rng
         self.conn = conn or connect()
         self._owns_conn = conn is None
         self.provider, self.models, self.scene = provider, models, scene
@@ -279,6 +320,10 @@ class Engine:
         self.vitals = VitalsBook()
         self.outcome_judge = OutcomeJudge(self)
         self.canon_guard: Any = None   # harness.canon.play.CanonGuard: narrated output that contradicts canon is regenerated
+        # harness.scene_cast.SceneCast: people the narration brings in are admitted or the
+        # narration is regenerated (living dialogue task 9); None: not checked
+        self.scene_cast: Any = None
+        self._admitted: list[tuple[Event, bool, bool]] = []  # this turn: (entry, new profile, was outside)
         self._fixes: list[dict[str, str]] = []  # glossary replacements of the running turn
         self._fixes_lock = threading.Lock()
         self._tl = threading.local()
@@ -286,6 +331,8 @@ class Engine:
         self._slow_lock = threading.RLock()
         self.slow_failure: BaseException | None = None
         self.after_settle: list[Callable[[], None]] = []  # run after the slow lane (the world)
+        self.llm_calls: list[str] = []  # role of every model call attempt (harness/decisions.py)
+        self.last_decisions: DecisionCount | None = None  # of the last settled turn, failed or not
         self.lane_stats: list[dict[str, Any]] = []  # per turn: fast, slow and wait seconds
         self._pool: ThreadPoolExecutor | None = None
         self.devlog: list[dict[str, Any]] = []  # engine-side events for the debug view
@@ -329,13 +376,31 @@ class Engine:
         """One model call for `role`; if it fails after retries, the role's fallback model."""
         model = getattr(self.models, role)
         fallback = getattr(self.models, role + "_fallback", None)
+        self.llm_calls.append(role)  # counted here, so any provider is counted
         try:
             return self.provider.complete(model, messages)
         except ProviderError as e:
             if not fallback:
                 raise
             self._note("model_fallback", role=role, model=model, fallback=fallback, error=str(e))
+            self.llm_calls.append(role)
             return self.provider.complete(fallback, messages)
+
+    def _complete_text(self, role: str, messages: list[dict[str, str]]) -> str:
+        """A creative call (narrator, NPC) whose output must stay in the output language's
+        script: letters of another script (a stray "天天爱彩票") make it ask once more; if the
+        second answer has them too, the foreign runs are cut."""
+        text = self._complete(role, messages)
+        runs = foreign_runs(text, self.output_language)
+        if not runs:
+            return text
+        self._note("script_regenerated", role=role, runs=runs)
+        text = self._complete(role, messages)
+        runs = foreign_runs(text, self.output_language)
+        if runs:
+            self._note("script_cut", role=role, runs=runs)
+            text = cut_foreign(text, self.output_language)
+        return text
 
     def _run_captured(self, fn: Callable[..., Any], *args: Any) -> _Captured:
         """Run in a worker: notes and judgments go to private buffers, not to the shared logs."""
@@ -411,6 +476,17 @@ class Engine:
         return done
 
     @property
+    def _name_words(self) -> list[str]:
+        """Every word of every character's name, and each whole description (a beat shown to a
+        player who does not know the name says «жінка в темній хустці ...»; its first word alone
+        is not a name), for `split_npc_output(names=...)`: a piece between dashes that names a
+        character is a beat, not speech."""
+        out = {w for p in self.profiles.values() for w in re.findall(r"[\w'’]+", p.name)
+               if len(w) > 2 and w[0].isupper()}
+        out |= {p.appearance.strip() for p in self.profiles.values() if p.appearance.strip()}
+        return sorted(out)
+
+    @property
     def _npc_names(self) -> list[str]:
         return [p.name for c, p in self.profiles.items() if c != PLAYER] + [
             c for c in self.profiles if c != PLAYER]
@@ -441,7 +517,8 @@ class Engine:
 
     def _ids_for_names(self, data: Any) -> Any:
         """The extractor sometimes answers with a character's display name where an id is
-        required (a "source" or "character" field); map the name back to the id."""
+        required (a "source" or "character" field); map the name back to the id. A source may
+        carry a line suffix: «Горст~2» (the display name plus ~N) is the segment `horst~2`."""
         by_name = {p.name.lower(): c for c, p in self.profiles.items()}
         if isinstance(data, dict):
             for key in ("new_facts", "state_changes"):
@@ -449,8 +526,15 @@ class Engine:
                     if isinstance(item, dict):
                         for f in ("source", "character"):
                             v = item.get(f)
-                            if isinstance(v, str) and v not in self.profiles:
-                                item[f] = by_name.get(v.strip().lower(), v)
+                            if not isinstance(v, str) or v in self.profiles:
+                                continue
+                            base, sep, n = v.strip().partition("~")
+                            if f == "source" and sep and n.strip().isdigit():
+                                cid = by_name.get(base.strip().lower())
+                                if cid is not None:
+                                    item[f] = f"{cid}~{n.strip()}"
+                                continue
+                            item[f] = by_name.get(v.strip().lower(), v)
         return data
 
     # -- narrator -------------------------------------------------------
@@ -502,9 +586,13 @@ class Engine:
         no actions or speakers yet: the scene director fills them in."""
         sc = self.scene
         raw, parsed = "", None
+        notes: list[str] = []  # why earlier drafts were rejected, when the narrator can fix it
+        # the cast review's last draft that passed it, and the last one that drifted (task LD-9)
+        cast: dict[str, tuple[NarratorOutput, Any]] = {}
         for attempt in range(self.narrate_retries + 1):
-            raw = self._complete("narrator", self.ctx.narrator(
-                sc, player_text, outcome.for_narrator() if outcome else None)).strip()
+            admitted: list[tuple[Event, bool, bool]] = []
+            raw = self._complete_text("narrator", self._with_notes(self.ctx.narrator(
+                sc, player_text, outcome.for_narrator() if outcome else None), notes)).strip()
             if self.narration == "prose":
                 text = self._prose_of(raw)
                 if not text:
@@ -533,14 +621,24 @@ class Engine:
                     why := self.canon_guard.check("\n".join(out.texts()), "narration")) is not None:
                 self._note("canon_drift_rejected", attempt=attempt, why=why, text=out.description)
                 ok = False
+            elif self.scene_cast is not None and (
+                    why := self._cast_review(out, admitted, attempt, cast)) is not None:
+                notes.append(why)
+                ok = False
             elif on_candidate is not None:
                 ok = on_candidate(self._valid_speakers(out))
             else:
                 ok = not self._speech_judged("\n".join(out.texts()))
             if ok:
                 return self._valid_speakers(out)
+            self._unadmit(admitted)
             self._note("narrator_speech_rejected", attempt=attempt, text=out.description)
         names = self._npc_names
+        late: tuple[NarratorOutput, Any] | None = None  # people to admit into the delivered draft
+        if "ok" in cast:  # never deliver a person who cannot be here: the last draft that passed
+            parsed, late = cast["ok"][0], cast["ok"]
+        elif "drift" in cast:  # every reviewed draft drifted: remove the people, keep the rest
+            parsed, late = self._remove_absent(*cast["drift"]), cast["drift"]
         if parsed is None:
             parsed = NarratorOutput(self._fix_names(self._prose_of(raw), "narration"))
         mask = lambda t: self.names.mask(PLAYER, t)  # noqa: E731 - last resort: no unknown name
@@ -553,7 +651,92 @@ class Engine:
             stripped.description = "..."
         self._note("narrator_speech_stripped", before=parsed.description,
                    after=stripped.description)
+        if late is not None:
+            self._cast_admit(stripped, late[1], [], -1)
         return self._valid_speakers(stripped)
+
+    @staticmethod
+    def _with_notes(messages: list[dict[str, str]], notes: Sequence[str]
+                    ) -> list[dict[str, str]]:
+        """The narrator's messages with the reasons earlier drafts were rejected, at the end."""
+        if not notes or not messages:
+            return messages
+        last = messages[-1]
+        return [*messages[:-1], {**last, "content": last["content"] + "\n\nNote on your earlier "
+                                 "draft: " + " ".join(dict.fromkeys(notes))}]
+
+    def _cast_review(self, out: NarratorOutput, admitted: list[tuple[Event, bool, bool]],
+                     attempt: int, cast: dict[str, tuple[NarratorOutput, Any]]) -> str | None:
+        """People the narration shows present who are not in the scene (main thread). A person
+        who cannot be here (canon calendar, the world, a plausibility judgment) makes the draft
+        drift: the reason is returned and the narrator writes again with it. Everyone else enters
+        the scene now (`_cast_admit`). `admitted` collects the entries, undone if the draft is
+        rejected later. `cast` keeps the last draft that passed ("ok") and the last that drifted
+        ("drift"), with their reviews, for the case that every draft is rejected."""
+        rv = self.scene_cast.review(self, "\n".join(out.texts()))
+        draft = NarratorOutput(out.description, list(out.actions), list(out.speakers))
+        if rv.reject is not None:
+            cast["drift"] = (draft, rv)
+            self._note("narrator_absent_character", attempt=attempt, people=rv.people,
+                       absent=rv.absent, why=rv.reject, text=out.description)
+            return rv.reject
+        cast["ok"] = (draft, rv)
+        self._cast_admit(out, rv, admitted, attempt)
+        return None
+
+    def _cast_admit(self, out: NarratorOutput, rv: Any, admitted: list[tuple[Event, bool, bool]],
+                    attempt: int) -> None:
+        """The people a review admits enter the scene (`enter_scene`, a profile from canon or
+        npcgen), so they can speak and the director can pick them; a name the player character
+        has not learned is replaced by how the person looks."""
+        for adm in rv.admit:
+            before = set(self.profiles)
+            cid = self.scene_cast.character_for(self, adm)
+            if cid in self.scene.present:
+                continue
+            outside = cid in self.scene.outside
+            ev = self.enter_scene(cid)
+            # only a generated passer-by's profile is dropped on undo; a canon profile stays
+            # made (harness/canon/play.py keeps it), as for any canon person of the campaign
+            entry = (ev, adm.kind == "passer_by" and cid not in before, outside)
+            admitted.append(entry)
+            self._admitted.append(entry)
+            self._note("character_admitted", attempt=attempt, character=cid, how=adm.kind,
+                       mention=adm.mention)
+        if admitted:  # names stay knowledge: a newcomer is shown by appearance
+            out.description = self.names.mask(PLAYER, out.description)
+            out.actions = [self.names.mask(PLAYER, a) for a in out.actions]
+
+    def _remove_absent(self, draft: NarratorOutput, rv: Any) -> NarratorOutput:
+        """Last resort after every draft drifted: the sentences that put the absent people here
+        are removed in code."""
+        from .scene_cast import remove_people
+
+        desc, removed = remove_people(draft.description, rv.absent)
+        acts = [a for a in (remove_people(a, rv.absent)[0] for a in draft.actions) if a]
+        self._note("narrator_absent_character_removed", absent=rv.absent, removed=removed,
+                   before=draft.description, after=desc)
+        return NarratorOutput(desc, acts, list(draft.speakers))
+
+    def _unadmit(self, admitted: list[tuple[Event, bool, bool]]) -> None:
+        """Undo admissions of a rejected draft (or a failed turn): the entry and what it caused
+        are rolled back, the person leaves the scene, a passer-by made for the draft is dropped."""
+        for ev, created, outside in reversed(admitted):
+            cid = ev.payload["character"]
+            self.log.rollback(ev.id, "narration rejected")
+            self.scene.present = tuple(c for c in self.scene.present if c != cid)
+            if outside and cid not in self.scene.outside:
+                self.scene.outside = self.scene.outside + (cid,)
+            if created:
+                self.profiles.pop(cid, None)
+                self.vitals.people.pop(cid, None)
+            self._admitted = [x for x in self._admitted if x[0].id != ev.id]
+            self._note("character_admission_undone", character=cid)
+        if admitted:
+            if self._owns_conn:
+                self._save_setup()
+            self.refresh_memory()
+        admitted.clear()
 
     def _valid_speakers(self, out: NarratorOutput) -> NarratorOutput:
         by_name = {p.name.lower(): c for c, p in self.profiles.items()}
@@ -670,16 +853,24 @@ class Engine:
         p = j.probabilities.get("yes")
         return float(p) if p is not None else (j.probability if j.answer else 1 - j.probability)
 
-    def _npc_line(self, prep: _NpcPrep, heard: Sequence[str] = ()) -> str:
+    def _npc_line(self, prep: _NpcPrep, heard: Sequence[str] = (),
+                  notes: Sequence[str] = ()) -> str:
         """Generate and output-check one NPC line. A line is rejected at suspicion >=
         `npc_reject_p`; up to `check_retries` regenerations. If every try is rejected, the least
         suspicious candidate is used (and logged) rather than a canned line. `heard`: lines other
-        NPCs said earlier in this turn, which this NPC also heard."""
+        NPCs said earlier in this turn, which this NPC also heard. `notes`: what to fix from the
+        start (a reply that was over its shape)."""
         tried: list[tuple[float, str]] = []
-        notes: list[str] = []
+        notes = list(notes)
         for _ in range(self.check_retries + 1):
             text = self._fix_names(
-                clean_npc_line(self._complete("npc", prep.messages(heard, notes))), "npc_line")
+                clean_npc_line(self._complete_text("npc", prep.messages(heard, notes))), "npc_line")
+            # without a style there is no book form: only a self-prefix is dropped
+            tidy = tidy_speaker(text, [self.names.real(prep.npc), self.names.label(prep.npc)],
+                                self._name_words, book_form=self.style is not None)
+            if tidy != text:
+                self._note("speaker_tidied", npc=prep.npc, before=text, after=tidy)
+                text = tidy
             why = (foreign_voice(text, self.ctx.name(prep.npc),
                                  [p.name for p in self.profiles.values()])
                    if self.style is not None else None)
@@ -722,7 +913,7 @@ class Engine:
         character has not learned is replaced there by what is seen. Spoken words stay literal."""
         if self.style is None or not self.names.mentions(text):
             return text
-        parsed = split_npc_output(text)
+        parsed = split_npc_output(text, self._name_words)
         if not parsed.has_dash:
             return text
         for beat in parsed.beats:
@@ -778,11 +969,11 @@ class Engine:
             return DESCRIPTION, None
         if key.startswith("action") and key[6:].isdigit():
             return ACTION, None
-        if key.startswith("paction"):  # the player's own action (asterisks)
-            return ACTION, None
-        if key.startswith(PLAYER + "~"):  # a further speech part of the player's input
-            return SPEECH, PLAYER
-        return SPEECH, key  # "player" or an NPC id
+        if key.startswith("paction") or key.startswith("gesture"):  # the player's own action
+            return ACTION, None  # (asterisks), or an NPC's gesture-only turn (living mode)
+        # "player~2": a further speech part of the player's input; "horst~2": Horst's second
+        # line in this turn's exchange
+        return SPEECH, key.split("~", 1)[0]  # "player" or an NPC id
 
     def _commit(self, diff: Diff, source_events: dict[str, Event]) -> list[int]:
         """Store facts with perception computed from scene state, then apply state changes."""
@@ -968,16 +1159,35 @@ class Engine:
 
     # -- the turn -------------------------------------------------------
     def _launch(self, out: NarratorOutput, player_text: str, speakers: Sequence[str] | None,
-                turn_events: list[Event], *, check: bool) -> _Launch:
+                turn_events: list[Event], *, check: bool,
+                first_step: tuple[str, Shape, dict[Shape, float]] | None = None) -> _Launch:
         """Prose mode: run the scene director (speakers and observable actions). Write the
         narration and action events, and (parallel mode) start the speech check and one chain per
         speaking NPC, each chain waiting for the lines of the NPCs before it so that it hears them.
-        Event writes stay on this thread, in a fixed order."""
+        Event writes stay on this thread, in a fixed order.
+
+        Living mode: no speaker list here; what the exchange director reads is taken now (before
+        the narration events are written, so it is the same in both modes), and in parallel
+        mode its first step runs in a worker next to the speech check and the actions lister.
+        `first_step`: no narration this turn (empty `out`): nothing is written for it, and the
+        exchange starts from the first step already answered."""
         speech = None
+        bare = first_step is not None
         if self.parallel and check:
             speech = self._submit(self._speech_judged, "\n".join(out.texts()))
-        if self.narration == "prose":
-            spk, act = self._direct_jobs(out.description, player_text, speakers)
+        living = self._living(speakers)
+        director: list[str] = []
+        npcs: dict[str, str] = {}
+        first: Future[_Captured] | None = None
+        if living:
+            npcs = {c: self.ctx.describe(c) for c in self.scene.present if c != PLAYER}
+            director = self.ctx.director_state(self.scene, player_text, out.description)
+            if self.parallel and not bare:
+                first = self._submit(self._decide_next, self._exchange_state(director, []),
+                                     npcs, out.description, True)
+        if self.narration == "prose" and not bare:
+            spk, act = self._direct_jobs(out.description, player_text,
+                                         [] if living else speakers)
             if self.parallel:
                 fs = self._submit(spk) if spk is not None else None
                 fa = self._submit(act)
@@ -988,11 +1198,15 @@ class Engine:
                 out.actions = act()
             if got is not None:
                 out.speakers = got
-        narr_ev = self._event(NARRATION, [], {"text": out.description}, witnesses=[],
-                              notability=0.4)
-        evs = [narr_ev]
-        sources = {"narration": narr_ev}
-        segments = [("narration", out.description)]
+        evs: list[Event] = []
+        sources: dict[str, Event] = {}
+        segments: list[tuple[str, str]] = []
+        if not bare:
+            narr_ev = self._event(NARRATION, [], {"text": out.description}, witnesses=[],
+                                  notability=0.4)
+            evs.append(narr_ev)
+            sources["narration"] = narr_ev
+            segments.append(("narration", out.description))
         for i, action in enumerate(out.actions, 1):
             ev = self._event(ACTION_EVENT, [], {"text": action}, notability=0.4)
             evs.append(ev)
@@ -1000,8 +1214,10 @@ class Engine:
             segments.append((f"action{i}", action))
         turn_events.extend(evs)
         order = list(speakers) if speakers is not None else list(out.speakers)
-        launch = _Launch(out, evs, sources, segments, order)
+        launch = _Launch(out, evs, sources, segments, [] if living else order)
         launch.speech = speech
+        launch.director, launch.npcs, launch.first = director, npcs, first
+        launch.first_step = first_step
         if self.parallel:
             earlier: list[tuple[str, Future[_Captured]]] = []
             for npc in order:
@@ -1011,12 +1227,283 @@ class Engine:
                 earlier.append((npc, fut))
         return launch
 
+    # -- the NPC exchange (living mode) ------------------------------------------------------
+    def _living(self, speakers: Sequence[str] | None) -> bool:
+        """The director picks each next line (prose narration, no fixed speakers)."""
+        return self.dialogue == "living" and self.narration == "prose" and speakers is None
+
+    def _exchange_state(self, director: list[str], lines: Sequence[str]) -> list[str]:
+        """What the exchange director reads at a step: the scene and the player's input (taken
+        once, before the turn's events), who the player character is to the others, and every
+        line of this exchange so far. Main-thread data only, so the log never depends on timing."""
+        who = (f"The player character is {self.ctx.describe(PLAYER)}. Someone who does not know "
+               "the name addresses them by how they look or what they seem to be.")
+        extra = [who] + ([EXCHANGE_HEADER + "\n" + "\n".join(lines)] if lines else [])
+        g = self.glossary
+        return [*director, *([g.apply(x) for x in extra] if g else extra)]
+
+    def _decide_next(self, state: list[str], npcs: dict[str, str], narration: str,
+                     first: bool) -> tuple[str, Shape, dict[Shape, float]]:
+        """One exchange step (network only; safe in a worker): (floor, shape, the decider's
+        distribution over shapes). No decider: on the first step the fallback speaker (silence
+        would stall the scene), later the floor goes back to the player."""
+        try:
+            return decide_next(self.judge, state, npcs, self.shape_prior,  # type: ignore[return-value]
+                               with_dist=True)
+        except JudgeError as e:
+            kept = self._fallback_speakers(narration)[:1] if first else []
+            self._note("director_unavailable", error=str(e), fallback=kept)
+            return (kept[0], Shape.NORMAL, {}) if kept else (NOBODY, Shape.NORMAL, {})
+
+    def _choose_shape(self, npc: str, shape: Shape, dist: dict[Shape, float],
+                      step: int, *, speak: bool = False) -> tuple[Shape, bool | None]:
+        """Main thread. With a world profile code samples the step's shape from the decider's
+        distribution blended with the profile and leaning against the session's gap
+        (`shape.shape_weights`), and draws whether a spoken line carries a beat from the
+        profile's `no_beat_share` (`shape.beat_wanted`; only with a style, None otherwise).
+        Without a profile: the decider's shape, the beat left to the model. `speak`: the first
+        step of a turn whose narration was skipped; silence and gesture are left out of the
+        draw (a short line instead without a profile), so the turn is never empty."""
+        prof = self.world_profile
+        if speak:
+            dist = {s: p for s, p in dist.items() if s in SPEECH_SHAPES}
+            if shape not in SPEECH_SHAPES:
+                self._note("first_step_speaks", npc=npc, decider=shape.value)
+                shape = Shape.SHORT
+            if not sum(dist.values()):
+                dist = {shape: 1.0} if dist or prof is not None else {}
+        if prof is None or not prof.length_bins or not dist:
+            return shape, None
+        rng = random.Random(f"{self.seed}|shape|{self._draws}")
+        self._draws += 1
+        names = self._name_words
+        weights = shape_weights(dist, prof, self.session_lines, names)
+        chosen = sample_shape(weights, rng)
+        beat = (beat_wanted(prof, self.session_lines, rng, names)
+                if chosen in SPEECH_SHAPES and self.style is not None else None)
+        self._note("shape_sampled", npc=npc, step=step, decider=shape.value, shape=chosen.value,
+                   beat=beat, weights={s.value: round(w, 3) for s, w in weights.items()})
+        return chosen, beat
+
+    def _without_narration(self, player_text: str
+                           ) -> tuple[str, Shape, dict[Shape, float]] | None:
+        """Living mode: is the moment just talk? One batched call (the need for narration and the
+        first exchange step, read without any narration). None: narrate as usual (the director
+        says so, or is unavailable). Otherwise the first step, and the narrator is not called."""
+        npcs = {c: self.ctx.describe(c) for c in self.scene.present if c != PLAYER}
+        state = self.ctx.director_state(self.scene, player_text, "")
+        try:
+            need, nxt, shape, dist = decide_first_step(
+                self.judge, self._exchange_state(state, []), npcs, self.shape_prior,
+                with_dist=True)
+        except JudgeError as e:
+            self._note("director_unavailable", error=str(e), fallback="narrate")
+            return None
+        if need or nxt not in npcs:  # an empty turn (nobody, the player, no NPCs): narrate
+            return None
+        self._note("narration_skipped", first=nxt, shape=shape.value)
+        return nxt, shape, dist
+
+    def _narrate_empty(self, player_text: str, turn_events: list[Event],
+                       sources: dict[str, Event], segments: list[tuple[str, str]],
+                       result: "TurnResult") -> NarratorOutput:
+        """Safety net (main thread): the narration was skipped for an exchange that then
+        delivered nothing, so the player would see only their own line. One narrator passage is
+        written after the exchange (note `empty_exchange_narrated`)."""
+        self._note("empty_exchange_narrated")
+        out = self._narrate(player_text)
+        ev = self._event(NARRATION, [], {"text": out.description}, witnesses=[], notability=0.4)
+        turn_events.append(ev)
+        sources["narration"] = ev
+        segments.append(("narration", out.description))
+        result.narration = out.description
+        return out
+
+    def _shaped_line(self, prep: _NpcPrep, shape: Shape, bounds: tuple[int, int],
+                     beat: bool | None = None) -> str:
+        """An NPC line told its shape, output-checked as every line, and fitted to the same
+        bounds: far over them it is asked once more, then cut at a sentence boundary. For a
+        gesture the result is the action alone ("" when none came back). `beat`: the line is
+        told to carry one small action (True) or none (False); a beat written anyway on a
+        no-beat line is cut (note `beat_stripped`)."""
+        prof = self.profiles.get(prep.npc) or CharacterProfile(prep.npc, prep.npc)
+        prep = replace(prep, instruction=self.ctx.npc_instruction(prof, shape, bounds, beat))
+        text = self._npc_line(prep)
+        names = self._name_words
+        fitted, how = fit_to_shape(text, shape, bounds, names=names)
+        if how == "regenerate":
+            self._note("shape_regenerated", npc=prep.npc, shape=shape.value, text=text)
+            fix = (f"Do not speak: write only the one small thing {prof.name} does."
+                   if shape is Shape.GESTURE else
+                   f"Your last reply was far too long: say at most {bounds[1]} words.")
+            text = self._npc_line(prep, notes=[fix])
+            fitted, how = fit_to_shape(text, shape, bounds, allow_trim=True, names=names)
+            if how == "trimmed":
+                self._note("shape_trimmed", npc=prep.npc, shape=shape.value, before=text,
+                           after=fitted)
+        if beat is False and shape in SPEECH_SHAPES:
+            out = split_npc_output(fitted, names)
+            if out.has_dash and out.beats and out.speech:
+                self._note("beat_stripped", npc=prep.npc, before=fitted, beats=out.beats)
+                fitted = "— " + out.speech
+        return fitted
+
+    def _exchange(self, launch: _Launch, result: "TurnResult", turn_events: list[Event],
+                  sources: dict[str, Event], segments: list[tuple[str, str]],
+                  handle: InterruptHandle | None, on_word: Callable[[str, str], None] | None
+                  ) -> None:
+        """The NPC exchange of one turn. Each step: the director picks the floor and the shape
+        (one batched judge call), the NPC's context is read fresh from the log (so it holds every
+        line and name learned so far this turn), its line is generated, checked, fitted and
+        delivered, and its events are written. Strictly sequential: each step depends on the
+        line before it.
+
+        Stops, checked in this order before each step: the player cut in (the handle fired while
+        the previous step was being prepared or delivered: nothing more is asked or written), the
+        cap. After the director's answer: the player's floor, nobody, or the NPC who took the
+        step just before (any step: line, gesture or silence). One NPC never takes two steps in a
+        row; it may speak again only after another NPC has taken a step in between. Such a pick
+        ends the exchange as "nobody" (note `same_speaker_stopped`): the speaker has had their
+        say and the floor goes back to the player."""
+        sc, npcs = self.scene, launch.npcs
+        lines: list[str] = []  # as the director reads them
+        said: dict[str, int] = {}
+        gestures = 0
+        last: str | None = None  # the NPC of the step just taken
+        for step in range(MAX_EXCHANGE_LINES + 1):
+            if handle is not None and handle.requested:
+                if launch.first is not None and step == 0:
+                    launch.first.cancel()
+                result.stop_reason, result.interrupted = "interrupted", True
+                self._note("exchange_interrupted", steps=step)
+                return
+            if step == MAX_EXCHANGE_LINES:
+                result.stop_reason = "cap"
+                self._note("exchange_cap", steps=step)
+                return
+            if step == 0 and launch.first_step is not None:
+                nxt, shape, dist = launch.first_step
+            elif step == 0 and launch.first is not None:
+                nxt, shape, dist = self._take(launch.first)
+            else:
+                nxt, shape, dist = self._decide_next(
+                    self._exchange_state(launch.director, lines), npcs, launch.out.description,
+                    step == 0)
+            if nxt == PLAYER_FLOOR:
+                result.stop_reason = "player_addressed"
+                return
+            if nxt == NOBODY or nxt not in npcs:
+                result.stop_reason = "nobody"
+                return
+            if nxt == last:
+                result.stop_reason = "nobody"
+                self._note("same_speaker_stopped", npc=nxt, step=step + 1)
+                return
+            last = nxt
+            shape, beat = self._choose_shape(nxt, shape, dist, step + 1,
+                                             speak=step == 0 and launch.first_step is not None)
+            name = self.names.real(nxt)
+            if shape is Shape.SILENCE:
+                self._note("silence", npc=nxt, step=step + 1)
+                result.exchange.append(("silence", nxt, ""))
+                lines.append(f"[{name} says nothing]")
+                continue
+            prep = self._prep_npc(nxt)
+            text = self._shaped_line(prep, shape, word_bounds(shape, self.world_profile), beat)
+            if shape is Shape.GESTURE:
+                if not text:
+                    self._note("silence", npc=nxt, step=step + 1, why="no action came back")
+                    result.exchange.append(("silence", nxt, ""))
+                    lines.append(f"[{name} says nothing]")
+                    continue
+                for notice, _ in prep.mem.noticed:
+                    turn_events.append(self.notices.mark_shown(notice, sc))
+                act = self._fix_names(beat_as_action(text, name, [self.names.label(nxt)]),
+                                      "npc_beat")
+                ev = self._event(ACTION_EVENT, [nxt], {"text": act, "by": nxt, "gesture": True},
+                                 notability=0.3)
+                turn_events.append(ev)
+                gestures += 1
+                sources[f"gesture{gestures}"] = ev
+                segments.append((f"gesture{gestures}", act))
+                seen = self.names.mask(PLAYER, act, known=prep.player_known)
+                self._note("gesture", npc=nxt, step=step + 1, text=act)
+                result.exchange.append(("gesture", nxt, seen))
+                lines.append(f"[{name} does] {act}")
+                continue
+            said[nxt] = said.get(nxt, 0) + 1
+            sr = self._deliver(nxt, prep, text, result, turn_events, sources, segments, handle,
+                               on_word, key=nxt if said[nxt] == 1 else f"{nxt}~{said[nxt]}")
+            result.exchange.append(("line", nxt, sr.spoken_text))
+            lines.append(f"{name}: {sr.spoken_text}")
+            if sr.interrupted:
+                result.stop_reason = "interrupted"
+                return
+
+    def _deliver(self, npc: str, prep: _NpcPrep, text: str, result: "TurnResult",
+                 turn_events: list[Event], sources: dict[str, Event],
+                 segments: list[tuple[str, str]], handle: InterruptHandle | None,
+                 on_word: Callable[[str, str], None] | None, *, key: str | None = None
+                 ) -> StreamResult:
+        """Stream an NPC line to the player and write its events (main thread): the utterance
+        (only the delivered words), names learned from it, the NPC's own beats as actions, the
+        interruption if the handle fired. `key`: the extractor segment (default: the NPC id)."""
+        sc = self.scene
+        for notice, _ in prep.mem.noticed:  # surfaced now, so not again next turn
+            turn_events.append(self.notices.mark_shown(notice, sc))
+        cb = (lambda w, n=npc: on_word(n, w)) if on_word else None
+        sr = run_stream(iter([text]), handle, cb, self.pace)
+        if sr.spoken_text.strip():
+            self.session_lines.append(sr.spoken_text)
+        parsed = (split_npc_output(sr.spoken_text, self._name_words) if self.style is not None
+                  else None)
+        extra: dict[str, object] = (
+            {"speech": parsed.speech} if parsed is not None and parsed.has_dash else {})
+        ev = self._utterance(npc, sr.spoken_text, interrupted=sr.interrupted, **extra)
+        turn_events.append(ev)
+        result.utterances.append(ev)
+        # only what is said aloud teaches a name, never the NPC's own beats
+        self._learn_from_speech(
+            ev, npc, parsed.speech if parsed is not None and parsed.has_dash
+            else sr.spoken_text)
+        if parsed is not None:  # the NPC's own beats, only the delivered part
+            for beat in parsed.beats:
+                act = self._fix_names(beat_as_action(beat, self.ctx.name(npc),
+                                                     [self.names.label(npc)]), "npc_beat")
+                if act:
+                    turn_events.append(self._event(
+                        ACTION_EVENT, [npc], {"text": act, "by": npc}, notability=0.3,
+                        cause_id=ev.id))
+        key = key or npc
+        sources[key] = ev
+        segments.append((key, sr.spoken_text))
+        if sr.interrupted:
+            turn_events += self._record_interruption(ev, sr)
+            result.interrupted = True
+        return sr
+
+    def dialogue_report(self) -> dict[str, Any] | None:
+        """The session's NPC speech measured like the world profile (debug view): the rolling
+        `profile_of_lines` over every delivered line plus, when the world has a profile, its
+        `distance` to it on speech metrics only (a session has no narration paragraphs). None
+        before the first line."""
+        try:
+            prof = profile_of_lines(self.session_lines, self._name_words)
+        except ValueError:
+            return None
+        out: dict[str, Any] = prof.to_dict()
+        out["distance"] = (distance(prof, self.world_profile, speech_only=True)
+                           if self.world_profile is not None else None)
+        return out
+
     def _discard(self, launch: _Launch) -> None:
         """The narration was rejected after the chains had started: forget it all."""
         for ev in launch.events:
             self.log.rollback(ev.id, "narration rejected")
         for _, fut in launch.chains.values():
             fut.cancel()
+        if launch.first is not None:
+            launch.first.cancel()
         self._note("speculative_chains_discarded", npcs=list(launch.chains))
 
     def _prior_outputs(self, before_id: int) -> list[tuple[str, str]]:
@@ -1154,6 +1641,7 @@ class Engine:
             raise CampaignEnded("the player character is dead; the campaign is read-only")
         t_start = time.monotonic()
         waited = self._settle_for_next_turn()
+        marks = (len(self.judgments.entries), len(self.llm_calls), len(self.devlog))
         if self.canon_guard is not None:
             self.canon_guard.refresh(self)
         for s in speakers or ():
@@ -1161,6 +1649,7 @@ class Engine:
                 raise ValueError(f"{s!r} cannot speak: not an NPC in the scene")
         turn_events: list[Event] = []
         launch: _Launch | None = None
+        self._admitted = []
         with self._fixes_lock:
             self._fixes = []
         parts = split_input(player_text)
@@ -1180,7 +1669,13 @@ class Engine:
                         turn_events.append(record_death(self, outcome, player_ev))
             outcomes = [outcome] if outcome else []
 
-            if self.parallel:
+            first_step = (self._without_narration(model_text)
+                          if outcome is None and self._living(speakers) else None)
+            if first_step is not None:
+                out = NarratorOutput("")
+                launch = self._launch(out, model_text, speakers, turn_events, check=False,
+                                      first_step=first_step)
+            elif self.parallel:
                 def on_candidate(out: NarratorOutput) -> bool:
                     nonlocal launch
                     cand = self._launch(out, model_text, speakers, turn_events, check=True)
@@ -1198,44 +1693,31 @@ class Engine:
                 out = self._narrate(model_text, outcome=outcome)
                 launch = self._launch(out, model_text, speakers, turn_events, check=False)
 
-            if on_narration is not None:
+            turn_events.extend(ev for ev, _, _ in self._admitted)  # undone with the turn
+            if on_narration is not None and first_step is None:
                 on_narration(out.description)
             sources = {**{k: ev for k, ev in player_pairs}, **launch.sources}
             segments = [*[(k, ev.payload["text"]) for k, ev in player_pairs], *launch.segments]
             result = TurnResult(out.description, actions=list(out.actions))
-            for npc in launch.speakers:
+            if self._living(speakers):
+                self._exchange(launch, result, turn_events, sources, segments, handle, on_word)
+                if (first_step is not None and not result.interrupted
+                        and not any(u.payload.get("text", "").strip() for u in result.utterances)
+                        and not any(k == "gesture" for k, _, _ in result.exchange)):
+                    out = self._narrate_empty(model_text, turn_events, sources, segments, result)
+                    if on_narration is not None:
+                        on_narration(out.description)
+            for npc in launch.speakers:  # classic, or a fixed list of speakers
                 if npc in launch.chains:
                     prep, fut = launch.chains[npc]
                     text = self._take(fut)
                 else:  # sequential: this NPC sees what earlier speakers of the turn said
                     prep = self._prep_npc(npc)
                     text = self._npc_line(prep)
-                for notice, _ in prep.mem.noticed:  # surfaced now, so not again next turn
-                    turn_events.append(self.notices.mark_shown(notice, sc))
-                cb = (lambda w, n=npc: on_word(n, w)) if on_word else None
-                sr = run_stream(iter([text]), handle, cb, self.pace)
-                parsed = split_npc_output(sr.spoken_text) if self.style is not None else None
-                extra: dict[str, object] = (
-                    {"speech": parsed.speech} if parsed is not None and parsed.has_dash else {})
-                ev = self._utterance(npc, sr.spoken_text, interrupted=sr.interrupted, **extra)
-                turn_events.append(ev)
-                result.utterances.append(ev)
-                # only what is said aloud teaches a name, never the NPC's own beats
-                self._learn_from_speech(
-                    ev, npc, parsed.speech if parsed is not None and parsed.has_dash
-                    else sr.spoken_text)
-                if parsed is not None:  # the NPC's own beats, only the delivered part
-                    for beat in parsed.beats:
-                        act = self._fix_names(beat_as_action(beat, self.ctx.name(npc)), "npc_beat")
-                        if act:
-                            turn_events.append(self._event(
-                                ACTION_EVENT, [npc], {"text": act, "by": npc}, notability=0.3,
-                                cause_id=ev.id))
-                sources[npc] = ev
-                segments.append((npc, sr.spoken_text))
+                sr = self._deliver(npc, prep, text, result, turn_events, sources, segments,
+                                   handle, on_word)
                 if sr.interrupted:
-                    turn_events += self._record_interruption(ev, sr)
-                    result.interrupted = True
+                    result.stop_reason = "interrupted"
                     break
 
             if self.outcomes_on and not result.interrupted:
@@ -1244,12 +1726,16 @@ class Engine:
             slow = _Slow(segments, sources, outcomes, turn_events, result, player_ev, sc.time,
                          self.ctx.extractor(sc, segments, [o.for_narrator() for o in outcomes]))
             slow.fast_s = time.monotonic() - t_start - waited
+            slow.marks = marks
         except Exception:
             if launch is not None:
                 for _, fut in launch.chains.values():
                     fut.cancel()
+                if launch.first is not None:
+                    launch.first.cancel()
             for e in turn_events:
                 self.log.rollback(e.id, "turn failed")
+            self._unadmit(self._admitted)
             self.refresh_memory()
             raise
         if launch is not None and self.parallel:
@@ -1318,11 +1804,17 @@ class Engine:
                 sc.time = real_time
                 for ev in slow.turn_events:
                     self.log.rollback(ev.id, "turn failed")
+                    if ev.type == SCENE_ENTRY:  # a person the narration brought in (task LD-9)
+                        sc.present = tuple(c for c in sc.present
+                                           if c != ev.payload["character"])
                 sc.time = slow.time  # the turn's minutes did not happen
                 self.after_settle.clear()
                 self.refresh_memory()
                 self.slow_failure = e
                 self._note("slow_lane_failed", error=repr(e)[:200])
+            # counted whether or not the slow lane succeeded: the calls were made either way
+            slow.result.decisions = self.last_decisions = count_since(
+                self, slow.player_event.id, slow.marks[0], slow.marks[1], slow.marks[2])
             self.lane_stats.append({"fast_s": round(slow.fast_s, 3),
                                     "slow_s": round(time.monotonic() - t0, 3),
                                     "waited_s": 0.0, "needed": False})
@@ -1342,8 +1834,11 @@ class Engine:
         own: the world decides, then one short paragraph narrates only that. The director has
         already listed the acts, so this is the step after the first narration."""
         acts = [("", a) for a in launch.out.actions]
+        names = self._name_words
         acts += [(u.payload["speaker"], b) for u in result.utterances
-                 for b in ([] if self.style is None else split_npc_output(u.payload["text"]).beats)]
+                 for b in ([] if self.style is None
+                           else split_npc_output(u.payload["text"], names).beats)]
+        acts += [(npc, t) for kind, npc, t in result.exchange if kind == "gesture"]
         got = self.outcome_judge.npc_acts(acts, unbounded=self.ctx.player_unlimited)
         done: list[Outcome] = []
         for o in got:
@@ -1374,7 +1869,7 @@ class Engine:
                 + (f" Write in {self.output_language}." if self.output_language else ""))
         for _ in range(2):
             try:
-                text = self._prose_of(self._complete("narrator", self.ctx.finish([
+                text = self._prose_of(self._complete_text("narrator", self.ctx.finish([
                     {"role": "system", "content": "You are the narrator of a role-playing game. "
                      "Write vivid prose."},
                     {"role": "user", "content": user}], PLAYER))).strip()
@@ -1495,7 +1990,7 @@ class Engine:
             self._note("challenge_not_regenerated", event=event_id,
                        reason="not the last NPC line")
             return res
-        self._regenerate(ev, res)
+        self._regenerate(ev, res, explanation)
         return res
 
     def _find_channel(self, npc: str, text: str, explanation: str,
@@ -1517,17 +2012,80 @@ class Engine:
         by_key = {it.key: it for it in items}
         return by_key.get(str(j.answer))
 
-    def _regenerate(self, old: Event, res: "Challenge") -> None:
+    def _still_has(self, npc: str, texts: Sequence[str], old_text: str,
+                   explanation: str) -> list[bool]:
+        """Typed checks, one question per text in a single judge call: does it still assert or
+        allude to the disputed point (the player's explanation is the reference)?"""
+        ref = explanation or "the content the player disputed"
+        state = [f"Speaker: {self.names.real(npc)}", f"Disputed line: {old_text}",
+                 f"The player objects: {ref}"]
+        qs = {}
+        for i, t in enumerate(texts):
+            qs[str(i)] = yes_no_q(
+                "Does this line still assert, imply or allude to the disputed point, even in "
+                "other words?" + f"\nLine: {t}", tag="challenge_still_has")
+        if not qs:
+            return []
+        got = self.judge.ask(state, qs)
+        return [bool(got[str(i)].answer) for i in range(len(texts))]
+
+    def _regenerate_text(self, npc: str, old: Event, explanation: str) -> str | None:
+        """A replacement line with the disputed point verified gone: up to `check_retries`+1
+        candidates; if all still carry it, the sentences that carry it are dropped (logged). If
+        nothing safe is left (or the check cannot run) the line is withdrawn: None."""
+        old_text = old.payload["text"]
+        notes: list[str] = []
+        cands: list[str] = []
+        for _ in range(self.check_retries + 1):
+            text = self._npc_line(self._prep_npc(npc), notes=notes)
+            cands.append(text)
+            try:
+                present = self._still_has(npc, [text], old_text, explanation)[0]
+            except JudgeError as e:
+                self._note("challenge_check_unavailable", npc=npc, error=str(e))
+                return text
+            if not present:
+                if len(cands) > 1:
+                    self._note("challenge_removed_after_retry", npc=npc, tries=len(cands))
+                return text
+            self._note("challenge_still_present", npc=npc, text=text)
+            notes = ["Your previous try still touched on what the player objected to ("
+                     + (explanation or old_text) + "). Leave that point out entirely, in any "
+                     "wording."]
+        last = cands[-1]
+        parts = sentences(last)
+        try:
+            flags = self._still_has(npc, parts, old_text, explanation)
+            kept = [p for p, bad in zip(parts, flags) if not bad]
+            joined = " ".join(kept)
+            # an allusion can be spread over sentences: verify the remainder as a whole
+            if kept and self._still_has(npc, [joined], old_text, explanation)[0]:
+                kept = []
+        except JudgeError as e:
+            self._note("challenge_check_unavailable", npc=npc, error=str(e), stage="drop")
+            kept, joined = [], ""
+        if not kept:
+            self._note("challenge_line_withdrawn", npc=npc, text=last)
+            return None
+        self._note("challenge_sentences_dropped", npc=npc, before=last,
+                   dropped=[p for p, bad in zip(parts, flags) if bad])
+        return joined
+
+    def _regenerate(self, old: Event, res: "Challenge", explanation: str = "") -> None:
         """Replace the NPC line `old` by a new one generated with the correction in context. If
         generating fails the old text is put back (the log is append-only, so as a new event)."""
         npc = old.payload["speaker"]
         self.log.rollback(old.id, "model error: no channel")
         try:
-            text = self._npc_line(self._prep_npc(npc))
+            text = self._regenerate_text(npc, old, explanation)
         except Exception:
             self._utterance(npc, old.payload["text"], replaces=old.id, restored=True)
             self.refresh_memory()
             raise
+        if text is None:  # the point cannot be removed from this line: the NPC says nothing
+            self.refresh_memory()
+            res.withdrawn = True
+            return
         new = self._utterance(npc, text, replaces=old.id, regenerated=True)
         self._learn_from_speech(new, npc, text)
         try:
@@ -1558,10 +2116,23 @@ class Engine:
         is never one already in the campaign (cast, glossary names)."""
         extra = ([e.canonical for e in self.glossary.entries if e.kind == "person"]
                  if self.glossary else [])
+        kw.setdefault("sex_decider", self._decide_sex)
         spec = generate_npc(self.seed, slot, culture=culture,
                             used=[*taken_names(self.profiles.values(), extra)],
                             now_t=self.scene.time, **kw)
         return spec
+
+    def _decide_sex(self, about: str) -> str | None:
+        """One decider call for an NPC whose sex the text does not give (the answer is kept in
+        the profile by `add_npc`). None when the decider is unavailable."""
+        try:
+            return str(self.judge.ask([f"A new person in {self.scene.location}: {about}"], {
+                "sex": choice_q("Is this person a man or a woman?",
+                                {"m": "a man or a boy", "f": "a woman or a girl"},
+                                tag="npc_sex")})["sex"].answer)
+        except JudgeError as e:
+            self._note("npc_sex_unavailable", error=str(e)[:200])
+            return None
 
     def set_core(self, npc: str, core: str) -> None:
         """Set an NPC's immutable core once (a second, different core is refused)."""
@@ -1621,14 +2192,15 @@ class Engine:
     def _save_setup(self) -> None:
         with self.conn:
             for k, v in {
-                "profiles": [[p.id, p.name, p.description, p.manner, p.appearance, p.core]
+                "profiles": [[p.id, p.name, p.description, p.manner, p.appearance, p.core, p.sex]
                              for p in self.profiles.values()],
                 "settings": {"output_language": self.output_language,
                              "record_language": self.record_language,
                              "narration": self.narration,
                              "minutes_per_turn": self.minutes_per_turn,
                              "player_unlimited": self.ctx.player_unlimited,
-                             "outcomes": self.outcomes_on, "seed": self.seed},
+                             "outcomes": self.outcomes_on, "seed": self.seed,
+                             "dialogue": self.dialogue},
                 "vitals": self.vitals.to_json(),
             }.items():
                 self.conn.execute("INSERT OR REPLACE INTO campaign_meta (key, value) VALUES (?,?)",

@@ -127,7 +127,7 @@ def populate_canon_campaign(eng: Engine, canon: Any) -> Any:
         except Exception as e:  # noqa: BLE001 - a store without this person: the scene still runs
             eng._note("canon_person_missing", entity=ent, error=str(e)[:100])
     for slot, occ, _home, look, _goal in EXTRA_CAST:
-        eng.add_npc(eng.fresh_npc(slot, "northern", occupation=occ), appearance=look)
+        eng.add_npc(eng.fresh_npc(slot, "northern", occupation=occ, appearance=look), appearance=look)
     ids = canon_extra_ids()
     keeper = "innkeeper" in eng.profiles
     pairs = [(ids["guard"], ids["drunk"])] + ([("innkeeper", ids["guard"]),
@@ -166,4 +166,10 @@ def make_canon_world(eng: Engine, canon: Any, judge: Judge, *, play: Any = None)
         eng.canon_guard = play.guard(judge)
     except Exception:  # noqa: BLE001
         eng.canon_guard = None
+    # people the narration brings in (living dialogue task 9): the canon calendar says whether a
+    # canon person can be here; whoever can is admitted to the scene, passers-by from npcgen
+    from ..canon.play import CanonCast
+    from ..scene_cast import SceneCast
+    eng.scene_cast = SceneCast(CanonCast(play, places=CANON_PLACES), culture="northern",
+                               where=world.where, here=world.here)
     return world

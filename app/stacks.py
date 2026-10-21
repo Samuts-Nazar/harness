@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import json
 import os
-
+import re
 import threading
 
 from harness.judge import (
     DecisionJudge, EscalatingJudge, FakeJudge, FallbackJudge, LLMJudge,
+    fake_needs_narration,
 )
+from harness.director import EXCHANGE_HEADER, NOBODY, PLAYER_FLOOR
 from harness.pipeline import ModelConfig
 from harness.policy import DEFAULT_JUDGE_FIRST, FALLBACKS, Spend
 from harness.providers import Messages, OpenRouterProvider
@@ -96,9 +98,12 @@ class FakeUk:
             if "fact extractor" in sys:
                 i = self.n["extractor"]
                 self.n["extractor"] += 1
-                diff = {"new_facts": [{"content": FACTS[i % len(FACTS)], "source": "narration",
+                keys = re.search(r"<one of: ([^>]*)>", messages[1]["content"])
+                keys = keys.group(1).split(", ") if keys else ["narration"]
+                src = "narration" if "narration" in keys else keys[0]  # no narration: just talk
+                diff = {"new_facts": [{"content": FACTS[i % len(FACTS)], "source": src,
                                        "notability": 0.4}],
-                        "state_changes": [CHANGES[i]] if i < len(CHANGES) else []}
+                        "state_changes": [{**CHANGES[i], "source": src}] if i < len(CHANGES) else []}
                 return json.dumps(diff, ensure_ascii=False)
             name = sys[8:].split(".")[0]
             lines = LINES.get(name, GENERIC_LINES)  # any other cast (the Vizima campaign)
@@ -140,9 +145,21 @@ def fake_judge() -> FakeJudge:
                       for f in _forms(n) if f and f in low)
         return hits[0][1] if hits else "nobody"
 
+    def next_floor(q, state):  # type: ignore[no-untyped-def]
+        """Living exchange: the first NPC the narration names speaks, then the player's turn."""
+        if any(str(x).startswith(EXCHANGE_HEADER) for x in state):
+            return PLAYER_FLOOR
+        narration = [x for x in state if str(x).startswith("Narration:")]
+        npcs = q.__class__(q.kind, q.text, {c: n for c, n in q.options.items()
+                                            if c not in (PLAYER_FLOOR, NOBODY)}, tag=q.tag)
+        got = first(npcs, narration)
+        return got if got != NOBODY else next(iter(npcs.options), NOBODY)
+
     return FakeJudge({
         "attitude_direction": "neutral", "relationship_magnitude": 0,
         "director_first": first,
+        "director_next": next_floor,
+        "director_narration": fake_needs_narration,
         "director_also": lambda q, st: any(
             f in " ".join(st).split("Narration:")[-1].lower()
             for f in _forms(q.text.split(" also ")[0].removeprefix("Would "))),

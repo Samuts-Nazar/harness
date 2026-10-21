@@ -255,3 +255,67 @@
 - [ ] **Step 4: Generate 10 A/B pairs.** Each pair is a whole short exchange, classic vs living, on the same situations. No book text. The key goes to `reports/dialogue/ab_key.json`.
 - [ ] **Step 5: Write `reports/dialogue/SUMMARY.md`** (verdict first, numbers vs profile, quoted short examples, latency, spend), **`reports/decisions_count.md`** (per action, scene, session, with the session's real numbers) and **the README section.**
 - [ ] **Step 6: Commit.**
+
+---
+
+## Amendment 2026-10-21 (user play test on main, campaign vizima-20261021-103825)
+
+Found by the lead in the user's live session; added as Tasks 9–11 after Task 8 because they touch the same turn loop.
+
+### Task 9: Characters the narration brings into a scene
+**Files:** `harness/pipeline.py`, `harness/canon/play.py` (or the canon guard), `harness/world/` if presence lives there; tests `tests/test_scene_cast.py`.
+- Bug: the narrator wrote Ґеральт into «Під Лисом» on day 3 (the book's opening scene). He was never a scene character, so the director could never pick him: the player addressed him three times and only the narrator described his acts. The canon drift guard did not catch it.
+- Required:
+  - after the narrator (before delivery), detect people named or clearly described in the narration who are not in the scene;
+  - for a canon character, check the canon calendar: where are they at this time? If they cannot be here, reject the narration as drift and regenerate with a note;
+  - if they can be here (or for an invented passer-by), admit them to the scene (`enter_scene`, a profile from canon or `npcgen`), so they can speak and the director can choose them;
+  - names stay knowledge (a stranger is shown by appearance).
+- Tests:
+  - `test_narrator_cannot_place_absent_canon_character` (fake canon calendar: Geralt elsewhere → regenerate);
+  - `test_admitted_character_can_be_addressed_and_answers` (the player addresses the newcomer, so the director picks them).
+
+### Task 10: "How does he know that?" must remove the disputed content
+**Files:** `harness/pipeline.py` (`challenge_line` and the regeneration path); tests `tests/test_challenge.py`.
+- Bug: after the player's challenge ("he talks about broken teeth, Geralt has done nothing yet"), the line was regenerated twice and the broken-teeth claim stayed in another wording.
+- Required:
+  - after regeneration, one typed check per candidate: "does this line still assert or allude to <the disputed point>?" (the player's explanation is the reference);
+  - retry up to the existing limit;
+  - if every candidate still has it, drop the sentence(s) that carry it (claim split) and log it;
+  - the stored correction applies to that NPC's later lines too (already true, keep).
+- Tests:
+  - `test_challenge_regeneration_verifies_removal` (fake: first regeneration still mentions it, second does not → the second is shown);
+  - `test_challenge_drops_sentence_when_all_fail`.
+
+### Task 11: Dash-inside-speech parsing and name gender
+**Files:** `harness/style.py` (`split_npc_output`), `harness/npcgen.py`; tests `tests/test_style.py`, `tests/test_npcgen.py`.
+- Bugs:
+  - "— Кімнати нема. «Старий Наракорт» — туди. І пиво допийте тут." produced an ACTION "Корчмар туди. І пиво допийте тут." (a dash inside speech was read as a beat boundary);
+  - a male carter got the female name Ружена.
+- Required:
+  - a beat must look like a narrated act (a third-person verb or the speaker's name/pronoun near its start); otherwise the piece is speech;
+  - seeded names carry gender and are drawn to match the character's gender (from profile/appearance; ask the decider once if unknown).
+- Tests: the exact line above parses as one speech piece plus the real beat; a male role never gets a female-table name.
+
+### Task 12: Fixes from the Task 8 measurement and the reviews
+**Files:** `harness/pipeline.py`, `harness/director.py`, `harness/shape.py`, `harness/style.py`, `app/`, `experiments/dialogue/`; tests in the matching files.
+- **Extractor source bug.**
+  - In live runs, 5 of 20 turns hit `ExtractionRejected: unknown source 'Горст~2'`: for an NPC's second line in a turn the extractor cites the display name plus `~2`, not `horst~2`, and the slow lane rolls back the turn.
+  - Map display-name + `~N` back to the segment key before validation (`_ids_for_names`).
+  - Test with a fake extractor answering `Горст~2`.
+- **Shape distribution follows the profile.**
+  - Living runs had 0 lines over 15 words (book 36%) and a beat on every line (book ~45–59% without beats).
+  - Change the shape choice so the session's length distribution tracks the world profile: e.g. the decider gives shape probabilities and code samples from them, reweighted by the gap between the session so far and the profile.
+  - Make the beat a per-line choice drawn from the profile's `no_beat_share` (the NPC call is told "no gesture this line"), not left to the model.
+  - Report the distance before/after on a fake-provider simulation and in the live re-run below.
+- **Names in parsing.** Pass the known character names to `split_npc_output(..., names=...)` from the pipeline (Task 11 added the parameter).
+- **Gender.** Wire `sex_decider` for NPCs whose sex cannot be inferred (one decider call, cached in the profile).
+- **Speaker-prefix glitches.**
+  - Two glitches seen in output: a description used as a speaker prefix ("Горст: кремезний сивий чоловік…") and a name repeated after the label ("Ельза: Ельза потерла…").
+  - Strip a leading "<label or name>:" prefix and a leading repeat of the speaker's own name/label in NPC output. Tests with both lines.
+- **Script-switch check.**
+  - A stray "天天爱彩票" reached output.
+  - Any narration/NPC output with characters outside the expected scripts (Cyrillic, Latin for names, punctuation) is regenerated once, then the foreign run is cut. Test.
+- **Flaky tests.** Make `app/tests/test_app_dialogue.py::test_send_during_exchange_via_http_does_not_return_409` and `test_send_during_exchange_interrupts_then_runs` deterministic (they failed 1–2 of 3 full runs): synchronise on events, not sleeps. The full suite must pass 5 times in a row.
+- **Live re-run and A/B.**
+  - Re-run `experiments/dialogue/live_check.py` (2 inn sessions living + classic, 3 scenes; budget 0.40 USD) and update `reports/dialogue/SUMMARY.md` with before/after numbers.
+  - Regenerate the A/B pairs (whole short exchanges, no book text, no glitches; drop any pair with a detected glitch) into `app/static/ab_data.js` and `reports/dialogue/ab_key.json`.

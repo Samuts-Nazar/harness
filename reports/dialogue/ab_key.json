@@ -1,0 +1,44 @@
+[
+ {
+  "pair": 1,
+  "session": "A",
+  "turn": 4,
+  "A": "living",
+  "B": "classic"
+ },
+ {
+  "pair": 2,
+  "session": "A",
+  "turn": 5,
+  "A": "living",
+  "B": "classic"
+ },
+ {
+  "pair": 3,
+  "session": "B",
+  "turn": 1,
+  "A": "living",
+  "B": "classic"
+ },
+ {
+  "pair": 4,
+  "session": "B",
+  "turn": 2,
+  "A": "classic",
+  "B": "living"
+ },
+ {
+  "pair": 5,
+  "session": "B",
+  "turn": 4,
+  "A": "living",
+  "B": "classic"
+ },
+ {
+  "pair": 6,
+  "session": "B",
+  "turn": 5,
+  "A": "classic",
+  "B": "living"
+ }
+]

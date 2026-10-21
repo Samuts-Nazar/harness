@@ -83,6 +83,7 @@ class CharacterProfile:
     # character with an appearance is referred to by it until the viewer has learned the name;
     # one without is known by name to everyone.
     core: str = ""  # task 19: immutable core (voice, drives, values), set once and shown verbatim
+    sex: str = ""  # "m"/"f" of a generated NPC (from its text or one decider call); "" unknown
 
 
 @dataclass

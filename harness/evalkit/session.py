@@ -34,7 +34,7 @@ def play(stack: Stack, turns: Sequence[str], root: Path | str, *, timeout: float
          ) -> tuple[Game, list[dict[str, Any]]]:
     """Run the turns through the app's Game (threads, slow lane) and collect per-turn timing."""
     game = Game(lambda new: open_vizima(stack, root=root, new=True, name=NAME, canon_db=False,  # type: ignore[arg-type]
-                                        seed=SEED), pace=0.0)
+                                        seed=SEED, dialogue="classic"), pace=0.0)  # stored recordings are classic
     rows: list[dict[str, Any]] = []
     for i, text in enumerate(turns, 1):
         t0 = time.monotonic()

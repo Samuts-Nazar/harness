@@ -27,7 +27,7 @@
 </head>
 <body>
 <main>
-  <h1>Яка репліка звучить живіше, як у Сапковського?</h1>
+  <h1>Яка розмова звучить живіше, як у Сапковського?</h1>
   <div class="mut" id="prog"></div>
   <div class="ctx" id="ctx"></div>
   <div class="opt"><b>A</b><span id="a"></span></div>
@@ -57,7 +57,7 @@
   function render() {
     var p = pairs[i];
     $("prog").textContent = (i + 1) + " з " + pairs.length;
-    $("ctx").textContent = p.who + " відповідає на: «" + p.player + "»";
+    $("ctx").textContent = p.who ? p.who + " відповідає на: «" + p.player + "»" : "Ти кажеш: «" + p.player + "»";
     $("a").textContent = p.a; $("b").textContent = p.b;
     document.querySelectorAll("button[data-v]").forEach(function (btn) {
       btn.classList.toggle("on", ans[i] === btn.dataset.v);

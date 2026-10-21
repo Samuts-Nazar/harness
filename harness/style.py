@@ -21,12 +21,16 @@ import math
 import os
 import re
 import threading
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import TYPE_CHECKING, Iterable, Sequence
 
 from .models import CharacterProfile
 from .providers import Messages
+
+if TYPE_CHECKING:
+    from .shape import Shape
 
 REPO = Path(__file__).resolve().parents[1]
 WORLDS = REPO / "worlds"
@@ -56,15 +60,78 @@ def _is_tag(beat: str) -> bool:
     return 0 < len(words) <= 4 and any(w.startswith(_TAG_VERBS) for w in words)
 
 
+_PRESENT_END = ("ить", "їть", "ається", "ється", "иться", "ться", "ає", "яє", "ує", "юєте", "оче",
+                "іче", "ече", "иче", "є")
+_PAST_END = ("ав", "ив", "ув", "ев", "яв", "ала", "ила", "ула", "ела", "яла", "али", "или", "ули",
+             "ели", "яли", "ало", "ило", "уло", "іла", "іли", "іло", "ед", "ed")
+_PAST_REFL = ("вся", "лася", "лося", "лися", "лась", "лось", "лись")  # not imperatives: "-йся"
+_PREFIXES = ("під", "по", "за", "на", "ви", "роз", "при", "від", "пере", "об", "с", "з", "у", "в")
+_IRREGULAR = {"потер", "втер", "витер", "обтер", "ліг", "сів", "виліз", "поліз", "заліз", "приніс",
+              "виніс", "поніс", "відніс", "зніс", "вліз", "помер", "здер", "задер", "запер",
+              "був", "була", "було", "були", "зник", "замовк", "змовк", "крикнув", "зберіг",
+              "втік", "підвів", "повів", "привів", "зрів", "вдарив"}
+_NOT_VERBS = {"школа", "стіл", "село", "тіло", "діло", "число", "чоло", "зло", "добро", "кров",
+              "любов", "мала", "хвиля", "скеля", "земля", "стріла", "кола", "вона", "ніколи"}
+_SPEAKERS = {"я", "ми", "ти", "ви", "мені", "мене", "тобі", "тебе", "нам", "нас", "вам", "вас"}
+_GERUND = ("ючи", "ячи", "ачи", "вши", "шись", "вшись")
+
+
+def _is_verb(w: str) -> bool:
+    """A third-person verb form (past or present), strict enough to leave nouns alone."""
+    if w in _NOT_VERBS:
+        return False
+    if w in _IRREGULAR:
+        return True
+    if len(w) >= 4 and (w.endswith(_PAST_END) or w.endswith(_PAST_REFL)):
+        return True
+    if len(w) >= 6 and w.endswith("ів") and re.search(r"[аеиіоуя][^аеиіоуяю]+ів$", w):
+        return True  # прошепотів, ревів (a genitive plural noun is rare this early in a piece)
+    if len(w) >= 5 and w.endswith(_PRESENT_END):
+        return True
+    # consonant-final past with a prefix: замовк, підвів, зник
+    return len(w) >= 5 and w.endswith(("вк", "ик", "ік", "ід", "ів")) and w.startswith(_PREFIXES)
+
+
+def _is_beat(piece: str, names: Iterable[str] = ()) -> bool:
+    """Does a piece between dashes read as a narrated act or a speech tag? It does if, with no
+    I/we/you before it, it starts with he/she/they, has a known name early, has a speech-tag
+    stem, or has a third-person verb among its first three words (or later, after a leading
+    participial clause). Anything else (an adverb, a noun, an imperative) is the speech going
+    on after a dash."""
+    words = re.findall(r"[\w']+", piece.lower())[:8]
+    if not words:
+        return False
+    known = {n.lower() for n in names if n}
+    head = " ".join(re.findall(r"[\w']+", piece.lower())[:12])
+    for ph in (k for k in known if " " in k):  # a whole description («жінка в темній хустці»)
+        ph = " ".join(re.findall(r"[\w']+", ph))
+        if head.startswith(ph + " ") or head == ph:
+            return True
+    gerund = any(w.endswith(_GERUND) for w in words[:3])
+    for i, w in enumerate(words):
+        if w in _SPEAKERS or (i == 0 and w in {"це", "то", "ось", "так", "ні", "тут", "там"}):
+            return False
+        if w in _PRON and i == 0:
+            return True
+        if w in known and i < 3:
+            return True
+        if w.startswith(_TAG_VERBS) and len(w) > 3:
+            return True
+        if _is_verb(w) and (i <= 2 or gerund):
+            return True
+    return False
+
+
 def _speech_tail(s: str) -> str:
     return re.sub(r"[,;:]\s*$", ".", s.strip())
 
 
-def split_npc_output(text: str) -> NpcOutput:
+def split_npc_output(text: str, names: Iterable[str] = ()) -> NpcOutput:
     """Separate speech from the NPC's own beats in book-style dialogue. In a paragraph that
     starts with a dash the pieces between dashes alternate speech, beat, speech, ...; a paragraph
     that starts without a dash begins with a beat. A text with no dash at all is plain speech
-    (the old form). A piece longer than 40 words is never a beat (a dash inside a speech)."""
+    (the old form). A piece longer than 40 words is never a beat (a dash inside a speech). `names`: known
+    character names, which mark a piece as a beat."""
     text = text.strip()
     if not re.search(r"(?:^|\s)[—–](?:\s|$)", text):
         return NpcOutput(text, [], False)
@@ -80,16 +147,26 @@ def split_npc_output(text: str) -> NpcOutput:
         else:
             beats.append(para)
             continue
+        speech_closed = True  # nothing of this paragraph's speech yet
         for piece in pieces:
             piece = piece.strip()
             if not piece:
                 is_beat = not is_beat
                 continue
             if is_beat and len(piece.split()) <= 40:
+                if not _is_beat(piece, names):  # a dash inside the speech, not a narrated act
+                    if speech and not speech_closed:
+                        speech[-1] = f"{speech[-1]} — {piece}"
+                    else:
+                        speech.append(piece)
+                    speech_closed = False
+                    continue
                 if not _is_tag(piece):
                     beats.append(piece)
+                speech_closed = True
             else:
                 speech.append(piece)
+                speech_closed = False
             is_beat = not is_beat
     joined = ""
     for piece in speech:  # "..., — додав він. — Тут" : the comma was for the tag
@@ -99,12 +176,17 @@ def split_npc_output(text: str) -> NpcOutput:
     return NpcOutput(_speech_tail(joined) if joined else "", beats, True)
 
 
-def beat_as_action(beat: str, name: str) -> str:
+def beat_as_action(beat: str, name: str, aliases: Iterable[str] = ()) -> str:
     """A beat as one observable-action sentence naming the actor ("озирнувся, стишив голос" ->
-    "Горст озирнувся, стишив голос.")."""
+    "Горст озирнувся, стишив голос."). `aliases`: how the actor is shown to a player who does
+    not know the name (the appearance label); a beat that opens with one names the actor."""
     b = beat.strip().strip(",;:").strip()
     if not b:
         return ""
+    for a in sorted((a.strip() for a in aliases if a and a.strip()), key=len, reverse=True):
+        if b.lower().startswith(a.lower()) and (len(b) == len(a) or not b[len(a)].isalnum()):
+            b = name + b[len(a):]
+            break
     first = b.split(None, 1)
     if first and first[0].lower() in _PRON:
         b = name + (" " + first[1] if len(first) > 1 else "")
@@ -129,6 +211,108 @@ def foreign_voice(text: str, own: str, others: Iterable[str]) -> str | None:
             if head.startswith(stem):
                 return f"beat acts for {o}: {b[:40]}"
     return None
+
+
+def tidy_speaker(text: str, own: Iterable[str], names: Iterable[str] = (), *,
+                 book_form: bool = True) -> str:
+    """Two glitches of an NPC call, fixed in its own output. `own`: the speaker's name and how
+    they are shown (appearance label); `names`: known character names (a piece naming one is a
+    beat).
+
+    - A leading "<own name or label>:" prefix (a script line for oneself, or the appearance used
+      as one) is dropped.
+    - A line that opens with a one-sentence beat ending right before the dash that opens speech
+      ("Ельза потерла край фартуха. — А якщо...?") gets the book form, speech first and the beat
+      after it ("— А якщо...? — Ельза потерла край фартуха."). A longer opening beat, or a dash
+      inside it, is left as written (that dash is punctuation, not the start of speech).
+    Anything else is returned unchanged. `book_form=False`: only the prefix is dropped."""
+    t = text.strip()
+    owns = sorted({o.strip() for o in own if o and o.strip()}, key=len, reverse=True)
+    stripped = True
+    while stripped:
+        stripped = False
+        for o in owns:
+            m = re.match(rf"{re.escape(o)}\s*:\s*", t, re.IGNORECASE)
+            if m and t[m.end():].strip():
+                t, stripped = t[m.end():].strip(), True
+                break
+    if not book_form or not t or t[0] in DASHES:
+        return t
+    # only the dash that opens speech: the opening beat is one sentence that ends before it
+    m = re.search(r"(?<=[.!?…])\s[—–]\s", t)
+    if m is None:
+        return t
+    beat, rest = t[: m.start()].strip(), t[m.end():].strip()
+    known = [*names, *owns]
+    if (not beat or not rest or len(beat.split()) > 40 or re.search(r"[—–]|[.!?…]\s", beat)
+            or not _is_beat(beat, known)):
+        return t
+    # what follows the dash must be speech: not another narrated act that opens with he/she
+    # or a name ("— Він замовк"). (The full `_is_beat` would also reject speech that starts with
+    # a verb, "А якщо вернеться...".)
+    nxt = re.findall(r"[\w'’]+", rest)[:1]
+    if nxt and (nxt[0].lower() in _PRON or nxt[0] in names or any(
+            rest.lower().startswith(o.lower()) for o in owns)):
+        return t
+    rest = rest if rest[-1] in ".!?…" else rest + "."
+    first = re.match(r"[\w'’]+", beat)
+    proper = first is not None and first.group(0) in set(names) | {o.split()[0] for o in owns
+                                                                   if o[:1].isupper()}
+    if rest[-1] != "." and not proper:  # "— Скільки? — кремезний сивий чоловік ..."
+        beat = beat[0].lower() + beat[1:]
+    elif rest[-1] == ".":
+        beat = beat[0].upper() + beat[1:]
+    return f"— {rest} — {beat}"
+
+
+# ---------------------------------------------------------------------------------------------
+# Script switches ("天天爱彩票" in a Ukrainian line)
+# ---------------------------------------------------------------------------------------------
+# the script of an output language besides Latin (always allowed: names, terms); a language not
+# listed is not checked
+LANGUAGE_SCRIPTS = {
+    "ukrainian": ("CYRILLIC",), "russian": ("CYRILLIC",), "belarusian": ("CYRILLIC",),
+    "bulgarian": ("CYRILLIC",), "serbian": ("CYRILLIC",), "macedonian": ("CYRILLIC",),
+    "english": (), "polish": (), "german": (), "french": (), "spanish": (), "italian": (),
+    "czech": (), "slovak": (), "portuguese": (), "greek": ("GREEK",),
+}
+
+
+def _foreign(ch: str, allowed: tuple[str, ...]) -> bool:
+    if not ch.isalpha() or unicodedata.category(ch) == "Lm":  # modifier letters: apostrophes
+        return False
+    script = unicodedata.name(ch, "").split(" ", 1)[0]
+    return script not in ("LATIN", *allowed)
+
+
+def foreign_runs(text: str, language: str | None) -> list[str]:
+    """Runs of letters outside the expected scripts of `language` (Latin is always allowed),
+    in order; [] when the language is unknown or None."""
+    allowed = LANGUAGE_SCRIPTS.get((language or "").strip().lower())
+    if allowed is None:
+        return []
+    runs: list[str] = []
+    cur = ""
+    for ch in text:
+        if _foreign(ch, allowed):
+            cur += ch
+        elif cur and not ch.isalpha() and not ch.isspace() and ch not in ".,;:!?…—–«»\"'()":
+            cur += ch  # a symbol inside the run (a dot between ideographs) stays with it
+        else:
+            if cur:
+                runs.append(cur)
+            cur = ""
+    if cur:
+        runs.append(cur)
+    return runs
+
+
+def cut_foreign(text: str, language: str | None) -> str:
+    """The text without its foreign-script runs, spacing and punctuation tidied."""
+    for run in foreign_runs(text, language):
+        text = text.replace(run, " ")
+    text = re.sub(r"[ \t]+([,.;:!?…])", r"\1", text)
+    return re.sub(r"[ \t]{2,}", " ", text).strip()
 
 
 # ---------------------------------------------------------------------------------------------
@@ -331,10 +515,20 @@ NPC_CORE = (
 NPC_FORM = (
     "Form, as the Ukrainian books write dialogue: a dash opens speech. Your own small physical "
     "business and manner go in between, in the third person, in the same paragraph "
-    "(\"— ..., — озирнувся {name}. — ...\"), or in a short clause before the dash. Use "
-    "one to three small beats, things anyone present could see or hear (a glance round, a "
-    "lowered voice, fidgeting, a spit, a pause, a hand to the purse). Not thoughts, not "
-    "explanations. Speech can be short, and sometimes it should be.")
+    "(\"— ..., — озирнувся {name}. — ...\"), or in a short clause before the dash, but only "
+    "when it earns its place: many lines have no gesture at all. When there is one, it is a "
+    "thing anyone present could see or hear (a glance round, a lowered voice, a spit, a pause, "
+    "a hand to the purse). Not thoughts, not explanations. Speech can be short, and "
+    "sometimes it should be. Answer the last thing said, not the whole situation.")
+
+GESTURE_FORM = (  # the gesture-only shape: the reply is the action itself, stored as an action
+    "Form: one short sentence in the third person about {name}, something anyone present could "
+    "see or hear. No dash, no speech, no thoughts.")
+
+BEAT_NO = ("No gesture this line: only {name}'s spoken words, after the dash, with no action "
+           "or manner between the dashes.")
+BEAT_YES = ("This line carries one small action of {name}'s (a glance, a pause, a hand to "
+            "something), woven between the dashes as the books do.")
 
 NPC_LIMITS = (
     "You write only {name}: your own words and your own actions. Never another character's "
@@ -395,9 +589,22 @@ class Style:
         parts.append(self._sec("dialogue", "voices by class", "irony and subtext", "what it avoids"))
         return "\n\n".join(p for p in parts if p)
 
-    def npc_instruction(self, prof: CharacterProfile, language: str | None) -> str:
+    def npc_instruction(self, prof: CharacterProfile, language: str | None,
+                        shape: "Shape | None" = None,
+                        bounds: tuple[int, int] | None = None, beat: bool | None = None) -> str:
+        """`bounds`: the words the shape allows (`shape.word_bounds`); the caller fits the reply
+        to the same bounds. `beat`: the engine drew whether this line carries one small action
+        (True), none (False), or left it to the model (None). The language line appears once,
+        at the end."""
+        from .shape import Shape, shape_instruction  # shape imports this module
+        form = (GESTURE_FORM if shape is Shape.GESTURE else NPC_FORM).format(name=prof.name)
+        speaks = shape not in (Shape.GESTURE, Shape.SILENCE)
+        beat_line = ("" if beat is None or not speaks else
+                     (BEAT_YES if beat else BEAT_NO).format(name=prof.name) + "\n")
         return (f"Write {prof.name}'s next turn: what {prof.name} says and does in this moment.\n"
-                + NPC_FORM.format(name=prof.name) + "\n" + NPC_LIMITS.format(name=prof.name)
+                + (shape_instruction(shape, None, bounds=bounds, name=prof.name) + "\n"
+                   if shape is not None else "")
+                + beat_line + form + "\n" + NPC_LIMITS.format(name=prof.name)
                 + (f"\nWrite in {language}." if language else ""))
 
     def npc_examples_section(self, situation: str) -> str:

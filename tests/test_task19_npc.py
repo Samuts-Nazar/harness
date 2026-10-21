@@ -9,7 +9,7 @@ from harness.judge import FakeJudge
 from harness.models import PLAYER, CharacterProfile, Scene
 from harness.npcgen import (
     CULTURES, LIFESPAN, NAMES, YEAR_MIN, generate_npc, make_vitals, pick_name, taken_names,
-    with_core,
+    infer_sex, with_core,
 )
 from harness.pipeline import Engine, ModelConfig
 from harness.providers import FakeProvider
@@ -125,3 +125,68 @@ def test_natural_death_is_computed_in_code_and_removes_the_person():
 def test_marriage_and_children_are_only_hooks():
     v = make_vitals("x", "northern", "f", 1)
     assert v.spouse is None and v.children == ()
+
+
+# -- name gender (task 11) -----------------------------------------------------------------------
+@pytest.mark.parametrize("slot", range(40))
+def test_a_male_role_never_gets_a_female_table_name(slot):
+    spec = generate_npc(3, slot, culture="northern", occupation="візник")
+    assert spec.sex == "m"
+    assert spec.name.split()[0] in NAMES["northern"][0]
+    assert spec.name.split()[0] not in NAMES["northern"][1]
+
+
+def test_sex_is_inferred_from_description_or_appearance_and_asked_once_when_unknown():
+    assert infer_sex("Високий чоловік з сивою бородою") == "m"
+    assert infer_sex("Молода жінка, вона носить хустку") == "f"
+    assert infer_sex("корчмарка", role=True) == "f"
+    assert infer_sex("міський вартовий", role=True) == "m"
+    assert infer_sex("людина") is None
+    f = generate_npc(3, 1, culture="northern", appearance="висока жінка, вона усміхається")
+    assert f.sex == "f" and f.name.split()[0] in NAMES["northern"][1]
+    asked: list[str] = []
+
+    def decider(q: str) -> str:
+        asked.append(q)
+        return "f"
+    d = generate_npc(3, 2, culture="northern", occupation="селянин", sex_decider=decider)
+    # a masculine occupation noun answers on its own: the decider is not bothered
+    assert d.sex == "m" and not asked
+    e = generate_npc(3, 3, culture="northern", description="перехожий без прикмет",
+                     sex_decider=decider)
+    assert e.sex == "f" and len(asked) == 1
+
+
+def test_infer_sex_does_not_read_nouns_or_male_names_as_feminine():
+    assert infer_sex("Високий чоловік, рука на перев'язі, шапка") == "m"
+    assert infer_sex("Лука") is None
+    assert infer_sex("Лука, він кульгає") == "m"
+
+
+def test_engine_asks_the_decider_once_when_sex_cannot_be_inferred(tmp_path):
+    """Task 12: one decider call for an NPC whose sex the text does not give; the answer is kept
+    in the profile (and in the saved setup)."""
+    e = eng()
+    e.judge.inner.rules["npc_sex"] = "f"
+    n0 = len(e.judge.inner.asked)
+    spec = e.fresh_npc("w1", "northern", description="перехожий без прикмет")
+    assert spec.sex == "f" and spec.name.split()[0] in NAMES["northern"][1]
+    assert len(e.judge.inner.asked) == n0 + 1
+    prof = e.add_npc(spec)
+    assert prof.sex == "f"
+    # the text says it: no call
+    e.fresh_npc("w2", "northern", appearance="висока жінка, вона усміхається")
+    # nothing to go on at all: no call (the seeded roll decides)
+    e.fresh_npc("w3", "northern")
+    assert len(e.judge.inner.asked) == n0 + 1
+
+
+def test_profile_sex_survives_reopening(tmp_path):
+    prov = FakeProvider(script={})
+    e = Engine.create_campaign("c", prov, PROFILES, Scene("Inn", (PLAYER,), 0), root=tmp_path,
+                               models=ModelConfig(), judge=FakeJudge({"npc_sex": "m"}),
+                               record_language=None)
+    prof = e.add_npc(e.fresh_npc("w1", "northern", description="перехожий без прикмет"))
+    e.close()
+    e2 = Engine.open_campaign("c", prov, root=tmp_path, models=ModelConfig(), judge=FakeJudge())
+    assert e2.profiles[prof.id].sex == "m"

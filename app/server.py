@@ -32,9 +32,10 @@ def create_app(game: Game) -> Starlette:
     async def turn(request: Request) -> JSONResponse:
         body = await request.json()
         try:
-            game.start_turn(str(body.get("text", "")))
+            # typing during a turn cuts in: this waits for the running turn to stop, then starts
+            await run_in_threadpool(game.start_turn, str(body.get("text", "")))
         except Busy:
-            return JSONResponse({"error": "Хід уже триває."}, status_code=409)
+            return JSONResponse({"error": "Хід ще триває."}, status_code=409)
         except Ended:
             return JSONResponse({"error": "Персонаж загинув. Кампанію завершено.",
                                  "ended": True}, status_code=423)
@@ -44,6 +45,9 @@ def create_app(game: Game) -> Starlette:
 
     async def interrupt(_: Request) -> JSONResponse:
         return JSONResponse({"interrupted": game.interrupt()})
+
+    async def skip(_: Request) -> JSONResponse:
+        return JSONResponse({"skipped": game.skip()})
 
     async def presence(request: Request) -> JSONResponse:
         body = await request.json()
@@ -117,6 +121,7 @@ def create_app(game: Game) -> Starlette:
         Route("/api/state", state),
         Route("/api/turn", turn, methods=["POST"]),
         Route("/api/interrupt", interrupt, methods=["POST"]),
+        Route("/api/skip", skip, methods=["POST"]),
         Route("/api/presence", presence, methods=["POST"]),
         Route("/api/campaign/new", new_campaign, methods=["POST"]),
         Route("/api/panel", panel),

@@ -11,7 +11,8 @@ import threading
 import time
 from typing import Any, Callable
 
-from harness.models import PLAYER, format_time
+from harness.decisions import DecisionCount, aggregate, count_since
+from harness.models import ACTION, PLAYER, UTTERANCE, format_time
 from harness.streaming import InterruptHandle
 
 from harness.outcome import CampaignEnded
@@ -52,7 +53,9 @@ class Game:
     def __init__(self, open_campaign: Callable[[bool], Campaign], pace: float = 0.25) -> None:
         """`open_campaign(new)`: the saved current campaign (new=False) or a fresh one."""
         self._open = open_campaign
-        self.pace = pace
+        self.base_pace = pace
+        self.pace = pace  # `skip()` sets it to 0 for the rest of the turn
+        self.start_lock = threading.Lock()  # one start_turn at a time (interrupt, wait, start)
         self.lock = threading.RLock()
         self.visible = threading.Event()
         self.visible.set()
@@ -61,6 +64,8 @@ class Game:
         self.thread: threading.Thread | None = None
         self.threads: list[threading.Thread] = []
         self.challenging = False
+        self.turn_no = 0  # every turn's events carry its id, so a client scopes them per turn
+        self._tl = threading.local()  # the turn id of the running thread
         self.reset(new=False)
 
     # -- campaign ---------------------------------------------------------------------------
@@ -71,11 +76,13 @@ class Game:
             if self.running or self.challenging:
                 raise Busy("a turn is running")
             self.camp = self._open(new)
+            self._ended = self.eng.ended  # read again whenever no turn's thread uses the database
             self.transcript: list[dict[str, Any]] = self.camp.transcript()
             self.phase = "idle"  # idle | thinking | narrating | speaking
             self.handle: InterruptHandle | None = None
             self.skip_narration = False
             self.debug: dict[str, Any] = {}
+            self.decision_log: list[tuple[str, DecisionCount]] = []  # (location, turn count)
             self.events = []
             self._panel = self._compute_panel()
             self.turn_start_seq = self.seq
@@ -90,8 +97,19 @@ class Game:
     def eng(self):  # type: ignore[no-untyped-def]
         return self.camp.engine
 
+    def _is_ended(self) -> bool:
+        """Is the player character dead? Read from the database only while no turn's thread is
+        alive (one SQLite connection must not be used from two threads at once); otherwise the
+        value that thread left after its turn. Call with `self.lock` held."""
+        if not self.running:
+            self._ended = self.eng.ended
+        return self._ended
+
     # -- events -----------------------------------------------------------------------------
     def _emit(self, type: str, **data: Any) -> dict[str, Any]:
+        turn = getattr(self._tl, "turn", None)
+        if turn is not None:
+            data.setdefault("turn", turn)
         with self.lock:
             self.seq += 1
             ev = {"seq": self.seq, "type": type, **data}
@@ -130,7 +148,8 @@ class Game:
                 "title": self.camp.title, "live": self.camp.live, "clock": self.clock(),
                 "transcript": list(self.transcript), "panel": self.panel(),
                 "running": self.running, "phase": self.phase,
-                "ended": self.eng.ended, "chronicle": self.chronicle() if self.eng.ended else [],
+                "ended": self._is_ended(),
+                "chronicle": self.chronicle() if self._is_ended() and not self.running else [],
                 # a client replays everything after this; for an idle game that is nothing
                 "resume_after": self.turn_start_seq if self.running else self.seq,
                 "pending_turn": getattr(self, "pending", None) if self.running else None,
@@ -149,24 +168,47 @@ class Game:
         (self.visible.set if visible else self.visible.clear)()
 
     # -- turn -------------------------------------------------------------------------------
-    def start_turn(self, text: str) -> None:
+    def start_turn(self, text: str, wait: float = 60.0) -> None:
+        """Start a turn. While one runs, the new text cuts in: the running turn is interrupted at
+        its current point, this waits until the player is free to read again (the slow lane may
+        go on), then the new turn starts."""
         text = text.strip()
         if not text:
             raise ValueError("empty input")
-        with self.lock:
-            if self.eng.ended:
-                raise Ended("the character is dead; the campaign is read-only")
-            # a turn may start while the slow lane of the last one still runs (it waits for it)
-            if self.phase != "idle" or self.challenging:
-                raise Busy("a turn is already running")
-            self.pending = text
-            self.phase = "thinking"
-            self.turn_start_seq = self.seq
-            self.events = []
-            self._emit("turn_start", text=text)
-            self.thread = threading.Thread(target=self._run, args=(text,), daemon=True)
-            self.threads = [t for t in self.threads if t.is_alive()] + [self.thread]
-            self.thread.start()
+        with self.start_lock:
+            with self.lock:
+                if self._is_ended():
+                    raise Ended("the character is dead; the campaign is read-only")
+                if self.challenging:
+                    raise Busy("a challenge is running")
+                if self.phase != "idle":
+                    self.interrupt(any_phase=True)
+            end = time.monotonic() + wait
+            while self.phase != "idle":  # the interrupted turn finishes within a word or a step
+                if time.monotonic() > end:
+                    raise Busy("the running turn did not stop")
+                time.sleep(0.01)
+            with self.lock:
+                if self._is_ended():
+                    raise Ended("the character is dead; the campaign is read-only")
+                if self.challenging:  # a challenge began while this waited
+                    raise Busy("a challenge is running")
+                self.pending = text
+                self.phase = "thinking"
+                self.pace = self.base_pace
+                self.handle = InterruptHandle()
+                self.skip_narration = False
+                self.turn_start_seq = self.seq
+                self.events = []
+                self.turn_no += 1
+                self._emit("turn_start", text=text, turn=self.turn_no)
+                # the last turn's thread may still be in its slow lane and bookkeeping: the new
+                # one waits for it before it touches the engine
+                self.thread = threading.Thread(
+                    target=self._run, args=(text, self.handle, self.thread, self.turn_no),
+                    daemon=True)
+                self.threads = [t for t in self.threads if t.is_alive()] + [self.thread]
+                self.thread.start()
 
     # -- "how does he know that?" ------------------------------------------------------------
     def challenge(self, event: int, explanation: str = "") -> dict[str, Any]:
@@ -188,6 +230,10 @@ class Game:
                         en.update(text=res.text, event=res.new_event)
                         en.pop("cut", None)
                 self._panel = self._compute_panel()
+            elif res.withdrawn:  # the line is gone and nothing replaces it: no empty bubble
+                self.transcript[:] = [en for en in self.transcript
+                                      if not (en.get("kind") == "npc" and en.get("event") == event)]
+                self._panel = self._compute_panel()
             self.debug = {**self.debug, "challenge": out,
                           "notes": self.debug.get("notes", []) + self.eng.devlog[-3:]}
             return out
@@ -203,34 +249,62 @@ class Game:
             return {c: {"name": eng.profiles[c].name, "label": eng.names.label(c),
                         "items": eng.knowledge_report(c)} for c in eng.profiles}
 
-    def interrupt(self) -> str:
-        """The interrupt button. Returns what was interrupted."""
+    def interrupt(self, any_phase: bool = False) -> str:
+        """The interrupt button. Returns what was interrupted. `any_phase`: also while the world
+        is still thinking (typing a new text cuts the running turn wherever it is)."""
         with self.lock:
             if self.phase == "speaking" and self.handle is not None:
                 self.handle.request()
                 return "speech"
             if self.phase == "narrating":
                 self.skip_narration = True
+                if any_phase and self.handle is not None:
+                    self.handle.request()
                 return "narration"
+            if any_phase and self.phase == "thinking" and self.handle is not None:
+                self.handle.request()
+                self.skip_narration = True
+                return "turn"
             return "none"
+
+    def skip(self) -> bool:
+        """Tap to skip the pace: the rest of this turn's words arrive at once. Not an interrupt:
+        nothing is cut. The pace comes back with the next turn."""
+        with self.lock:
+            if self.phase == "idle":
+                return False
+            self.pace = 0
+            return True
 
     def _pace(self) -> None:
         self.visible.wait()  # nothing is "said" while the app is in the background
         if self.pace:
             time.sleep(self.pace)
 
-    def _run(self, text: str) -> None:
+    def _run(self, text: str, handle: InterruptHandle,
+             last: threading.Thread | None = None, turn: int | None = None) -> None:
         eng, rec, spend = self.eng, self.camp.recorder, self.camp.spend
         t0 = time.monotonic()
+        self._tl.turn = turn  # every event this thread emits belongs to this turn
+        if last is not None and last is not threading.current_thread():
+            last.join()  # one thread on the engine and its database at a time
+        try:
+            self._turn(text, handle, eng, rec, spend, t0)
+        finally:
+            self._ended = eng.ended  # this thread is the database's only user here
+
+    def _turn(self, text: str, handle: InterruptHandle, eng: Any, rec: Any, spend: Any,
+              t0: float) -> None:
         eng._settle_for_next_turn()  # the slow lane of the last turn, if it is still running
         waited = round(time.monotonic() - t0, 2)
         marks = {"calls": len(rec.calls), "dev": len(eng.devlog),
-                 "judg": len(eng.judgments.entries), "cost": getattr(spend, "total", 0.0)}
+                 "judg": len(eng.judgments.entries), "where": eng.scene.location,
+                 "llm": len(eng.llm_calls),
+                 "cost": getattr(spend, "total", 0.0)}
         first_word: list[float] = []
         new_events: list[dict[str, Any]] = []
         entries: list[dict[str, Any]] = [{"kind": "player", "text": text}]
-        narr_words: list[str] = []
-        cur: dict[str, Any] = {"who": None}
+        cur: dict[str, Any] = {"who": None}  # the NPC whose block the next word extends
 
         def stamp() -> None:
             if not first_word:
@@ -239,13 +313,27 @@ class Game:
         def on_event(ev) -> None:  # type: ignore[no-untyped-def]
             new_events.append({"id": ev.id, "type": ev.type, "game_time": ev.game_time,
                                "payload": ev.payload, "participants": list(ev.participants)})
+            if ev.type == UTTERANCE:
+                cur["who"] = None  # the line is over: the next word starts a new block
+            elif ev.type == ACTION and ev.payload.get("gesture"):
+                # a gesture-only step of an NPC: shown as their action, in its place in the talk
+                who = ev.payload.get("by") or (ev.participants[0] if ev.participants else "")
+                name = eng.ctx.label(PLAYER, who)
+                act = eng.ctx.mask(PLAYER, str(ev.payload.get("text", ""))).strip()
+                if act:
+                    entries.append({"kind": "npc_act", "who": who, "name": name, "text": act})
+                    self._emit("npc_act", who=who, name=name, text=act)
+                cur["who"] = None
 
         def on_narration(narration: str) -> None:
-            self._stream_narration(narration, narr_words, stamp)
+            spoken: list[str] = []
+            self._stream_narration(narration, spoken, stamp)
+            if spoken:
+                entries.append({"kind": "narr", "text": " ".join(spoken)})
 
         def on_word(npc: str, w: str) -> None:
             self.visible.wait()
-            if cur["who"] != npc:
+            if cur["who"] != npc or entries[-1]["kind"] != "npc":
                 cur["who"] = npc
                 self.phase = "speaking"
                 name = eng.ctx.label(PLAYER, npc)  # a stranger stays "a stout grey-haired man"
@@ -254,22 +342,22 @@ class Game:
             stamp()
             entries[-1]["text"] = (entries[-1]["text"] + " " + w).strip()
             self._emit("word", who=npc, w=w)
-            if self.pace:
-                time.sleep(self.pace)
+            pace = self.pace  # a tap on the stream sets it to 0 mid-turn
+            if pace:
+                time.sleep(pace)
 
         world = getattr(self.camp, "world", None)
         since = max((e.id for e in eng.log.active()), default=0)
         unsubscribe = eng.log.subscribe(on_event)
-        self.handle = InterruptHandle()
-        self.skip_narration = False
         try:
             if world is not None:  # the world interprets the turn (trip, wait) and catches up
-                r = world.play(text, defer_slow=True, handle=self.handle, on_word=on_word,
+                r = world.play(text, defer_slow=True, handle=handle, on_word=on_word,
                                on_narration=on_narration).result
             else:
-                r = eng.turn(text, handle=self.handle, on_word=on_word, on_narration=on_narration,
+                r = eng.turn(text, handle=handle, on_word=on_word, on_narration=on_narration,
                              defer_slow=True)
         except BaseException as e:  # noqa: BLE001 - shown to the player, the input is kept
+            self._ended = eng.ended
             self.phase = "idle"
             self._emit("error", message=explain(e), text=text, detail=type(e).__name__)
             self._save_debug(marks, new_events, t0, first_word, error=repr(e)[:300])
@@ -278,26 +366,28 @@ class Game:
             return
         finally:
             unsubscribe()
-        if r.interrupted and entries[-1]["kind"] == "npc":
-            entries[-1]["cut"] = True
-        line_events = iter(u.id for u in r.utterances)
-        for en in entries:  # lets the player question a line afterwards ("how does he know?")
-            if en["kind"] == "npc":
-                en["event"] = next(line_events, None)
-        if narr_words:
-            entries.insert(1, {"kind": "narr", "text": " ".join(narr_words)})
+        # lines that were really delivered (a line cut before its first word has no block)
+        shown = [u for u in r.utterances if u.payload.get("text", "").strip()]
+        npc_entries = [en for en in entries if en["kind"] == "npc"]
+        for en, u in zip(npc_entries, shown):  # lets the player question a line afterwards
+            en["event"] = u.id
+            if u.payload.get("interrupted"):
+                en["cut"] = True
+        line_ids = [en["event"] for en in npc_entries if "event" in en]
+        cut_ids = [en["event"] for en in npc_entries if en.get("cut") and "event" in en]
         fast_s = round(time.monotonic() - t0, 2)
         with self.lock:
             self.transcript += entries
+            self._ended = eng.ended  # before the player is free: a death shows at once
             self.phase = "idle"  # the player can read and type now; bookkeeping goes on below
             self._emit("turn_done", interrupted=r.interrupted, clock=self.clock(),
-                       panel=self._panel, lines=[u.id for u in r.utterances], settling=True)
+                       panel=self._panel, lines=line_ids, cut_lines=cut_ids, settling=True)
         # the slow lane: extraction, salience, attitudes, world catch-up (while the player reads)
         eng.settle()
         failure, eng.slow_failure = eng.slow_failure, None
         with self.lock:
             if failure is not None:
-                del self.transcript[len(self.transcript) - len(entries) - (1 if narr_words else 0):]
+                del self.transcript[len(self.transcript) - len(entries):]
                 self._save_debug(marks, new_events, t0, first_word, error=repr(failure)[:300])
                 self._emit("retract", message=explain(failure), text=text)
                 return
@@ -311,6 +401,8 @@ class Game:
                 self._emit("ended", chronicle=self.chronicle())
 
     def _stream_narration(self, text: str, spoken: list[str], stamp: Callable[[], None]) -> None:
+        if not text.strip():  # an empty narration is never a bubble
+            return
         self.phase = "narrating"
         self._emit("narr_start")
         for w in text.split():
@@ -320,10 +412,24 @@ class Game:
             stamp()
             spoken.append(w)
             self._emit("narr_word", w=w)
-            if self.pace:
-                time.sleep(self.pace)
+            pace = self.pace
+            if pace:
+                time.sleep(pace)
         self._emit("narr_end", cut=self.skip_narration)
         self.phase = "thinking"
+
+    def _decisions(self, turn: DecisionCount | None, where: str) -> dict[str, Any] | None:
+        """The turn's decision count with the running scene (same location) and session totals."""
+        if turn is None:
+            return None
+        self.decision_log.append((where, turn))
+        scene = []
+        for loc, d in reversed(self.decision_log):
+            if loc != where:
+                break
+            scene.append(d)
+        return {"turn": turn.as_dict(), "scene": aggregate(scene).as_dict(),
+                "session": aggregate(d for _, d in self.decision_log).as_dict()}
 
     def _save_debug(self, marks: dict[str, Any], new_events: list[dict[str, Any]], t0: float,
                     first_word: list[float], error: str | None = None,
@@ -344,8 +450,11 @@ class Game:
             "cost": round(getattr(spend, "total", 0.0) - marks["cost"], 6),
             "error": error,
             "repetition": (report or {}).get("repetition"),
+            "dialogue": eng.dialogue_report(),
             "names": (report or {}).get("names"),
             "parallel": eng.parallel,
+            "decisions": self._decisions(
+                count_since(eng, 0, marks["judg"], marks["llm"], marks["dev"]), marks["where"]),
         }
 
     def wait_idle(self, timeout: float = 30.0) -> None:

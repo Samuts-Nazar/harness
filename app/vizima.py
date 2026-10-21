@@ -16,12 +16,14 @@ from harness.canon.retrieve import Canon
 from harness.glossary import Glossary
 from harness.models import Scene
 from harness.pipeline import Engine
+from harness.profile import load_profile
 from harness.style import Style
 from harness.world import pilot
 from harness.world.pilot import CANON_PLAYER, START_TIME
 from harness.world.places import vizima
 from harness.world.world import World
 
+from . import campaigns
 from .campaigns import CAMPAIGNS, Campaign, Recorder, Stack, Translator, _pointer
 
 TITLE = "Візім · корчма «Під Лисом»"
@@ -48,7 +50,7 @@ def canon_path(explicit: str | os.PathLike[str] | None = None) -> Path | None:
 
 def open_vizima(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = False,
                 name: str | None = None, canon_db: str | os.PathLike[str] | bool | None = None,
-                seed: int | str | None = None) -> Campaign:
+                seed: int | str | None = None, dialogue: str | None = None) -> Campaign:
     """Continue the current Vizima campaign, or start a new one at situation A."""
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
@@ -65,7 +67,8 @@ def open_vizima(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = False
             embedder = OpenRouterEmbedder("qwen/qwen3-embedding-8b")
         canon = Canon(store, embedder)
     kw = dict(models=stack.models, judge=stack.judge, glossary=Glossary.for_world("witcher"),
-              style=Style.load("witcher"))
+              style=Style.load("witcher"), dialogue=dialogue or campaigns.DIALOGUE,
+              world_profile=load_profile("witcher"))
     reopened = bool(name) and not new and Engine.campaign_exists(name, root)
     if reopened:
         eng = Engine.open_campaign(name, rec, root=root, **kw)  # type: ignore[arg-type]
@@ -98,7 +101,7 @@ def open_vizima(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = False
 def _populate_without_canon(eng: Engine) -> None:
     """No canon store: the same tavern with the code-made people only."""
     for slot, occ, _home, look, _goal in pilot.EXTRA_CAST:
-        eng.add_npc(eng.fresh_npc(slot, "northern", occupation=occ), appearance=look)
+        eng.add_npc(eng.fresh_npc(slot, "northern", occupation=occ, appearance=look), appearance=look)
     ids = pilot.canon_extra_ids()
     eng.acquaint(ids["guard"], ids["drunk"])
     for c in (ids["guard"], ids["drunk"], "player"):
