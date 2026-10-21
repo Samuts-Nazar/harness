@@ -29,7 +29,7 @@ ABS = Path("/home/cock/projects/harness")
 OUT = ABS / "campaigns" / "ld"
 BOOK = ABS / "data" / "witcher_books.txt"
 SCENES = REPO / "worlds" / "witcher" / "scenes"
-SPEND_CAP = 0.58
+SPEND_CAP = 0.40  # Task 12 re-run budget (Task 8: 0.58)
 
 SESSIONS = {
     "A": [
@@ -185,10 +185,13 @@ def run_session(name: str, mode: str, stack):
 def finish(eng, rec, out: dict) -> dict:
     from harness.profile import profile_of_lines
     out["lines"] = list(eng.session_lines)
+    out["names"] = list(eng._name_words)  # for the with-names measure (Task 12)
     out["dialogue_report"] = eng.dialogue_report()
     out["calls"] = rec.calls
     out["devlog_kinds"] = [n["kind"] for n in eng.devlog]
     out["slow_failures"] = [n for n in eng.devlog if n["kind"] == "slow_lane_failed"]
+    out["fix_notes"] = [n for n in eng.devlog if n["kind"] in (  # Task 12 fixes at work
+        "script_regenerated", "script_cut", "speaker_tidied", "beat_stripped", "shape_sampled")]
     out["slow_failure"] = repr(eng.slow_failure) if eng.slow_failure else None
     path = OUT / (out["unit"].replace(":", "_") + ".json")
     path.write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -219,7 +222,8 @@ def book_numbers(a: int, b: int) -> dict:
 def unit_numbers(d: dict, prof) -> dict:
     from harness.profile import distance, profile_of_lines
     lines = d["lines"]
-    p = profile_of_lines(lines)
+    p = profile_of_lines(lines)  # the Task 8 measure (no names), comparable across runs
+    pn = profile_of_lines(lines, d.get("names") or [])
     words = [len(x.split()) for x in lines]
     first = [t["first_word_s"] for t in d["turns"] if t["first_word_s"] is not None]
     fast = [t["fast_s"] for t in d["turns"]]
@@ -235,7 +239,13 @@ def unit_numbers(d: dict, prof) -> dict:
             "share_1_3": p.length_bins["1"] + p.length_bins["2-3"],
             "ratio_to_profile_median": p.median_words / prof.median_words,
             "question_share": p.question_share, "no_beat_share": p.no_beat_share,
+            "share_over_15": p.length_bins["16-30"] + p.length_bins["31+"],
             "length_bins": p.length_bins,
+            "with_names": {"median": pn.median_words,
+                           "share_1_3": pn.length_bins["1"] + pn.length_bins["2-3"],
+                           "share_over_15": pn.length_bins["16-30"] + pn.length_bins["31+"],
+                           "no_beat_share": pn.no_beat_share,
+                           "l1": distance(pn, prof, speech_only=True)["length_bins_l1"]},
             "distance": distance(p, prof, speech_only=True),
             "first_word_median_s": statistics.median(first) if first else None,
             "first_word_max_s": max(first) if first else None,
