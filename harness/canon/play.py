@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any, Callable, Sequence
 
 from ..facts import _tokens
 from ..judge import Judge, JudgeError
-from ..models import HEARD, SCRIPTED, TOLD, WITNESSED, CharacterProfile
+from ..models import HEARD, SCRIPTED, TOLD, WITNESSED, CharacterProfile, format_time
 from .api import Background, CanonCampaign, EventVerdict, Knower, ScheduledEvent
 from .retrieve import Canon
 
@@ -424,7 +424,9 @@ class CanonCast:
 
     def whereabouts(self, entity: str, t: int, here_place: str | None, here_name: str) -> "Whereabouts":
         """Where canon puts the person at campaign time `t`: the canon event with them that is nearest
-        in time (within `near` minutes) and has a place. None near: UNKNOWN."""
+        in time (within `near` minutes) and has a place. None near: the interval they are in, between the
+        last known canon place before now and the next one after; both elsewhere is ELSEWHERE (lodged
+        there), both here is HERE, anything else UNKNOWN with what is known (for a plausibility judgment)."""
         from ..scene_cast import ELSEWHERE, HERE, UNKNOWN, Whereabouts
         st = self.play.start.to_story_t(t)
         with self.canon._lock:
@@ -433,15 +435,30 @@ class CanonCast:
                 "JOIN record r ON r.id=p.event_id JOIN canon_event c ON c.id=r.id "
                 "WHERE p.entity=? AND r.place IS NOT NULL AND r.t_from BETWEEN ? AND ? "
                 "ORDER BY ABS(r.t_from - ?), r.t_from", (entity, st - self.near, st + self.near, st)).fetchall()
-            if not rows:   # nothing near now: the last place canon had them, for a plausibility judgment
-                last = self.canon.con.execute(
-                    "SELECT r.t_from, r.place FROM canon_participant p JOIN record r ON r.id=p.event_id "
-                    "WHERE p.entity=? AND r.place IS NOT NULL AND r.t_from <= ? ORDER BY r.t_from DESC LIMIT 1",
-                    (entity, st)).fetchone()
-                if last is None:
-                    return Whereabouts(UNKNOWN)
-                return Whereabouts(UNKNOWN, f"last seen in canon at {self.canon.name(last['place'])}, "
-                                            f"{round((st - last['t_from']) / 60)} h before now")
+            if not rows:   # nothing near now: the interval between the last known place and the next
+                q = ("SELECT r.t_from, r.place FROM canon_participant p JOIN record r ON r.id=p.event_id "
+                     "WHERE p.entity=? AND r.place IS NOT NULL AND r.t_from {} ? ORDER BY r.t_from {} LIMIT 1")
+                last = self.canon.con.execute(q.format("<=", "DESC"), (entity, st)).fetchone()
+                nxt = self.canon.con.execute(q.format(">", "ASC"), (entity, st)).fetchone()
+                lname = self.canon.name(last["place"]) if last is not None else ""
+                nname = self.canon.name(nxt["place"]) if nxt is not None else ""
+        if not rows:
+            if last is None and nxt is None:
+                return Whereabouts(UNKNOWN)
+            here = [x is not None and self._is_here(x["place"], nm, here_place, here_name)
+                    for x, nm in ((last, lname), (nxt, nname))]
+            who = self.canon.name(entity)
+            if last is not None and nxt is not None and not any(here):
+                return Whereabouts(ELSEWHERE, f"canon has {who} lodged at {lname} since {format_time(last['t_from'])} "
+                                              f"(story time), next at {nname} at {format_time(nxt['t_from'])}")
+            if last is not None and nxt is not None and all(here):
+                return Whereabouts(HERE, f"canon has {who} here from {format_time(last['t_from'])} "
+                                         f"to {format_time(nxt['t_from'])}")
+            parts = ([f"last seen in canon at {lname}, {round((st - last['t_from']) / 60)} h before now"]
+                     if last is not None else []) + (
+                [f"next in canon at {nname}, {round((nxt['t_from'] - st) / 60)} h after now"] if nxt is not None else [])
+            return Whereabouts(UNKNOWN, "; ".join(parts))
+        with self.canon._lock:
             r = rows[0]
             pname = self.canon.name(r["place"])
         if self._is_here(r["place"], pname, here_place, here_name):

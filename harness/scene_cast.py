@@ -84,10 +84,13 @@ class Admission:
 @dataclass
 class Review:
     """`reject`: why the narration is drift (the note for the narrator), None if it stands.
-    `admit`: who comes into the scene when it stands."""
+    `admit`: who may come into the scene (only when it stands, or when the absent people are
+    removed from it as a last resort). `absent`: the mentions (as the narration
+    wrote them) of the people who cannot be here."""
     reject: str | None = None
     admit: list[Admission] = field(default_factory=list)
     people: list[str] = field(default_factory=list)
+    absent: list[str] = field(default_factory=list)
 
 
 def parse_people(raw: str, limit: int = MAX_PEOPLE) -> list[str]:
@@ -103,9 +106,58 @@ def parse_people(raw: str, limit: int = MAX_PEOPLE) -> list[str]:
     return out[:limit]
 
 
-def _same_look(a: str, b: str) -> bool:
-    a, b = a.strip().lower(), b.strip().lower()
-    return bool(a and b) and (a in b or b in a)
+def _words(text: str) -> list[str]:
+    return [w for w in re.findall(r"\w+", text.lower()) if len(w) >= 3]
+
+
+def _same_word(a: str, b: str) -> bool:
+    """Whole words, allowing an inflected ending (сивий / сивого)."""
+    if a == b:
+        return True
+    n = 0
+    for x, y in zip(a, b):
+        if x != y:
+            break
+        n += 1
+    return n >= 3 and n >= min(len(a), len(b)) - 2
+
+
+def _same_look(mention: str, label: str) -> bool:
+    """The mention describes the person with this appearance label: more than half of the label's
+    words occur in the mention as whole words (a bare "жінка" or "сивий" is not enough)."""
+    lw, mw = _words(label), _words(mention)
+    if not lw or not mw:
+        return False
+    hit = sum(1 for w in lw if any(_same_word(w, m) for m in mw))
+    return hit * 2 > len(lw)
+
+
+_SENTENCE = re.compile(r"[^.!?…\n]*(?:[.!?…]+[»\"]?|\n|$)")
+
+
+def _mention_pattern(mention: str) -> re.Pattern[str]:
+    """A mention in any inflected form: each word by its stem, whole words, in order."""
+    parts = []
+    for w in re.findall(r"\w+", mention):
+        stem = w[:-2] if len(w) > 5 else (w[:-1] if len(w) > 3 else w)
+        parts.append(re.escape(stem) + r"\w*")
+    return re.compile(r"(?<!\w)" + r"\W+(?:\w+\W+){0,2}?".join(parts) + r"(?!\w)", re.IGNORECASE)
+
+
+def remove_people(text: str, mentions: list[str]) -> tuple[str, list[str]]:
+    """`text` without the sentences that mention any of these people; and the removed sentences.
+    The last resort when every draft put someone here who cannot be here."""
+    pats = [_mention_pattern(m) for m in mentions if re.search(r"\w", m)]
+    kept: list[str] = []
+    removed: list[str] = []
+    for para in text.split("\n"):
+        out = []
+        for sent in _SENTENCE.findall(para):
+            if not sent.strip():
+                continue
+            (removed if any(p.search(sent) for p in pats) else out).append(sent.strip())
+        kept.append(" ".join(out))
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(kept)).strip(), removed
 
 
 class SceneCast:
@@ -180,6 +232,7 @@ class SceneCast:
                     rv.admit.append(adm)
                 elif w.status == ELSEWHERE:
                     drift.append(f"{m}: {w.reason or 'canon puts this person elsewhere now'}")
+                    rv.absent.append(m)
                 else:
                     about = self.source.describe(entity) + (f"; {w.reason}" if w.reason else "")
                     ask[f"p{i}"] = self._plausible_q(m, about, eng)
@@ -195,8 +248,12 @@ class SceneCast:
                         rv.admit.append(Admission("known", m, cid=cid))
                     else:
                         drift.append(f"{name} is at {place} now, not here")
+                        rv.absent.append(m)
                     continue
-                ask[f"p{i}"] = self._plausible_q(name, eng.ctx.describe(cid), eng)
+                about = eng.ctx.describe(cid) + (
+                    f"; last known place: {place}" if place is not None else
+                    "; where they are now is not known")
+                ask[f"p{i}"] = self._plausible_q(name, about, eng)
                 pending[f"p{i}"] = Admission("known", m, cid=cid)
                 continue
             adm = Admission("passer_by", m, label=m)
@@ -207,7 +264,9 @@ class SceneCast:
             rv.admit.append(adm)
         if ask:
             try:
-                got = eng.judge.ask([eng.ctx._scene_header(sc), f"Narration: {narration}"], ask)
+                # the facts, the place and the time, not the draft under review (it would prime
+                # the answer): what is known of each person is in their question
+                got = eng.judge.ask([eng.ctx._scene_header(sc)], ask)
             except JudgeError as e:
                 eng._note("scene_cast_judge_unavailable", error=str(e)[:200])
                 got = {}
@@ -218,13 +277,13 @@ class SceneCast:
                 elif j is not None and j.answer:
                     rv.admit.append(adm)
                 else:  # implausible, or no verdict: the narration may not place them here
+                    rv.absent.append(adm.mention)
                     drift.append(f"{adm.mention} would not plausibly be here now"
                                  + ("" if j is not None else " (could not be checked)"))
         if drift:
             rv.reject = ("Your last draft brought into the scene people who cannot be here now: "
                          + "; ".join(drift) + ". Rewrite it without them; they are not at "
                          f"{sc.location}.")
-            rv.admit = []
         return rv
 
     def _plausible_q(self, who: str, about: str, eng: "Engine") -> Any:

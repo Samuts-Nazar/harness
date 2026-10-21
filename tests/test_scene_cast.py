@@ -244,3 +244,64 @@ def test_undone_passer_by_leaves_no_profile():
     eng.turn("*Озираюсь.*")
     assert set(eng.profiles) == {p.id for p in PROFILES}
     assert eng.scene.present == (PLAYER, "horst")
+
+
+# -- review fix round 1 ---------------------------------------------------------------------------
+def test_canon_cast_between_two_events_elsewhere_is_elsewhere(canon):
+    """Ярош is at the town hall on day 3 morning and again on day 5 noon; on day 4 noon nothing is
+    near, but both ends of the interval are elsewhere: he is not in the tavern."""
+    play = CanonPlay.at(canon, 4, 12, "place:owl")
+    cc = CanonCast(play, places={"place:owl": "tavern", "place:hall": "hall"})
+    w = cc.whereabouts("char:yarosh", 0, "tavern", "корчма «Під Совою»")
+    assert w.status == ELSEWHERE and "lodged at ратуша" in w.reason
+    cc2 = CanonCast(CanonPlay.at(canon, 4, 12, "place:hall"), places={"place:hall": "hall"})
+    assert cc2.whereabouts("char:yarosh", 0, "hall", "ратуша").status == HERE
+
+
+def test_every_draft_drifting_delivers_the_narration_without_the_absent_person():
+    draft = "Дощ стукає у вікна. Біля стійки сидить Ґеральт і п'є пиво."
+    eng, prov, judge, cal = make([draft] * 3, ["Ґеральт"] * 3, status=ELSEWHERE,
+                                 reason="canon has him at the guardroom")
+    res = eng.turn("*Озираюсь.*")
+    assert len(narrator_prompts(prov)) == 3
+    assert res.narration == "Дощ стукає у вікна."
+    assert "geralt" not in eng.scene.present
+    notes = [n for n in eng.devlog if n["kind"] == "narrator_absent_character_removed"]
+    assert notes and notes[0]["removed"] == ["Біля стійки сидить Ґеральт і п'є пиво."]
+
+
+def test_all_rejected_delivers_the_last_draft_that_passed_the_cast_review():
+    calls = {"n": 0}
+
+    def speech(q, state):
+        calls["n"] += 1
+        return calls["n"] == 1  # the draft that passed the cast review "contains speech"
+
+    eng, prov, judge, cal = make(
+        ["Увійшов худий хлопчик-посильний.", "Ґеральт сидить.", "Ґеральт сидить."],
+        ["худий хлопчик-посильний", "Ґеральт", "Ґеральт"], status=ELSEWHERE,
+        rules={"narrator_speech": speech})
+    res = eng.turn("*Озираюсь.*")
+    assert res.narration == "Увійшов худий хлопчик-посильний."
+    new = [c for c in eng.scene.present if c not in (PLAYER, "horst")]
+    assert len(new) == 1 and eng.profiles[new[0]].appearance == "худий хлопчик-посильний"
+
+
+def test_plausibility_judge_does_not_read_the_draft():
+    eng, prov, judge, cal = make(["Біля стійки сидить Ґеральт.", "Тихо."], ["Ґеральт", "none"],
+                                 status=UNKNOWN, reason="last seen in canon at the guardroom",
+                                 rules={"cast_plausible": False})
+    eng.turn("*Озираюсь.*")
+    (state, qs), = [(st, qs) for st, qs in judge.asked
+                    if any(q.tag == "cast_plausible" for q in qs.values())]
+    assert not any("сидить" in str(x) or "Narration" in str(x) for x in state)
+    assert any("Location:" in str(x) and "Time:" in str(x) for x in state)
+    assert "guardroom" in next(iter(qs.values())).text
+
+
+def test_vague_mentions_are_not_taken_for_a_present_person():
+    from harness.scene_cast import _same_look
+    assert not _same_look("сивий", "кремезний сивий корчмар")
+    assert not _same_look("жінка", "жінка з ринку")
+    assert _same_look("кремезного сивого корчмаря", "кремезний сивий корчмар")
+    assert _same_look("жінка з ринку", "жінка з ринку")

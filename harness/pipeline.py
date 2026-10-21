@@ -546,6 +546,8 @@ class Engine:
         sc = self.scene
         raw, parsed = "", None
         notes: list[str] = []  # why earlier drafts were rejected, when the narrator can fix it
+        # the cast review's last draft that passed it, and the last one that drifted (task LD-9)
+        cast: dict[str, tuple[NarratorOutput, Any]] = {}
         for attempt in range(self.narrate_retries + 1):
             admitted: list[tuple[Event, bool, bool]] = []
             raw = self._complete("narrator", self._with_notes(self.ctx.narrator(
@@ -579,7 +581,7 @@ class Engine:
                 self._note("canon_drift_rejected", attempt=attempt, why=why, text=out.description)
                 ok = False
             elif self.scene_cast is not None and (
-                    why := self._cast_review(out, admitted, attempt)) is not None:
+                    why := self._cast_review(out, admitted, attempt, cast)) is not None:
                 notes.append(why)
                 ok = False
             elif on_candidate is not None:
@@ -591,6 +593,11 @@ class Engine:
             self._unadmit(admitted)
             self._note("narrator_speech_rejected", attempt=attempt, text=out.description)
         names = self._npc_names
+        late: tuple[NarratorOutput, Any] | None = None  # people to admit into the delivered draft
+        if "ok" in cast:  # never deliver a person who cannot be here: the last draft that passed
+            parsed, late = cast["ok"][0], cast["ok"]
+        elif "drift" in cast:  # every reviewed draft drifted: remove the people, keep the rest
+            parsed, late = self._remove_absent(*cast["drift"]), cast["drift"]
         if parsed is None:
             parsed = NarratorOutput(self._fix_names(self._prose_of(raw), "narration"))
         mask = lambda t: self.names.mask(PLAYER, t)  # noqa: E731 - last resort: no unknown name
@@ -603,6 +610,8 @@ class Engine:
             stripped.description = "..."
         self._note("narrator_speech_stripped", before=parsed.description,
                    after=stripped.description)
+        if late is not None:
+            self._cast_admit(stripped, late[1], [], -1)
         return self._valid_speakers(stripped)
 
     @staticmethod
@@ -616,18 +625,29 @@ class Engine:
                                  "draft: " + " ".join(dict.fromkeys(notes))}]
 
     def _cast_review(self, out: NarratorOutput, admitted: list[tuple[Event, bool, bool]],
-                     attempt: int) -> str | None:
+                     attempt: int, cast: dict[str, tuple[NarratorOutput, Any]]) -> str | None:
         """People the narration shows present who are not in the scene (main thread). A person
         who cannot be here (canon calendar, the world, a plausibility judgment) makes the draft
         drift: the reason is returned and the narrator writes again with it. Everyone else enters
-        the scene now (`enter_scene`, a profile from canon or npcgen), so they can speak and the
-        director can pick them; a name the player character has not learned is replaced by how
-        the person looks. `admitted` collects the entries, undone if the draft is rejected later."""
+        the scene now (`_cast_admit`). `admitted` collects the entries, undone if the draft is
+        rejected later. `cast` keeps the last draft that passed ("ok") and the last that drifted
+        ("drift"), with their reviews, for the case that every draft is rejected."""
         rv = self.scene_cast.review(self, "\n".join(out.texts()))
+        draft = NarratorOutput(out.description, list(out.actions), list(out.speakers))
         if rv.reject is not None:
+            cast["drift"] = (draft, rv)
             self._note("narrator_absent_character", attempt=attempt, people=rv.people,
-                       why=rv.reject, text=out.description)
+                       absent=rv.absent, why=rv.reject, text=out.description)
             return rv.reject
+        cast["ok"] = (draft, rv)
+        self._cast_admit(out, rv, admitted, attempt)
+        return None
+
+    def _cast_admit(self, out: NarratorOutput, rv: Any, admitted: list[tuple[Event, bool, bool]],
+                    attempt: int) -> None:
+        """The people a review admits enter the scene (`enter_scene`, a profile from canon or
+        npcgen), so they can speak and the director can pick them; a name the player character
+        has not learned is replaced by how the person looks."""
         for adm in rv.admit:
             before = set(self.profiles)
             cid = self.scene_cast.character_for(self, adm)
@@ -645,7 +665,17 @@ class Engine:
         if admitted:  # names stay knowledge: a newcomer is shown by appearance
             out.description = self.names.mask(PLAYER, out.description)
             out.actions = [self.names.mask(PLAYER, a) for a in out.actions]
-        return None
+
+    def _remove_absent(self, draft: NarratorOutput, rv: Any) -> NarratorOutput:
+        """Last resort after every draft drifted: the sentences that put the absent people here
+        are removed in code."""
+        from .scene_cast import remove_people
+
+        desc, removed = remove_people(draft.description, rv.absent)
+        acts = [a for a in (remove_people(a, rv.absent)[0] for a in draft.actions) if a]
+        self._note("narrator_absent_character_removed", absent=rv.absent, removed=removed,
+                   before=draft.description, after=desc)
+        return NarratorOutput(desc, acts, list(draft.speakers))
 
     def _unadmit(self, admitted: list[tuple[Event, bool, bool]]) -> None:
         """Undo admissions of a rejected draft (or a failed turn): the entry and what it caused
