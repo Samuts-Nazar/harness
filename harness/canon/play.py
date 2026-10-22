@@ -250,6 +250,7 @@ class CanonPlay:
     canon: Canon
     start: CanonCampaign
     made: dict[str, str] = field(default_factory=dict)   # canon entity -> engine character id
+    portraits: dict[str, str] = field(default_factory=dict)  # canon entity -> world portrait id
 
     @classmethod
     def at(cls, canon: Canon, day: int, hour: float, place: str | None, present: Sequence[str] = ()) -> "CanonPlay":
@@ -292,6 +293,8 @@ class CanonPlay:
                                 location=self.canon.name(o["place"]) if o["place"] else "",
                                 notability=float(o["loudness"]), knowers=[(prof.id, how, src)])
         eng._save_setup()
+        if self.portraits.get(entity) in eng.ctx.portraits:  # this person plays a world portrait
+            eng.bind_portrait(prof.id, self.portraits[entity])
         return prof.id
 
     def install(self, eng: "Engine", cast: Sequence[str], *, member_of: dict[str, Sequence[str]] | None = None) -> list[str]:

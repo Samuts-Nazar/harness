@@ -244,3 +244,18 @@ def test_the_card_names_the_moment_the_company_and_where_geralt_is(cid):
     assert sp["title"] in rows["Старт"] and card["title"] == sp["title"]
     assert rows["Ситуація"] == sp["pitch"] and rows["Хто поруч"] == sp["who"]
     assert rows["Де Ґеральт"] == sp["geralt"]
+
+
+@pytest.mark.parametrize("cid", ["vidmak_A_tavern", "vidmak_B_gate"])
+def test_canon_people_play_their_portraits(tmp_path, store, cid):
+    """The start point's `portraits` binding: the canon people made at the start play their
+    portraits; one the canon brings in later (Ґеральт) is bound when he is made."""
+    g, _ = build(tmp_path, cid, store)
+    eng = g.eng
+    assert eng.profiles["velerad"].portrait == "velerad"
+    assert eng.profiles["foltest"].portrait == "foltest"
+    assert eng.profiles["innkeeper"].portrait == "innkeeper_vizima"
+    assert eng.ctx.rung_of("innkeeper") == "stranger"
+    play = g.camp.world.canon.play
+    gid = play.ensure_character(eng, "char:geralt")
+    assert eng.profiles[gid].portrait == "geralt_vidmak"

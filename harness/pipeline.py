@@ -10,7 +10,7 @@ import sqlite3
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
@@ -61,7 +61,7 @@ from .narrator import (
     parse_narration,
     strip_speech,
 )
-from .npcgen import NpcSpec, VitalsBook, generate_npc, taken_names, with_core
+from .npcgen import NpcSpec, VitalsBook, generate_npc, short_portrait, taken_names, with_core
 from .outcome import (
     CHARACTER_DEATH, FAILS, OUTCOME, CampaignEnded, Outcome, OutcomeJudge, record_death, record_outcome,
 )
@@ -71,7 +71,7 @@ from .policy import (
 )
 from .providers import Provider, ProviderError
 from .stylehits import count_by_kind, style_hits
-from .portrait import PortraitError, copy_overlap, load_world_portraits
+from .portrait import PortraitError, copy_overlap, load_world_portraits, parse_portrait
 from .repetition import WINDOW as REPETITION_WINDOW, measure_turn, sentences
 from .profile import WorldProfile, distance, profile_of_lines
 from .settings import (
@@ -382,6 +382,7 @@ class Engine:
                                   player_unlimited=player_unlimited)
         self.ctx.outcomes = outcomes
         self.world = world
+        self._short_portraits: dict[str, dict | None] = {}  # npc -> generated portrait (None: failed)
         try:  # a broken portrait file must not stop a campaign from opening
             self.ctx.portraits = load_world_portraits(world) if world else {}
         except (OSError, PortraitError) as e:
@@ -1955,6 +1956,7 @@ class Engine:
                                      first_raw=first)
                 slow.result.fact_ids = self._commit(diff, slow.sources)
                 self._apply_switches(slow)
+                self.promote_short_portraits()
                 self._turn_report(slow.player_event.id, slow.result)
                 for u in slow.result.utterances:
                     self.agents.promote(u.payload["speaker"], sc)
@@ -2623,6 +2625,51 @@ class Engine:
         if self._owns_conn:
             self._save_setup()
 
+    # -- short portraits for invented NPCs who matter ---------------------------------------
+    def make_short_portrait(self, npc: str, text: str = "", rung: str = "stranger") -> bool:
+        """One extractor-role call: a short portrait for the invented NPC `npc` (`text`: the
+        author's free-text description), cached in the campaign and played from now on. A failure
+        is noted and not retried; the NPC keeps playing by manner. True when it now has one."""
+        if npc in self._short_portraits:
+            return bool(self._short_portraits[npc]) and bool(self.profiles[npc].portrait)
+        spec = self._spec_of(npc)
+        p = short_portrait(spec, self.style, lambda m: self._complete("extractor", m), text=text)
+        self._short_portraits[npc] = asdict(p) if p else None
+        if p is None:
+            self._note("short_portrait_failed", npc=npc)
+        else:
+            self.ctx.portraits[p.id] = p
+            self.bind_portrait(npc, p.id, rung)
+        if self._owns_conn:
+            with self.conn:
+                self.conn.execute("INSERT OR REPLACE INTO campaign_meta (key, value) VALUES (?,?)",
+                                  ("short_portraits",
+                                   json.dumps(self._short_portraits, ensure_ascii=False)))
+        return p is not None
+
+    def _spec_of(self, npc: str) -> NpcSpec:
+        """What the portrait writer is told about an invented NPC, from the profile and vitals."""
+        prof, v = self.profiles[npc], self.vitals.people[npc]
+        return NpcSpec(npc, prof.name, v.culture, v.sex, prof.description, (), "", prof.core, v)
+
+    def promote_short_portraits(self) -> list[str]:
+        """Present invented NPCs who now matter (the player knows their name, or they came into a
+        scene a second time) and have no portrait yet get a short one (slow lane). Canon people,
+        package people with a portrait, and anyone already tried are skipped."""
+        entries: dict[str, int] = {}
+        for e in self.log.active([SCENE_ENTRY]):
+            c = e.payload.get("character")
+            entries[c] = entries.get(c, 0) + 1
+        out = []
+        for c in self.scene.present:
+            if (c == PLAYER or c not in self.vitals.people or c in self._short_portraits
+                    or self.profiles[c].portrait):
+                continue
+            if self.names.knows(PLAYER, c) or entries.get(c, 0) >= 2:
+                if self.make_short_portrait(c):
+                    out.append(c)
+        return out
+
     def set_core(self, npc: str, core: str) -> None:
         """Set an NPC's immutable core once (a second, different core is refused)."""
         self.profiles[npc] = with_core(self.profiles[npc], core)
@@ -2740,6 +2787,10 @@ class Engine:
         eng = cls(provider, kw.pop("profiles", profiles), scene, conn=conn, campaign_dir=d, **kw)
         eng.vitals = VitalsBook.from_json(meta.get("vitals", []))
         eng._owns_conn = True
+        eng._short_portraits = dict(meta.get("short_portraits") or {})
+        for pid, raw in eng._short_portraits.items():  # generated portraits: cached, never re-made
+            if raw:
+                eng.ctx.portraits[raw["id"]] = parse_portrait(raw, f"npc:{pid}")
         eng.refresh_memory()
         return eng
 

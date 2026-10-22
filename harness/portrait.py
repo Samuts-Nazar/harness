@@ -126,6 +126,11 @@ def load_portrait(path: Path) -> Portrait:
         d = yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as e:
         raise PortraitError(path, "<file>", f"invalid YAML: {e}") from e
+    return parse_portrait(d, path)
+
+
+def parse_portrait(d: object, path: Path | str = "<portrait>") -> Portrait:
+    """A Portrait from its mapping (a loaded YAML file, or a cached generated portrait)."""
     if not isinstance(d, dict):
         raise PortraitError(path, "<file>", "top level must be a mapping")
     sts = _req(path, d, "stances", list)

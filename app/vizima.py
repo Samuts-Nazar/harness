@@ -148,6 +148,9 @@ def _populate_without_canon(eng: Engine, start: pilot.CanonStart = pilot.SITUATI
     stand = _stand_ins(start)
     for slot, occ, _home, look, _goal in (*start.extras, *stand):
         eng.add_npc(eng.fresh_npc(slot, "northern", occupation=occ, appearance=look), appearance=look)
+    for ent, pid in start.portraits:  # a stand-in plays the portrait of the canon person it replaces
+        if ent in _STAND_INS and pid in eng.ctx.portraits and ent in start.here:
+            eng.bind_portrait(f"npc_{_STAND_INS[ent][0]}", pid)
     ids = {**pilot.canon_extra_ids(start), **{s: f"npc_{s}" for s, *_ in stand}}
     for a, b in start.pairs:
         a, b = ids.get(a, a), ids.get(b, b)

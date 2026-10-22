@@ -69,6 +69,44 @@ CHANGES = [  # one state change per extractor call, then none (the scripted stat
 ]
 
 
+PORTRAIT_REPLY = """```yaml
+core: A plain working person who owes the world a little and says so only in numbers.
+stances:
+  - id: wary
+    rung: [stranger, client]
+    does: Answers what is asked, names the price first, keeps a counter or a tool between them.
+    sounds: Short and dry; «добродію» as distance.
+    examples: ["— Це коштує два гроші.", "— Питайте прямо, добродію."]
+  - id: easy
+    rung: [ally, close]
+    does: Jokes about the trade and the authorities, helps without asking why.
+    sounds: Slow, warm, plain words.
+    examples: ["— Сідай, поговоримо."]
+  - id: soft
+    rung: [lover]
+    does: Quiet, rough tenderness shown in small deeds.
+    sounds: Few words, low.
+switches:
+  - id: paid_fair
+    trigger: Did the player pay fairly without haggling?
+    warmth: 0.2
+    trust: 0.2
+  - id: helped
+    trigger: Did the player help with the work without being asked?
+    warmth: 0.3
+    trust: 0.4
+  - id: mocked
+    trigger: Did the player mock the person or their trade?
+    warmth: -0.4
+    trust: -0.2
+hidden: Keeps a small secret about money.
+leaks:
+  - Glances at a bundle under the counter.
+voice: Lines of about eight words; numbers first.
+never: Never begs and never names the secret.
+```"""
+
+
 class FakeUk:
     """Scripted offline provider, Ukrainian text, any number of turns (it cycles). Thread-safe, so
     the engine's parallel turn runs on it too."""
@@ -85,6 +123,8 @@ class FakeUk:
         sys = messages[0]["content"]
         with self._lock:
             self.calls.append((model, messages))
+            if sys.startswith("You write character portraits"):  # a short portrait (portraits task 5)
+                return PORTRAIT_REPLY
             if "turn assistant" in sys:  # suggestions: a different set every call
                 i = self.n.setdefault("assistant", 0)
                 self.n["assistant"] = i + 3

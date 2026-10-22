@@ -22,9 +22,14 @@ import random
 import re
 import zlib
 from dataclasses import dataclass, field, replace
-from typing import Callable, Iterable, Sequence
+from typing import TYPE_CHECKING, Callable, Iterable, Sequence
+
+import yaml
 
 from .models import CharacterProfile
+
+if TYPE_CHECKING:
+    from .portrait import Portrait
 
 YEAR_MIN = 360 * 24 * 60  # the placeholder calendar of harness/world/clock.py
 EPOCH_YEAR = 1263          # placeholder: the year of campaign minute 0
@@ -327,3 +332,104 @@ class VitalsBook:
             b.register(Vitals(str(r[0]), str(r[1]), str(r[2]), int(r[3]), int(r[4]),  # type: ignore[call-overload]
                               r[5] if r[5] else None, tuple(r[6])))  # type: ignore[arg-type]
         return b
+
+
+# -- short portraits for invented NPCs who matter ------------------------------------------------
+# One cheap extractor-role call at creation (a named, recurring or package person), cached in the
+# campaign. The reply is checked and clamped in code; an unusable reply gives None and the NPC keeps
+# playing by manner.
+
+PORTRAIT_SYSTEM = """You write character portraits for a text role-playing game. Reply with ONE yaml \
+block only, no prose. Write the instructions in English; example lines in Ukrainian. Invent no \
+names of other people, places or events: the portrait only says how this person behaves.
+
+Fields:
+core: two sentences, who this person is and what drives them.
+stances: 4 or 5 items, each with id, rung (a list from: stranger, client, ally, close, lover), \
+does (what they do and how they treat the player at this rung), sounds (how they talk), examples \
+(0-2 short Ukrainian lines). Together the stances must cover all five rungs: strangers and close \
+people are treated differently.
+switches: 3 to 5 items, each with id, trigger (an English yes/no question about what the player \
+just did, ending with a question mark), warmth and trust (numbers from -0.5 to 0.5). Some warm \
+the person, some anger them.
+hidden: one sentence, what they hide.
+leaks: 1 or 2 small tells that show the hidden thing without naming it.
+voice: how long the lines are, which words and habits.
+never: what they never do or say.
+A stranger still answers a direct question."""
+
+MIN_STANCES, MIN_SWITCHES = 3, 3
+_YAML_FENCE = re.compile(r"```[ \t]*(?:ya?ml)?[ \t]*\n(.*?)```", re.DOTALL | re.IGNORECASE)
+
+
+def _portrait_request(spec: NpcSpec, style: object, text: str) -> list[dict[str, str]]:
+    lines = [f"Name: {spec.name}", f"Who: {spec.occupation}",
+             f"Sex: {'woman' if spec.sex == 'f' else 'man'}"]
+    if spec.traits:
+        lines.append(f"Traits: {', '.join(spec.traits)}. Habit: {spec.quirk}")
+    elif spec.core:
+        lines.append(f"Existing core: {spec.core}")
+    world = getattr(style, "sheet", {}).get("world") if style is not None else None
+    if world:
+        lines.append(f"World: {world[:300]}")
+    if text:
+        lines.append(f"The author's description (follow it): {text}")
+    return [{"role": "system", "content": PORTRAIT_SYSTEM},
+            {"role": "user", "content": "\n".join(lines)}]
+
+
+def short_portrait(spec: NpcSpec, style: object, complete: Callable[[list[dict[str, str]]], str],
+                   *, text: str = "") -> "Portrait | None":
+    """A Portrait for an invented NPC from one extractor-role call (`complete(messages)` returns the
+    reply). `text`: the author's free-text description, when there is one. None when the call fails
+    or its reply is not a usable portrait (at least 3 stances, 3 switches and a voice)."""
+    from .portrait import RUNGS, PortraitError, parse_portrait
+
+    try:
+        reply = complete(_portrait_request(spec, style, text))
+    except Exception:  # noqa: BLE001 - any provider failure: the NPC keeps playing by manner
+        return None
+    m = _YAML_FENCE.search(reply or "")
+    try:
+        d = yaml.safe_load(m.group(1) if m else reply)
+    except yaml.YAMLError:
+        return None
+    if not isinstance(d, dict) or not isinstance(d.get("stances"), list):
+        return None
+    try:
+        d["stances"] = [_clean_stance(s, RUNGS) for s in d["stances"]]
+        d["switches"] = [_clean_switch(s) for s in d.get("switches") or []]
+        if len(d["stances"]) < MIN_STANCES or len(d["switches"]) < MIN_SWITCHES:
+            return None
+        d.update(id=f"npc:{spec.id}", character=spec.id, name=spec.name,
+                 phase="invented person, as of the start of play")
+        d["hidden"] = str(d.get("hidden") or "")
+        d["never"] = str(d.get("never") or "")
+        if not isinstance(d.get("leaks"), list):
+            d["leaks"] = []
+        d["leaks"] = [str(x) for x in d["leaks"]]
+        d.pop("relations", None)
+        if not isinstance(d.get("voice"), str) or not d["voice"].strip():
+            return None
+        return parse_portrait(d, f"npc:{spec.id}")
+    except (PortraitError, KeyError, TypeError, ValueError, AttributeError):
+        return None
+
+
+def _clean_stance(s: dict, rungs: Sequence[str]) -> dict:
+    rung = s.get("rung")
+    rung = [rung] if isinstance(rung, str) else rung
+    out = {"id": str(s["id"]), "rung": [r for r in rung if r in rungs],
+           "does": str(s["does"]), "sounds": str(s["sounds"]), "when": {}}
+    ex = s.get("examples") or []
+    out["examples"] = [str(x) for x in (ex if isinstance(ex, list) else [ex])][:2]
+    if not out["rung"]:
+        raise ValueError("no usable rung")
+    return out
+
+
+def _clean_switch(s: dict) -> dict:
+    q = str(s["trigger"]).strip()
+    clamp = lambda v: max(-0.5, min(0.5, float(v)))  # noqa: E731
+    return {"id": str(s["id"]), "trigger": q if q.endswith("?") else q.rstrip(".") + "?",
+            "warmth": clamp(s["warmth"]), "trust": clamp(s["trust"])}
