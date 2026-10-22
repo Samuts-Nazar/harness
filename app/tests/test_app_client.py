@@ -116,7 +116,7 @@ def test_sheet_items_follow_the_spec_rules():
         ({**base, "lastLine": False}, both, ["challenge", "model_error", "ink"]),
         ({**base, "cut": True}, both, ["challenge", "model_error", "ink"]),
         ({**base, "busy": True, "event": False}, both, ["ink"]),
-        ({**base, "kind": "act", "event": False}, both, ["model_error", "ink"]),
+        ({**base, "kind": "act", "event": False}, both, ["ink"]),   # a gesture cannot be rewritten
         ({**base, "kind": "narr", "tok": "", "event": False}, both, ["model_error"]),
         ({**base, "kind": "narr", "tok": "", "event": False, "lastWorld": False}, both, []),
         ({**base, "kind": "me", "tok": "", "event": False, "lastWorld": False}, both, []),

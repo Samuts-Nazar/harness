@@ -16,7 +16,7 @@ from starlette.responses import FileResponse, JSONResponse, StreamingResponse
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from .game import Busy, Ended, Game, explain
+from .game import Busy, Ended, Game, Refused, explain
 
 STATIC = Path(__file__).parent / "static"
 KEEPALIVE = 15.0
@@ -105,6 +105,8 @@ def create_app(game: Game) -> Starlette:
             return JSONResponse({"error": "Хід триває."}, status_code=409)
         except Ended:
             return JSONResponse({"error": "Кампанію завершено.", "ended": True}, status_code=423)
+        except Refused as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
         except (ValueError, KeyError):
             return JSONResponse({"error": "Цього не можна виправити."}, status_code=400)
         except Exception as e:  # noqa: BLE001 - shown to the player, nothing else changes

@@ -2000,24 +2000,24 @@ class Engine:
     def model_error(self, event_id: int, explanation: str) -> "Challenge":
         """«Помилка моделі»: the player says what is wrong with the last world output. The note
         is stored for the campaign and fed to later generations (NPC lines: to that NPC's lines;
-        narration: to the narrator). Only the last output is regenerated, the player's turn
-        stays: the last NPC line (like `challenge_line` without the channel check) or the last
-        narration passage. An older output only gets the note."""
+        narration: to the narrator). Only the last world output (`last_world_output`) can be
+        marked: it is regenerated and the player's turn stays. Anything older is refused."""
         explanation = explanation.strip()
         if not explanation:
             raise ValueError("a model error needs the player's explanation")
         ev = self.log.get(event_id)
         if not self.log.is_active(event_id):
             raise ValueError("this output is no longer part of the story")
-        if ev.type == UTTERANCE and ev.payload.get("speaker") != PLAYER:
+        last = self.last_world_output()
+        if last is None or last.id != event_id:
+            raise ValueError("only the last world output can be a model error")
+        if ev.type == UTTERANCE:
             npc, text = ev.payload["speaker"], ev.payload["text"]
             self._event(CORRECTION, [npc], {"npc": npc, "line": text, "explanation": explanation,
                                             "line_event": event_id, "reason": "model error"},
                         witnesses=[], notability=0.1)
             res = Challenge("model_error", npc=npc, event=event_id)
-            last = self.log.last_npc_utterance()
-            if last is not None and last.id == event_id:
-                self._regenerate(ev, res, explanation)
+            self._regenerate(ev, res, explanation)
             return res
         if ev.type != NARRATION:
             raise ValueError("only a line or a narration passage can be a model error")
@@ -2026,10 +2026,19 @@ class Engine:
                                      "line_event": event_id, "reason": "model error",
                                      "narration": True}, witnesses=[], notability=0.1)
         res = Challenge("model_error", event=event_id)
-        later = [e for e in self.log.active([NARRATION]) if e.id > event_id]
-        if not later:
-            self._renarrate(ev, res)
+        self._renarrate(ev, res)
         return res
+
+    def last_world_output(self) -> Event | None:
+        """The last thing the world said or did that the player saw: a narration passage, an NPC
+        line or an NPC gesture."""
+        for e in reversed(self.log.active([NARRATION, UTTERANCE, ACTION_EVENT])):
+            if e.type == NARRATION or (e.type == UTTERANCE and e.payload.get("speaker") != PLAYER) \
+                    or (e.type == ACTION_EVENT and e.payload.get("gesture")):
+                return e
+            if e.type == UTTERANCE:  # the player's own line: nothing of the world after it
+                return None
+        return None
 
     def _renarrate(self, old: Event, res: "Challenge") -> None:
         """Replace the narration passage `old` by a new one written with the corrections in the

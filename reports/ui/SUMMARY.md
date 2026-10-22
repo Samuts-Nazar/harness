@@ -68,8 +68,10 @@ Turn 7, at the gate:
 - Turn 3's set speaks like the NPC, not like the player ("Стільки, скільки
   воно варте…"): the assistant mixed up who asks. Needs a prompt look.
 - Small slips: "Мені потрібен коней", "теї ночі".
-- The place tap writes the map name as it is: «Іду до брама» should be
-  «до брами». Names are nominative in the map; a genitive form is needed.
+- (Fixed after review) The place tap wrote «Іду до брама». Places now carry
+  a `to` phrase («до брами», «на ринок»); `/api/places` returns it as `go`
+  («Іду до брами»), falling back to «Іду: <name>». Model error is allowed
+  only on the very last world output (not a gesture), else 400.
 - Model error and cut are tested offline (fake providers) and in the UI check
   with the real endpoints; they were not run on live models (budget).
 

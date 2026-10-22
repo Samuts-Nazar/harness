@@ -138,12 +138,13 @@ function streaming(p) {
 function lines() { return Array.from(feed.children).filter((n) => n.dataset && n.dataset.line); }
 function lineInfo(p) {
   const all = lines(), i = all.indexOf(p);
-  let lastMe = -1;
-  all.forEach((n, k) => { if (n.dataset.line === "me") lastMe = k; });
+  let lastMe = -1, lastW = -1;
+  const isWorld = (n) => ["narr", "say", "act"].includes(n.dataset.line);
+  all.forEach((n, k) => { if (n.dataset.line === "me") lastMe = k; if (isWorld(n)) lastW = k; });
   const kind = p.dataset.line;
-  const world = kind === "narr" || kind === "say" || kind === "act";
+  // "last world output": the very last narration, line or gesture of the story, after the player
   return { kind, tok: p.dataset.tok || "", event: p.dataset.event != null && p.dataset.event !== "",
-    cut: p.classList.contains("cut"), lastWorld: world && lastMe >= 0 && i > lastMe,
+    cut: p.classList.contains("cut"), lastWorld: isWorld(p) && lastMe >= 0 && i === lastW && i > lastMe,
     lastLine: i === all.length - 1, busy };
 }
 // which items apply to a line (spec: «Звідки він це знає?» on NPC speech only; model error only
@@ -152,7 +153,7 @@ function lineInfo(p) {
 function sheetItems(x, offered) {
   const out = [];
   if (x.kind === "say" && x.event) out.push("challenge");
-  if (offered.includes("model_error") && x.lastWorld && !x.busy) out.push("model_error");
+  if (offered.includes("model_error") && x.lastWorld && x.kind !== "act" && !x.busy) out.push("model_error");
   if (offered.includes("cut") && x.kind === "say" && x.lastWorld && x.lastLine && !x.busy && !x.cut)
     out.push("cut");
   if (x.tok && (x.kind === "say" || x.kind === "act")) out.push("ink");
@@ -698,7 +699,7 @@ async function loadPlaces() {   // "where can I go" (Task 4); nothing when the e
     const li = el("li");
     const b = el("button", "linkbtn", name); b.type = "button";   // a tap writes «Іду до …»
     b.addEventListener("click", () => {
-      $("input").value = "Іду до " + name; syncSend(); grow();
+      $("input").value = pl.go || ("Іду: " + name); syncSend(); grow();
       $("drawer").close(); $("input").focus();
     });
     li.appendChild(b);

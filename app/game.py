@@ -30,6 +30,10 @@ class Busy(RuntimeError):
     pass
 
 
+class Refused(ValueError):
+    """The correction is not allowed now; the message is shown to the player."""
+
+
 class Ended(RuntimeError):
     """The player character is dead: the campaign is read-only."""
 
@@ -377,21 +381,21 @@ class Game:
             raise ValueError("the explanation is required")
         self._begin_edit()
         try:
-            if event is None:
-                last_player = max((i for i, en in enumerate(self.transcript)
-                                   if en["kind"] == "player"), default=-1)
-                narr = [en for en in self.transcript[last_player + 1:] if en["kind"] == "narr"
-                        and en.get("event") is not None]
-                if not narr:
-                    raise ValueError("no narration to rewrite")
-                event, kind = narr[-1]["event"], "narr"
-            else:
-                entry = next((en for en in self.transcript
-                              if en.get("event") == event and en["kind"] in ("npc", "narr")), None)
-                if entry is None:
-                    raise ValueError("unknown output")
-                kind = entry["kind"]
-            res = self.eng.model_error(event, explanation)
+            last_player = max((i for i, en in enumerate(self.transcript)
+                               if en["kind"] == "player"), default=-1)
+            world = [en for en in self.transcript[last_player + 1:]
+                     if en["kind"] in ("narr", "npc", "npc_act")]
+            tail = world[-1] if world else None
+            if (tail is None or tail["kind"] == "npc_act" or tail.get("event") is None
+                    or (event is not None and tail.get("event") != event)
+                    or (event is None and tail["kind"] != "narr")):  # null: the narration
+                raise Refused("Помилку моделі можна позначити лише на останньому, що сказав чи "
+                              "описав світ (репліка або опис). Це вже не воно.")
+            event, kind = tail["event"], tail["kind"]
+            try:
+                res = self.eng.model_error(event, explanation)
+            except ValueError as e:
+                raise Refused("Це вже не останнє, що сказав чи описав світ.") from e
             out = asdict(res)
             self._apply_regen(res, event, kind)
             self.debug = {**self.debug, "model_error": out,
@@ -428,10 +432,16 @@ class Game:
                 return []
             wmap = world.map
             here = wmap.resolve(self.eng.scene.location)
-            out = [{"name": p.name, "minutes": wmap.minutes(here.id, p.id) if here else
-                    wmap.minutes(p.id, p.id)}
-                   for p in wmap.places.values() if here is None or p.id != here.id]
-            return sorted(out, key=lambda x: (x["minutes"], x["name"]))
+            out = []
+            for p in wmap.places.values():
+                if here is not None and p.id == here.id:
+                    continue
+                item: dict[str, Any] = {"name": p.name,
+                                        "go": ("Іду " + p.to) if p.to else f"Іду: {p.name}"}
+                if here is not None:  # without a known position no distance is shown
+                    item["minutes"] = wmap.minutes(here.id, p.id)
+                out.append(item)
+            return sorted(out, key=lambda x: (x.get("minutes", 0), x["name"]))
 
     def knowledge(self) -> dict[str, Any]:
         """The debug view: per character, what they know and from where."""

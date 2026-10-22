@@ -273,7 +273,7 @@ def main() -> None:
         shot(page, "05c-line-menu-last-line")
         page.keyboard.press("Escape")
         assert sheet_items(page, hsel, 0) == ["challenge", "ink"], "old line: no cut, no rewrite"
-        assert sheet_items(page, f"{ACT}[data-tok='{horst}']", 0) == ["model_error", "ink"]
+        assert sheet_items(page, f"{ACT}[data-tok='{horst}']", 0) == ["ink"]
 
         # ink: picked from the line menu of an old line; every past line of him changes at once
         page.locator(hsel).first.click(button="right")

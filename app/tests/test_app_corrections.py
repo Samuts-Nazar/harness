@@ -20,10 +20,10 @@ def _no_local_character_file(monkeypatch, tmp_path):
     monkeypatch.setattr(campaigns, "DATA_FILE", tmp_path / "missing.md")
 
 
-def make():
+def make(floors=("horst", "player"), narration=False):
     stack = fake_stack()
-    stack.judge.rules["director_narration"] = False
-    stack.judge.rules[NEXT_TAG] = ["horst", "player"]
+    stack.judge.rules["director_narration"] = narration
+    stack.judge.rules[NEXT_TAG] = list(floors)
     root = tempfile.mkdtemp(prefix="harness-app-corr-")
     g = Game(lambda new: open_campaign(stack, root=root, new=new), pace=0.0, suggestions=False)
     g.start_turn("Що кажете?")
@@ -50,11 +50,10 @@ def test_model_error_on_the_last_npc_line_rewrites_it_and_stores_the_note():
     assert any("він грубіянить" in x for x in g.eng.ctx.corrections("horst"))
 
 
-def test_model_error_on_narration_rewrites_it_and_feeds_the_narrator(monkeypatch):
-    monkeypatch.setattr(campaigns, "DIALOGUE", "classic")  # the narrator speaks first
-    g, c, stack = make()
+def test_model_error_on_narration_rewrites_it_and_feeds_the_narrator():
+    g, c, stack = make(floors=("player",))        # a turn with narration only
     old = last(g, "narr")
-    assert old.get("event")
+    assert old.get("event") and last_kind(g) == "narr"
     r = c.post("/api/model_error", json={"event": None, "explanation": "дощу не було"})
     assert r.status_code == 200, r.text
     new = last(g, "narr")
@@ -63,13 +62,34 @@ def test_model_error_on_narration_rewrites_it_and_feeds_the_narrator(monkeypatch
     assert g.eng.log.get(new["event"]).type == NARRATION
     seen = [m for _, m in stack.provider.calls if "narrator" in m[0]["content"]][-1]
     assert "дощу не було" in seen[-1]["content"]
-    # and a later turn's narrator keeps getting it
     g.start_turn("Дивлюсь далі.")
     g.wait_idle(20)
     seen = [m for _, m in stack.provider.calls if "narrator" in m[0]["content"]][-1]
     assert "дощу не було" in "\n".join(x["content"] for x in seen)
-    # it does not leak into the NPC prompts
     assert not any("дощу не було" in x for x in g.eng.ctx.corrections("horst"))
+
+
+def last_kind(g):
+    return [t["kind"] for t in g.transcript if t["kind"] in ("narr", "npc", "npc_act")][-1]
+
+
+def test_model_error_only_on_the_last_world_output(monkeypatch):
+    monkeypatch.setattr(campaigns, "DIALOGUE", "classic")   # narration, then NPC lines
+    g, c, _ = make()
+    kinds = [t["kind"] for t in g.transcript]
+    assert "narr" in kinds and last_kind(g) == "npc", kinds
+    before = [dict(t) for t in g.transcript]
+    narr = last(g, "narr")
+    for ev in (None, narr["event"]):      # the narration is not the last output any more
+        r = c.post("/api/model_error", json={"event": ev, "explanation": "не так"})
+        assert r.status_code == 400 and "останньому" in r.json()["error"]
+    assert g.transcript == before and not g.eng.log.active([CORRECTION])
+    # an older NPC line too
+    g.start_turn("Ще одне.")
+    g.wait_idle(20)
+    old_line = before[-1]
+    r = c.post("/api/model_error", json={"event": old_line["event"], "explanation": "не так"})
+    assert r.status_code == 400 and not g.eng.log.active([CORRECTION])
 
 
 def test_model_error_needs_an_explanation_and_is_refused_while_a_turn_runs():
