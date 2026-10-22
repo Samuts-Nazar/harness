@@ -159,11 +159,14 @@ function sheetItems(x, offered) {
   if (offered.includes("cut") && x.kind === "say" && x.lastWorld && x.lastLine && !x.busy && !x.cut)
     out.push("cut");
   if (x.tok && (x.kind === "say" || x.kind === "act")) out.push("ink");
+  // a rating of any world line (never the player's own); the line needs its id from the server
+  if (x.event && ["say", "act", "narr"].includes(x.kind)) out.push("rate_up", "rate_down");
   return out;
 }
 const ITEM_TEXT = {
   challenge: "🔎 Звідки він це знає?", model_error: "⚠ Помилка моделі — переписати",
   cut: "✂ Перебити тут (заднім числом)", ink: "🎨 Чорнило цього персонажа",
+  rate_up: "👍 Добре написано", rate_down: "👎 Погано написано",
 };
 let sheetLine = null;
 function labelOf(p) { return p.dataset.label || ""; }
@@ -226,7 +229,9 @@ function closeSheet() { const s = $("sheet"); if (s.open) s.close(); }
 function act(a, p) {
   if (a === "ink") { inkPicker(p.dataset.tok); return; }
   closeSheet();
-  if (a === "challenge") openAsk(p);
+  if (a === "rate_up") sendRating(p, "up", "");
+  else if (a === "rate_down") openRateNote(p);
+  else if (a === "challenge") openAsk(p);
   else if (a === "model_error") openModelError(p);
   else if (a === "cut") openCut(p);
 }
@@ -273,15 +278,52 @@ feed.addEventListener("click", (ev) => {   // a tap on the story shows the rest 
   if (!onControl(ev.target)) skipPace();
 });
 
+// 👍/👎 on a world line: collected while playing. A quiet mark after the line (data-rating), kept
+// by the server (ratings.jsonl) and restored after a reload.
+const RATE_KIND = { narr: "narr", say: "npc", act: "npc_act" };
+const RATE_MARK = { up: "👍", down: "👎" };
+function setMark(p, rating) {
+  const old = p.querySelector(".rmark"); if (old) old.remove();
+  if (!RATE_MARK[rating]) { delete p.dataset.rating; return; }
+  p.dataset.rating = rating;
+  const m = el("span", "rmark", " " + RATE_MARK[rating]);
+  m.setAttribute("aria-label", rating === "up" ? "Оцінено: добре" : "Оцінено: погано");
+  (p._body || p).appendChild(m);   // right after the words, before any answer box
+}
+function applyRatings(map) {
+  for (const p of lines()) if (p.dataset.event && map[p.dataset.event]) setMark(p, map[p.dataset.event]);
+}
+async function loadRatings() {
+  try { const r = await fetch("/api/ratings"); if (r.ok) applyRatings(await r.json()); }
+  catch (e) { /* the marks are a nicety */ }
+}
+async function sendRating(p, rating, note) {
+  let r, d = {};
+  try {
+    r = await fetch("/api/rate", { method: "POST", body: JSON.stringify({
+      event: Number(p.dataset.event), kind: RATE_KIND[p.dataset.line], rating, note }) });
+    if (!r.ok) d = await r.json();
+  } catch (e) { r = { ok: false }; d = { error: "Немає зв'язку." }; }
+  if (!r.ok) { showError(d.error || "Не вдалося зберегти оцінку."); return false; }
+  setMark(p, rating);
+  return true;
+}
+function openRateNote(p) {
+  inlineBox(p, "Що не так? (можна пропустити)", "Надіслати", async (note, go, box) => {
+    go.disabled = true;
+    if (await sendRating(p, "down", note.value.trim())) box.remove(); else go.disabled = false;
+  }, ["Пропустити", () => sendRating(p, "down", "")]);
+}
+
 // "Звідки він це знає?": the player marks a line as impossible; the engine checks the channels
 function addAsk(block, event) { block.dataset.event = event; }
-function inlineBox(block, placeholder, goText, onGo) {
+function inlineBox(block, placeholder, goText, onGo, skip) {   // skip: [label, fn] replaces «Скасувати»
   if (block.querySelector(".askbox")) return;
   const box = el("span", "askbox");
   const note = el("textarea"); note.rows = 2; note.placeholder = placeholder;
   const go = el("button", "btn primary", goText); go.type = "button";
-  const cancel = el("button", "btn ghost", "Скасувати"); cancel.type = "button";
-  cancel.addEventListener("click", () => box.remove());
+  const cancel = el("button", "btn ghost", skip ? skip[0] : "Скасувати"); cancel.type = "button";
+  cancel.addEventListener("click", () => { box.remove(); if (skip) skip[1](); });
   go.addEventListener("click", () => onGo(note, go, box));
   box.append(note, go, cancel);
   block.appendChild(box);
@@ -506,7 +548,9 @@ function render(state) {
     let n = null;
     if (t.kind === "intro") n = narrBlock(t.text, "intro");
     else if (t.kind === "player") { n = meBlock(t.text); lastTurnNodes = []; }
-    else if (t.kind === "narr") { if (t.text && t.text.trim()) n = narrBlock(t.text); }
+    else if (t.kind === "narr") {
+      if (t.text && t.text.trim()) { n = narrBlock(t.text); if (t.event != null) n.dataset.event = t.event; }
+    }
     else if (t.kind === "npc_act") n = actBlock(t.tok, t.label, t.text, t.event);
     else n = sayBlock(t.tok, t.label, t.text, t.cut, t.event);
     if (!n) continue;
@@ -565,6 +609,8 @@ const handlers = {
       addAsk(turnNpc[i], id);
       if ((e.cut_lines || []).includes(id)) turnNpc[i].classList.add("cut");
     });
+    const narrs = (turnEls[e.turn != null ? e.turn : curTurn] || []).filter((n) => n.dataset.line === "narr");
+    (e.narr_lines || []).forEach((id, i) => { if (narrs[i]) narrs[i].dataset.event = id; });
     setPanel(e.panel);
     sugg.turn = e.turn;
     if (!sending) setBusy(false);       // a text typed during the turn is already on its way
@@ -667,6 +713,7 @@ async function load() {
   showError("");
   connect(state.resume_after);
   loadCast();
+  loadRatings();
   if (state.phase === "idle") loadSugg();
 }
 

@@ -83,6 +83,7 @@ body.names .who { display: inline; }
 .askbox { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; font-style: normal; }
 .askbox textarea { flex: 1 1 100%; resize: none; background: var(--paper2); border: 1px solid var(--rule); border-radius: 10px;
   padding: 8px 10px; font-size: 16px; color: var(--ink); }
+.rmark { font-size: .7em; font-style: normal; opacity: .45; white-space: nowrap; filter: grayscale(1); }
 .askres { display: block; margin-top: 6px; font-size: 15px; line-height: 1.45; font-style: italic; color: var(--muted); }
 .linkbtn { color: var(--pen); text-decoration: underline; text-underline-offset: 3px; font-style: normal; min-height: 32px; }
 .spoiler { display: block; margin-top: 4px; padding: 6px 8px; border-radius: 8px; background: var(--paper2); color: var(--ink);

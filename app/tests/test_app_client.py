@@ -123,7 +123,8 @@ def test_sheet_items_follow_the_spec_rules():
         ({**base, "kind": "narr", "tok": "", "event": False, "lastWorld": False}, both, []),
         ({**base, "kind": "me", "tok": "", "event": False, "lastWorld": False}, both, []),
     ]
-    expr = "[" + ",".join(f"sheetItems({json.dumps(x)}, {json.dumps(o)})" for x, o, _ in cases) + "]"
+    expr = "[" + ",".join(f"sheetItems({json.dumps(x)}, {json.dumps(o)}).filter(a => !a.startsWith('rate'))"
+                          for x, o, _ in cases) + "]"   # the rating items: test_app_ratings.py
     got = run({"events": [], "eval": expr})["value"]
     assert got == [want for _, _, want in cases]
 
