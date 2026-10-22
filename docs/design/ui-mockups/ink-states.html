@@ -1,0 +1,108 @@
+<link href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+
+<h2>«Своє чорнило» в дії</h2>
+<p class="subtitle">Чотири моменти гри на одному телефоні. Перевірте, чи логічно лежать дії. Натисніть на ті екрани, які подобаються як є; про решту напишіть, що змінити.</p>
+
+<style>
+  .ph{width:270px;height:560px;border-radius:26px;overflow:hidden;margin:0 auto;border:6px solid #0a0a0a;display:flex;flex-direction:column;background:#231d18;color:#e6d8bf;font-family:Alegreya,Georgia,serif;position:relative}
+  .top{padding:12px 16px 4px;color:#9c8a6c;font-size:12.5px;font-style:italic;display:flex;justify-content:space-between}
+  .legend{display:flex;gap:9px;padding:0 16px 4px;font-size:11.5px;flex-wrap:wrap}
+  .legend span{color:var(--c)} .legend span::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--c);margin-right:4px;vertical-align:middle}
+  .txt{flex:1;padding:4px 16px 0;font-size:15px;line-height:1.58;overflow:hidden}
+  .txt p{margin:0 0 9px}
+  .q{color:var(--c)} .tag{color:#a8967a;font-style:italic}
+  .you{font-style:italic;color:#d8b77d}
+  .horst{--c:#e0a46b}.elza{--c:#b9a0e6}.guard{--c:#8fb8a8}
+  .bottom{padding:8px 16px 14px;display:flex;align-items:center;gap:10px}
+  .line{flex:1;border-bottom:1px solid #6b5a40;color:#7d6c52;font-style:italic;padding:5px 2px;font-size:14px}
+  .pen{color:#c9a46a}
+  .caret{display:inline-block;width:7px;height:15px;background:var(--c);vertical-align:-2px;opacity:.8}
+  .hint{text-align:center;color:#7d6c52;font-size:12px;font-style:italic;padding:2px 0 6px}
+  .stop{position:absolute;right:14px;bottom:62px;background:#3a2e23;border:1px solid #6b5a40;color:#e6d8bf;border-radius:18px;padding:6px 12px;font-size:13px}
+  .dim{opacity:.35}
+  .sheet{position:absolute;left:0;right:0;bottom:0;background:#2e2620;border-top:1px solid #5b4a33;border-radius:18px 18px 0 0;padding:12px 16px 16px;font-size:14px}
+  .sheet .h{color:#c9a46a;font-size:13px;margin-bottom:8px;font-style:italic}
+  .opt{padding:9px 2px;border-bottom:1px solid #3d332a}
+  .opt:last-child{border-bottom:0}
+  .sel{background:#3a2e23;border-radius:6px;outline:1px solid #6b5a40}
+  .sw{display:flex;gap:8px;margin:8px 0 10px;flex-wrap:wrap}
+  .sw i{width:24px;height:24px;border-radius:50%;display:inline-block}
+  .sw i.on{outline:2px solid #e6d8bf;outline-offset:2px}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 8px}
+  .chip{font-size:12px;border:1px solid #5b4a33;border-radius:14px;padding:2px 8px;color:#d6c5a6}
+</style>
+
+<div class="cards" data-multiselect>
+
+  <div class="card" data-choice="speaking" onclick="toggleSelect(this)">
+    <div class="card-image"><div class="ph">
+      <div class="top"><span>Під Лисом, третій вечір</span><span>☰</span></div>
+      <div class="legend"><span style="color:#9c8a6c;font-style:italic">▴ сховати</span><span class="horst">сивий чоловік</span><span class="elza">жінка в хустці</span><span class="guard">вартовий</span></div>
+      <div class="txt">
+        <p>Двері рипнули. Корчмар зупинив кухоль над шинквасом.</p>
+        <p class="horst"><span class="q">— Сто п'ятдесят?</span> <span class="tag">— кремезний сивий чоловік потер палець об палець.</span> <span class="q">— За такі гроші в Брідках рік</span><span class="caret"></span></p>
+      </div>
+      <div class="stop">✋ Перебити</div>
+      <div class="hint">торкніться тексту — показати одразу</div>
+      <div class="bottom"><div class="line">Можна писати й зараз — це перебʼє…</div><div class="pen">✒</div></div>
+    </div></div>
+    <div class="card-body"><h3>1. Хтось говорить</h3><p>Легенду «хто є хто» можна сховати й показати одним дотиком; згорнута, вона лишає тільки кольорові крапки в рядку з місцем. Текст з'являється зі швидкістю мови. «Перебити» плаває праворуч. Дотик до тексту — показати решту одразу. Писати можна весь час: надіслане перебиває.</p></div>
+  </div>
+
+  <div class="card" data-choice="longpress" onclick="toggleSelect(this)">
+    <div class="card-image"><div class="ph">
+      <div class="top"><span>Під Лисом, третій вечір</span><span>☰</span></div>
+      <div class="txt">
+        <p class="dim">Двері рипнули. Корчмар зупинив кухоль над шинквасом.</p>
+        <p class="horst sel"><span class="q">— А платити за розбиті зуби хто буде?</span></p>
+        <p class="dim">— Скажи йому правду, Горсте.</p>
+      </div>
+      <div class="sheet">
+        <div class="h">Ця репліка — сивий чоловік</div>
+        <div class="opt">🔎 Звідки він це знає?</div>
+        <div class="opt">⚠ Помилка моделі — переписати</div>
+        <div class="opt">✂ Перебити тут (заднім числом)</div>
+        <div class="opt">🎨 Чорнило цього персонажа</div>
+      </div>
+    </div></div>
+    <div class="card-body"><h3>2. Довге натискання на репліку</h3><p>Усі дії над реплікою — в одному меню знизу: «звідки він це знає», «помилка моделі», перебити заднім числом, змінити чорнило. На екрані в грі цих кнопок не видно.</p></div>
+  </div>
+
+  <div class="card" data-choice="ink" onclick="toggleSelect(this)">
+    <div class="card-image"><div class="ph">
+      <div class="top"><span>Під Лисом, третій вечір</span><span>☰</span></div>
+      <div class="txt dim">
+        <p class="horst"><span class="q">— Сто п'ятдесят?</span></p>
+        <p class="elza"><span class="q">— Скажи йому правду, Горсте.</span></p>
+      </div>
+      <div class="sheet">
+        <div class="h">Чорнило: сивий чоловік</div>
+        <div class="sw">
+          <i style="background:#e0a46b" class="on"></i><i style="background:#d9776b"></i><i style="background:#c9b26b"></i><i style="background:#8fb8a8"></i><i style="background:#86a9d9"></i><i style="background:#b9a0e6"></i><i style="background:#d6c5a6"></i><i style="background:#9fd0c9"></i>
+        </div>
+        <div class="opt">Запам'ятати для цього персонажа в усій кампанії</div>
+        <div class="opt">Автоматично: різні кольори для всіх у сцені</div>
+      </div>
+    </div></div>
+    <div class="card-body"><h3>3. Призначити чорнило</h3><p>З довгого натискання або з легенди вгорі. Колір прив'язується до персонажа на всю кампанію. Новим персонажам колір дається автоматично, щоб у сцені не було двох однакових.</p></div>
+  </div>
+
+  <div class="card" data-choice="menu" onclick="toggleSelect(this)">
+    <div class="card-image"><div class="ph">
+      <div class="top"><span>Під Лисом, третій вечір</span><span>✕</span></div>
+      <div class="txt">
+        <div style="color:#c9a46a;font-style:italic;font-size:13px">Ви</div>
+        <div class="chips"><span class="chip">золоті очі</span><span class="chip">чорні кігті</span><span class="chip">меч за спиною</span></div>
+        <div style="font-size:14px;color:#cdbb99">Вечір третього дня. Вас тут ще не знають на ім'я.</div>
+        <div style="height:12px"></div>
+        <div class="opt">💡 Підказати варіанти дій</div>
+        <div class="opt">👥 Хто тут і що я про них знаю</div>
+        <div class="opt">🗺 Куди можна піти</div>
+        <div class="opt">⏸ Пауза · ⤼ Пропустити сцену · 🙈 Завіса</div>
+        <div class="opt">⚙ Налаштування й налагодження</div>
+      </div>
+    </div></div>
+    <div class="card-body"><h3>4. Меню ☰</h3><p>Усе, що не потрібно щохвилини: ваш стан, помічник ходу, хто тут, куди піти, межі вмісту, налаштування. Вилазить шторкою, текст гри лишається під ним.</p></div>
+  </div>
+
+</div>

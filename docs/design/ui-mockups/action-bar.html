@@ -1,0 +1,55 @@
+<link href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+
+<h2>Швидкі дії поруч із рядком вводу</h2>
+<p class="subtitle">«Варіанти дій» так само під рукою, як «Перебити», а «Перебити» — маленьке. Три способи розкласти низ екрана. Оберіть ближчий.</p>
+
+<style>
+  .ph{width:270px;height:330px;border-radius:26px 26px 26px 26px;overflow:hidden;margin:0 auto;border:6px solid #0a0a0a;display:flex;flex-direction:column;background:#231d18;color:#e6d8bf;font-family:Alegreya,Georgia,serif}
+  .txt{flex:1;padding:12px 16px 0;font-size:15px;line-height:1.58;overflow:hidden}
+  .horst{--c:#e0a46b} .q{color:var(--c)} .tag{color:#a8967a;font-style:italic}
+  .caret{display:inline-block;width:6px;height:14px;background:var(--c);vertical-align:-2px}
+  .bot{padding:8px 12px 12px}
+  .line{border-bottom:1px solid #6b5a40;color:#7d6c52;font-style:italic;padding:5px 2px;font-size:14px;flex:1}
+  .row{display:flex;align-items:center;gap:8px}
+  .ic{width:30px;height:30px;border-radius:50%;border:1px solid #5b4a33;color:#d6c5a6;display:flex;align-items:center;justify-content:center;font-size:14px;flex:0 0 auto}
+  .ic.live{border-color:#e0a46b;color:#e0a46b}
+  .tools{display:flex;gap:6px;margin-bottom:8px}
+  .pill{font-size:12.5px;border:1px solid #5b4a33;border-radius:14px;padding:3px 9px;color:#d6c5a6}
+  .pill.live{border-color:#e0a46b;color:#e0a46b}
+  .sugg{display:flex;gap:6px;overflow:hidden;margin-bottom:8px}
+  .sugg .s{white-space:nowrap;font-size:12.5px;font-style:italic;border:1px dashed #6b5a40;border-radius:14px;padding:3px 9px;color:#cdbb99}
+</style>
+
+<div class="cards">
+
+  <div class="card" data-choice="icons" onclick="toggleSelect(this)">
+    <div class="card-image"><div class="ph">
+      <div class="txt"><p class="horst"><span class="q">— Сто п'ятдесят?</span> <span class="tag">— він потер палець об палець.</span> <span class="q">— За такі гроші</span><span class="caret"></span></p></div>
+      <div class="bot"><div class="row"><div class="ic live" title="Перебити">✋</div><div class="ic" title="Варіанти дій">💡</div><div class="line">Що скажете чи зробите…</div><div class="ic">✒</div></div></div>
+    </div></div>
+    <div class="card-body"><h3>A. Дві іконки ліворуч від рядка</h3><p>✋ «Перебити» з'являється лише поки хтось говорить і підсвічена кольором того, хто говорить. 💡 «Варіанти дій» — завжди. Найкомпактніше.</p></div>
+  </div>
+
+  <div class="card" data-choice="pills" onclick="toggleSelect(this)">
+    <div class="card-image"><div class="ph">
+      <div class="txt"><p class="horst"><span class="q">— Сто п'ятдесят?</span> <span class="tag">— він потер палець об палець.</span> <span class="q">— За такі гроші</span><span class="caret"></span></p></div>
+      <div class="bot">
+        <div class="tools"><span class="pill live">✋ перебити</span><span class="pill">💡 варіанти</span><span class="pill">⏩ далі</span></div>
+        <div class="row"><div class="line">Що скажете чи зробите…</div><div class="ic">✒</div></div>
+      </div>
+    </div></div>
+    <div class="card-body"><h3>B. Тонкий рядок дій над вводом</h3><p>Маленькі підписані кнопки: «перебити» (лише поки говорять), «варіанти», «далі» (показати текст одразу). Зрозуміліше з першого погляду, займає один тонкий рядок.</p></div>
+  </div>
+
+  <div class="card" data-choice="suggestions" onclick="toggleSelect(this)">
+    <div class="card-image"><div class="ph">
+      <div class="txt"><p class="horst"><span class="q">— Сто п'ятдесят?</span> <span class="tag">— він потер палець об палець.</span> <span class="q">— За такі гроші в Брідках рік живуть.</span></p></div>
+      <div class="bot">
+        <div class="sugg"><span class="s">Торгуватись</span><span class="s">Спитати жінку про млин</span><span class="s">Мовчки чекати</span></div>
+        <div class="row"><div class="ic" title="Інші варіанти">💡</div><div class="line">Що скажете чи зробите…</div><div class="ic">✒</div></div>
+      </div>
+    </div></div>
+    <div class="card-body"><h3>C. Варіанти вже над рядком</h3><p>Коли настає ваш хід, над рядком самі з'являються 2–3 короткі варіанти дій; дотик — підставляє в рядок для правки. 💡 — більше варіантів. ✋ з'являється на місці 💡, поки хтось говорить.</p></div>
+  </div>
+
+</div>

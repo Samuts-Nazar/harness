@@ -1,0 +1,83 @@
+<link href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400;0,700;1,400&family=Alegreya+SC:wght@500&display=swap" rel="stylesheet">
+
+<h2>«Сторінка», але так, щоб було видно, хто що каже</h2>
+<p class="subtitle">Та сама інтерактивна книга. Три способи розрізняти мовців, не розбиваючи текст на бульбашки. Оберіть ближчий (можна кілька) і скажіть, що змінити.</p>
+
+<style>
+  .ph{width:300px;height:600px;border-radius:28px;overflow:hidden;margin:0 auto;border:6px solid #0a0a0a;display:flex;flex-direction:column;background:#231d18;color:#e6d8bf;font-family:Alegreya,Georgia,serif}
+  .top{padding:14px 18px 6px;color:#9c8a6c;font-size:13px;font-style:italic}
+  .txt{flex:1;padding:4px 18px 0;font-size:16px;line-height:1.6;overflow:hidden}
+  .txt p{margin:0 0 10px}
+  .you{font-style:italic;color:#d8b77d}
+  .bottom{padding:10px 18px 16px;display:flex;align-items:center;gap:10px}
+  .line{flex:1;border-bottom:1px solid #6b5a40;color:#7d6c52;font-style:italic;padding:6px 2px;font-size:15px}
+  .pen{color:#c9a46a}
+  .horst{--c:#e0a46b}.elza{--c:#b9a0e6}.guard{--c:#8fb8a8}
+
+  /* A: margin names */
+  .a .say{display:grid;grid-template-columns:58px 1fr;gap:8px;margin-bottom:10px}
+  .a .who{font-family:"Alegreya SC",serif;font-size:12px;line-height:1.25;color:var(--c);text-align:right;padding-top:3px}
+  .a .say .q{border-left:2px solid var(--c);padding-left:8px}
+  .a .narr{margin-left:66px}
+
+  /* B: ink colour per person */
+  .b .q{color:var(--c)}
+  .b .tag{color:#a8967a;font-style:italic}
+  .legend{display:flex;gap:10px;padding:0 18px 4px;font-size:12px}
+  .legend span{color:var(--c)}
+  .legend span::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--c);margin-right:4px;vertical-align:middle}
+
+  /* C: medallion */
+  .c .say{display:flex;gap:9px;margin-bottom:11px}
+  .c .med{flex:0 0 26px;height:26px;border-radius:50%;border:1.5px solid var(--c);color:var(--c);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;margin-top:2px}
+  .c .nm{font-size:12.5px;color:var(--c);font-variant:small-caps;letter-spacing:.02em}
+</style>
+
+<div class="cards" data-multiselect>
+
+  <div class="card" data-choice="margin" onclick="toggleSelect(this)">
+    <div class="card-image"><div class="ph a">
+      <div class="top">Під Лисом, третій вечір</div>
+      <div class="txt">
+        <p class="narr">Двері рипнули. Корчмар зупинив кухоль над шинквасом.</p>
+        <div class="say horst"><div class="who">сивий чоловік</div><div class="q">— Сто п'ятдесят? — він потер великий палець об пальці. — За такі гроші в Брідках рік живуть.</div></div>
+        <div class="say elza"><div class="who">жінка в хустці</div><div class="q">— Скажи йому правду, Горсте.</div></div>
+        <div class="say guard"><div class="who">вартовий</div><div class="q">— Гм.</div></div>
+        <p class="narr you">Яку правду? — питаєте ви.</p>
+      </div>
+      <div class="bottom"><div class="line">Що ви скажете чи зробите…</div><div class="pen">✒</div></div>
+    </div></div>
+    <div class="card-body"><h3>A. Імена на полях</h3><p>Як ремарки в п'єсі: хто говорить — дрібно на лівому полі, біля репліки — тонка лінія кольору цього персонажа. Текст лишається книжковим, а мовця видно одним поглядом.</p></div>
+  </div>
+
+  <div class="card" data-choice="ink" onclick="toggleSelect(this)">
+    <div class="card-image"><div class="ph b">
+      <div class="top">Під Лисом, третій вечір</div>
+      <div class="legend"><span class="horst">сивий чоловік</span><span class="elza">жінка в хустці</span><span class="guard">вартовий</span></div>
+      <div class="txt">
+        <p>Двері рипнули. Корчмар зупинив кухоль над шинквасом.</p>
+        <p class="horst"><span class="q">— Сто п'ятдесят?</span> <span class="tag">— кремезний сивий чоловік потер великий палець об пальці.</span> <span class="q">— За такі гроші в Брідках рік живуть.</span></p>
+        <p class="elza"><span class="q">— Скажи йому правду, Горсте,</span> <span class="tag">— озвалася жінка в темній хустці.</span></p>
+        <p class="guard"><span class="q">— Гм.</span></p>
+        <p class="you">Яку правду? — питаєте ви.</p>
+      </div>
+      <div class="bottom"><div class="line">Що ви скажете чи зробите…</div><div class="pen">✒</div></div>
+    </div></div>
+    <div class="card-body"><h3>B. Кожен — своїм чорнилом</h3><p>Найближче до справжньої книжки: чиста проза з тире, але мова кожного персонажа написана своїм кольором чорнила. Угорі маленька легенда, хто є хто. Жести — звичайним текстом.</p></div>
+  </div>
+
+  <div class="card" data-choice="medallion" onclick="toggleSelect(this)">
+    <div class="card-image"><div class="ph c">
+      <div class="top">Під Лисом, третій вечір</div>
+      <div class="txt">
+        <p>Двері рипнули. Корчмар зупинив кухоль над шинквасом.</p>
+        <div class="say horst"><div class="med">Г</div><div><div class="nm">сивий чоловік</div>— Сто п'ятдесят? — він потер великий палець об пальці. — За такі гроші в Брідках рік живуть.</div></div>
+        <div class="say elza"><div class="med">Ж</div><div><div class="nm">жінка в хустці</div>— Скажи йому правду, Горсте.</div></div>
+        <p class="you">Яку правду? — питаєте ви.</p>
+      </div>
+      <div class="bottom"><div class="line">Що ви скажете чи зробите…</div><div class="pen">✒</div></div>
+    </div></div>
+    <div class="card-body"><h3>C. Медальйон біля репліки</h3><p>Перед реплікою — маленький медальйон з першою літерою і ім'я над текстом. Натиснути на медальйон — відкриється картка персонажа: що ви про нього знаєте. Найчіткіше, але трохи менше «книжки».</p></div>
+  </div>
+
+</div>
