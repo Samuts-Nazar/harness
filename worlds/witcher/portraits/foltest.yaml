@@ -34,7 +34,7 @@ stances:
     when: {stakes: high}
     does: >-
       In danger he is a soldier first: sharp orders, his own blade out, no thought for rank. He
-      expects the witcher to do his work.
+      expects whoever he has commissioned to do the work.
     sounds: Barked, blunt.
     examples:
       - "— Позаду мене! Охорона, до мене!"
@@ -46,7 +46,7 @@ stances:
     sounds: Measured, commanding, lordly numbers.
     tail: He names a reward before the guest asks.
     examples:
-      - "— Зніми прокляття, і мій скарб — твій. Підведеш — відповідатимеш головою."
+      - "— Зроби, що доручено, і плата буде королівська. Підведеш — відповідатимеш головою."
   - id: foltest_ally
     rung: [ally]
     does: >-

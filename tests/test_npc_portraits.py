@@ -211,3 +211,85 @@ def test_a_bad_cached_portrait_does_not_stop_the_campaign_opening(tmp_path):
                                  models=ModelConfig(), judge=FakeJudge())
     assert again.ctx.portrait_of(extra.id) is None
     assert any(n["kind"] == "short_portrait_unreadable" for n in again.devlog)
+
+
+# -- final review fix wave ----------------------------------------------------------------------
+
+def test_at_most_two_portraits_per_settle_the_rest_follow():
+    e, prov = engine({"extractor": [REPLY] * 6})
+    ids = []
+    for i in range(6):
+        x = e.add_npc(e.fresh_npc(f"p{i}", "northern", sex="m"), appearance=f"гість {i}")
+        e.enter_scene(x.id)
+        e.names.learn(PLAYER, x.id, how="told", scene=e.scene)
+        ids.append(x.id)
+    got = []
+    for _ in range(4):
+        before = len(portrait_calls(prov))
+        done = e.promote_short_portraits()
+        assert len(portrait_calls(prov)) - before <= 2 and len(done) <= 2
+        got += done
+    assert sorted(got) == sorted(ids) and len(portrait_calls(prov)) == 6
+
+
+def test_a_promotion_error_is_noted_not_raised(monkeypatch):
+    e, _ = engine({"extractor": [REPLY]})
+    monkeypatch.setattr(e, "promote_short_portraits", lambda: 1 / 0)
+    e._promote_portraits()
+    assert any(n["kind"] == "short_portraits_failed" for n in e.devlog)
+
+
+def test_an_overlong_generated_portrait_is_capped_and_keeps_never():
+    from harness.context import PORTRAIT_HEAD
+    from harness.portrait import MAX_WORDS, slice_text
+    long = " ".join(["слово"] * 300)
+    reply = REPLY.replace("A ferryman who owes everyone a little and trusts nobody with the oar.", long)
+    reply = reply.replace("Never begs, never names who pays him for the letters.", long)
+    reply = reply.replace("Lines of about 8 words; numbers first; «ти» only to friends.", long)
+    reply = reply.replace("Answers what is asked, names the fare first, keeps the oar between them.", long)
+    p = short_portrait(spec(), None, lambda m: reply)
+    assert p is not None and len(p.never.split()) <= 30 and len(p.core.split()) <= 40
+    budget = MAX_WORDS - len(PORTRAIT_HEAD.split())
+    for st in p.stances:
+        text = slice_text(p, st, p.leaks[0] if p.leaks else None, budget)
+        assert len(text.split()) <= budget and p.never in text, st.id
+        assert all(x in text for x in st.examples) and p.leaks[0] in text
+
+
+def test_last_resort_cut_keeps_never_and_drops_the_leak_first():
+    from harness.portrait import parse_portrait, slice_text
+    p = load_world_portraits("witcher")["velerad"]
+    st = p.stances[0]
+    text = slice_text(p, st, "LEAKLINE one two", 60)
+    assert p.never in text and "LEAKLINE" not in text and len(text.split()) <= 60
+    tight = slice_text(p, st, None, len(p.never.split()) + 5)
+    assert p.never in tight
+
+
+def test_null_and_blank_fields_skip_the_item_not_the_portrait():
+    more = REPLY.replace("switches:", """  - id: extra
+    rung: [close]
+    does: Shares the bench.
+    sounds: Quiet.
+switches:""").replace("hidden:", """  - id: broken
+    trigger:
+    warmth: 0.1
+    trust: 0.1
+  - id: fourth
+    trigger: Did the player share bread?
+    warmth: 0.1
+    trust: 0.1
+hidden:""")
+    bad = more.replace("    does: Quiet, rough tenderness; brings food without a word.\n", "    does:\n")
+    p = short_portrait(spec(), None, lambda m: bad)
+    assert p is not None
+    assert [st.id for st in p.stances] == ["wary", "easy", "extra"]
+    assert len(p.switches) == 4 and all("None" not in st.does for st in p.stances)
+
+
+def test_too_few_usable_items_is_a_failure_with_a_reason():
+    bad = REPLY.replace("    does: Quiet, rough tenderness; brings food without a word.\n",
+                        "    does:\n")
+    why = []
+    assert short_portrait(spec(), None, lambda m: bad, on_fail=why.append) is None
+    assert why and "too thin" in why[0]

@@ -745,6 +745,7 @@ def _free_map(place: str) -> tuple[WorldMap, str]:
 def _build_people(eng: Engine, people: list[dict[str, Any]]) -> tuple[list[str], dict[str, str]]:
     """The package's people (or two passers-by when none are given), made whole by npcgen."""
     ids, goals = [], {}
+    texted: list[tuple[str, str, str]] = []   # (npc, free-text portrait, starting rung)
     for i, q in enumerate(people, 1):
         role = q.get("role")
         look = q.get("appearance") or role or q.get("name", "")
@@ -765,7 +766,9 @@ def _build_people(eng: Engine, people: list[dict[str, Any]]) -> tuple[list[str],
         if q.get("portrait"):
             eng.bind_portrait(spec.id, q["portrait"], rung_seed(q))
         elif q.get("portrait_text"):  # the author's free text, made into a portrait once
-            eng.make_short_portrait(spec.id, q["portrait_text"], rung_seed(q))
+            texted.append((spec.id, q["portrait_text"], rung_seed(q)))
+    if texted:   # the conversions are independent calls: made concurrently
+        eng.make_short_portraits(texted)
     return ids, goals
 
 

@@ -406,39 +406,73 @@ def short_portrait(spec: NpcSpec, style: object, complete: Callable[[list[dict[s
     if not isinstance(d, dict) or not isinstance(d.get("stances"), list):
         return fail("unparseable reply: no stances mapping")
     try:
-        d["stances"] = [_clean_stance(s, RUNGS) for s in d["stances"]]
-        d["switches"] = [_clean_switch(s) for s in d.get("switches") or []]
-        if len(d["stances"]) < MIN_STANCES or len(d["switches"]) < MIN_SWITCHES:
-            return fail(f"too thin: {len(d['stances'])} stances, {len(d['switches'])} switches")
-        d.update(id=f"npc:{spec.id}", character=spec.id, name=spec.name,
-                 phase="invented person, as of the start of play")
-        d["hidden"] = str(d.get("hidden") or "")
-        d["never"] = str(d.get("never") or "")
-        if not isinstance(d.get("leaks"), list):
-            d["leaks"] = []
-        d["leaks"] = [str(x) for x in d["leaks"]]
-        d.pop("relations", None)
-        if not isinstance(d.get("voice"), str) or not d["voice"].strip():
-            return fail("no voice")
-        return parse_portrait(d, f"npc:{spec.id}")
+        stances = _usable(d["stances"], lambda s: _clean_stance(s, RUNGS))
+        switches = _usable(d.get("switches") or [], _clean_switch)
+        if len(stances) < MIN_STANCES or len(switches) < MIN_SWITCHES:
+            return fail(f"too thin: {len(stances)} usable stances, {len(switches)} usable "
+                        "switches")
+        voice = _text(d.get("voice"), CAP_VOICE)
+        core = _text(d.get("core"), CAP_CORE)
+        leaks = d.get("leaks") if isinstance(d.get("leaks"), list) else []
+        out = {"id": f"npc:{spec.id}", "character": spec.id, "name": spec.name,
+               "phase": "invented person, as of the start of play", "core": core,
+               "stances": stances, "switches": switches, "voice": voice,
+               "hidden": _text(d.get("hidden"), CAP_HIDDEN, required=False),
+               "never": _text(d.get("never"), CAP_NEVER, required=False),
+               "leaks": [_text(x, CAP_LEAK) for x in leaks[:2] if _blank(x) is False]}
+        return parse_portrait(out, f"npc:{spec.id}")
     except (PortraitError, KeyError, TypeError, ValueError, AttributeError) as e:
         return fail(f"unusable portrait: {type(e).__name__}: {str(e)[:150]}")
+
+
+# Word caps of a generated portrait, chosen so its largest stance slice fits MAX_WORDS (260) less
+# the 12-word header with nothing trimmed: core 40 + does 50 + sounds 25 + 2 examples of 20 +
+# voice 30 + never 30 + one leak 20 = 235.
+CAP_CORE, CAP_DOES, CAP_SOUNDS, CAP_EXAMPLE = 40, 50, 25, 20
+CAP_VOICE, CAP_NEVER, CAP_LEAK, CAP_HIDDEN = 30, 30, 20, 40
+
+
+def _blank(v: object) -> bool:
+    return not isinstance(v, str) or not v.strip()
+
+
+def _text(v: object, cap: int, *, required: bool = True) -> str:
+    """A reply field as text of at most `cap` words. None, blank or non-text is an error for a
+    required field (never the string "None") and empty for an optional one."""
+    if _blank(v):
+        if required:
+            raise ValueError("missing text")
+        return ""
+    return " ".join(str(v).split()[:cap])
+
+
+def _usable(items: object, clean: Callable[[dict], dict]) -> list[dict]:
+    """The items that clean up; one bad stance or switch is skipped, not fatal."""
+    out = []
+    for it in items if isinstance(items, list) else []:
+        try:
+            out.append(clean(it))
+        except (KeyError, TypeError, ValueError, AttributeError):
+            continue
+    return out
 
 
 def _clean_stance(s: dict, rungs: Sequence[str]) -> dict:
     rung = s.get("rung")
     rung = [rung] if isinstance(rung, str) else rung
-    out = {"id": str(s["id"]), "rung": [r for r in rung if r in rungs],
-           "does": str(s["does"]), "sounds": str(s["sounds"]), "when": {}}
+    out = {"id": _text(s.get("id"), 6), "rung": [r for r in rung if r in rungs],
+           "does": _text(s.get("does"), CAP_DOES), "sounds": _text(s.get("sounds"), CAP_SOUNDS),
+           "when": {}}
     ex = s.get("examples") or []
-    out["examples"] = [str(x) for x in (ex if isinstance(ex, list) else [ex])][:2]
+    out["examples"] = [_text(x, CAP_EXAMPLE) for x in (ex if isinstance(ex, list) else [ex])
+                       if not _blank(x)][:2]
     if not out["rung"]:
         raise ValueError("no usable rung")
     return out
 
 
 def _clean_switch(s: dict) -> dict:
-    q = str(s["trigger"]).strip()
+    q = _text(s.get("trigger"), 40)
     clamp = lambda v: max(-0.5, min(0.5, float(v)))  # noqa: E731
-    return {"id": str(s["id"]), "trigger": q if q.endswith("?") else q.rstrip(".") + "?",
+    return {"id": _text(s.get("id"), 6), "trigger": q if q.endswith("?") else q.rstrip(".") + "?",
             "warmth": clamp(s["warmth"]), "trust": clamp(s["trust"])}
