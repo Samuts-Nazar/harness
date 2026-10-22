@@ -68,6 +68,7 @@ from .policy import (
 )
 from .providers import Provider, ProviderError
 from .stylehits import count_by_kind, style_hits
+from .portrait import RUNGS, copy_overlap, load_world_portraits
 from .repetition import WINDOW as REPETITION_WINDOW, measure_turn, sentences
 from .profile import WorldProfile, distance, profile_of_lines
 from .settings import (
@@ -272,6 +273,8 @@ class Engine:
         seed: int | str = 0,
         dialogue: str = DEFAULT_DIALOGUE,
         world_profile: WorldProfile | None = None,
+        world: str | None = None,
+        rung_seeds: dict[str, str] | None = None,
     ) -> None:
         """`player_unlimited` (task 17): the player's declared acts happen as declared; the
         narrator and the extractor must not soften them. `parallel`: run the independent calls of a turn concurrently. None (default): only if
@@ -302,7 +305,10 @@ class Engine:
         task 12 director (a first speaker and who also speaks, at most `max_speakers`). Explicit
         `speakers` and the json narrator's list are spoken as given in both modes.
         `world_profile`: the world's dialogue numbers (harness/profile.py); the shapes' word
-        bounds follow its length bins."""
+        bounds follow its length bins.
+        `world`: the world folder (`worlds/<world>`) whose character portraits NPCs may play
+        (harness/portrait.py; `bind_portrait`). `rung_seeds`: each NPC's starting rung toward the
+        player (stored with the campaign settings)."""
         if narration not in ("prose", "json"):
             raise ValueError(f"narration must be 'prose' or 'json', not {narration!r}")
         if dialogue not in ("living", "classic"):
@@ -369,6 +375,9 @@ class Engine:
                                   narration=narration, names=self.names, style=style,
                                   player_unlimited=player_unlimited)
         self.ctx.outcomes = outcomes
+        self.world = world
+        self.ctx.portraits = load_world_portraits(world) if world else {}
+        self.ctx.rung_seeds = dict(rung_seeds or {})
         self.memory = (MemoryWriter(self.campaign_dir / "memory", self.deriver, self.log,
                                     self.profiles, self.agents) if self.campaign_dir else None)
         self._save_scene()
@@ -939,6 +948,8 @@ class Engine:
         only). Failure is noted and the NPC simply has no notes; it is not retried every turn."""
         prof = self.profiles.get(npc)
         if self.style is None or prof is None or prof.manner or npc == PLAYER:
+            return
+        if self.ctx.portrait_of(npc) is not None:  # the portrait carries the voice
             return
         manner = ""
         try:
@@ -1601,6 +1612,8 @@ class Engine:
                     turn_events.append(self._event(
                         ACTION_EVENT, [npc], {"text": act, "by": npc}, notability=0.3,
                         cause_id=ev.id))
+        if prep.view.examples and copy_overlap(sr.spoken_text, prep.view.examples):
+            self._note("portrait_copy", npc=npc, line=sr.spoken_text[:300])
         key = key or npc
         sources[key] = ev
         segments.append((key, sr.spoken_text))
@@ -2402,6 +2415,17 @@ class Engine:
             self._note("npc_sex_unavailable", error=str(e)[:200])
             return None
 
+    def bind_portrait(self, npc: str, portrait: str, rung: str = "stranger") -> None:
+        """`npc` plays the world portrait `portrait` and starts on `rung` toward the player."""
+        if portrait not in self.ctx.portraits:
+            raise ValueError(f"no portrait {portrait!r} in world {self.world!r}")
+        if rung not in RUNGS:
+            raise ValueError(f"unknown rung {rung!r}")
+        self.profiles[npc] = replace(self.profiles[npc], portrait=portrait)
+        self.ctx.rung_seeds[npc] = rung
+        if self._owns_conn:
+            self._save_setup()
+
     def set_core(self, npc: str, core: str) -> None:
         """Set an NPC's immutable core once (a second, different core is refused)."""
         self.profiles[npc] = with_core(self.profiles[npc], core)
@@ -2460,15 +2484,16 @@ class Engine:
     def _save_setup(self) -> None:
         with self.conn:
             for k, v in {
-                "profiles": [[p.id, p.name, p.description, p.manner, p.appearance, p.core, p.sex]
-                             for p in self.profiles.values()],
+                "profiles": [[p.id, p.name, p.description, p.manner, p.appearance, p.core, p.sex,
+                              p.portrait] for p in self.profiles.values()],
                 "settings": {"output_language": self.output_language,
                              "record_language": self.record_language,
                              "narration": self.narration,
                              "minutes_per_turn": self.minutes_per_turn,
                              "player_unlimited": self.ctx.player_unlimited,
                              "outcomes": self.outcomes_on, "seed": self.seed,
-                             "dialogue": self.dialogue},
+                             "dialogue": self.dialogue, "world": self.world,
+                             "rung_seeds": self.ctx.rung_seeds},
                 "vitals": self.vitals.to_json(),
             }.items():
                 self.conn.execute("INSERT OR REPLACE INTO campaign_meta (key, value) VALUES (?,?)",

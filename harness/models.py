@@ -84,6 +84,8 @@ class CharacterProfile:
     # one without is known by name to everyone.
     core: str = ""  # task 19: immutable core (voice, drives, values), set once and shown verbatim
     sex: str = ""  # "m"/"f" of a generated NPC (from its text or one decider call); "" unknown
+    portrait: str = ""  # id of the world portrait (worlds/<world>/portraits) this NPC plays; ""
+    # none: the flat profile (core, manner) is used
 
 
 @dataclass

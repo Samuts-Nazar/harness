@@ -109,6 +109,12 @@ def create_app(game: Game) -> Starlette:
             return JSONResponse({"error": explain(e)}, status_code=502)
         return JSONResponse(await run_in_threadpool(game.state))
 
+    async def packages(_: Request) -> JSONResponse:
+        """The bundled game packages for the new-game sheet: id, title, pitch and the text that a
+        tap puts in the box."""
+        from .newgame import bundled_packages
+        return JSONResponse(await run_in_threadpool(bundled_packages))
+
     async def panel(_: Request) -> JSONResponse:
         return JSONResponse(await run_in_threadpool(game.panel))
 
@@ -266,6 +272,7 @@ def create_app(game: Game) -> Starlette:
         Route("/api/skip", skip, methods=["POST"]),
         Route("/api/presence", presence, methods=["POST"]),
         Route("/api/campaign/new", new_campaign, methods=["POST"]),
+        Route("/api/packages", packages),
         Route("/api/package/check", package_check, methods=["POST"]),
         Route("/api/package/start", package_start, methods=["POST"]),
         Route("/api/panel", panel),

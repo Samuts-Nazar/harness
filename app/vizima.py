@@ -65,7 +65,7 @@ def engine_kw(stack: Stack, dialogue: str | None = None) -> dict:
     """What every Witcher campaign's engine gets (new or reopened)."""
     return dict(models=stack.models, judge=stack.judge, glossary=Glossary.for_world("witcher"),
                 style=Style.load("witcher"), dialogue=dialogue or campaigns.DIALOGUE,
-                world_profile=load_profile("witcher"))
+                world_profile=load_profile("witcher"), world="witcher")
 
 
 def create_situation_a(rec: Recorder, root: Path, name: str, canon: Canon | None, kw: dict, *,

@@ -51,6 +51,10 @@
     <header><h2 id="newGameHead" tabindex="-1">Нова гра з файлу</h2><button id="newGameClose" class="ic" type="button" aria-label="Закрити">✕</button></header>
     <div class="ng-col">
       <p class="note">Вставте файл гри, який склав для вас ШІ-помічник за інструкцією, або завантажте його. Чого у файлі немає, те вирішить світ.</p>
+      <div id="pkgBundled" class="ng-bundled" hidden>
+        <h3 class="ng-label">Готові ігри</h3>
+        <ul id="pkgList"></ul>
+      </div>
       <label class="ng-label" for="pkgText">Файл гри (YAML)</label>
       <textarea id="pkgText" rows="9" spellcheck="false" placeholder="version: 1&#10;world: witcher&#10;player:&#10;  description: …"></textarea>
       <div class="ng-row">

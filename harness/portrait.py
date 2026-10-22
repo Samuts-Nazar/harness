@@ -5,8 +5,10 @@ goes into a prompt: `select_stance` picks a stance in code, `slice_text` renders
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterable
 
 import yaml
 
@@ -202,3 +204,18 @@ def slice_text(p: Portrait, stance: Stance, leak: str | None) -> str:
         elif trim == "leak":
             leak_line = ""
     return " ".join(out.split()[:MAX_WORDS])
+
+
+_WORD = re.compile(r"[\w'’]+")
+
+
+def _grams(text: str, n: int) -> set[tuple[str, ...]]:
+    w = _WORD.findall(text.lower())
+    return {tuple(w[i:i + n]) for i in range(len(w) - n + 1)}
+
+
+def copy_overlap(line: str, examples: Iterable[str], n: int = 6) -> bool:
+    """True when `line` repeats `n` consecutive words of any example line (case-insensitive,
+    punctuation ignored): the example leaked into play instead of only showing the voice."""
+    got = _grams(line, n)
+    return bool(got) and any(got & _grams(ex, n) for ex in examples)

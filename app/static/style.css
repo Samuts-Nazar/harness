@@ -194,6 +194,12 @@ dialog { color: var(--ink); font-family: var(--serif); }
 .ng-row label.btn { cursor: pointer; }
 .ng-row .vh:focus-visible + .btn, .ng-row label.btn:focus-within { outline: 2px solid var(--pen); outline-offset: 2px; }
 #pkgResult { margin-top: 10px; font-size: 16px; line-height: 1.5; }
+.ng-bundled h3 { font-weight: 400; }
+.ng-bundled ul { list-style: none; margin: 0 0 6px; padding: 0; }
+.ng-pick { display: block; width: 100%; text-align: left; margin: 0 0 8px; padding: 10px 12px; min-height: 44px;
+  background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; color: var(--ink); font: inherit; cursor: pointer; }
+.ng-pick b { display: block; font-weight: 400; color: var(--you); font-size: 17px; }
+.ng-pick span { display: block; margin-top: 2px; color: #d6c5a6; font-size: 15px; line-height: 1.4; }
 .ng-card { border-top: 1px solid var(--rule); padding-top: 10px; }
 .ng-card h3 { margin: 4px 0 8px; font-size: 19px; font-weight: 400; color: var(--you); }
 .ng-card h4 { margin: 14px 0 4px; font-size: 15px; font-weight: 400; font-style: italic; color: var(--pen); }
