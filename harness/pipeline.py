@@ -1296,7 +1296,7 @@ class Engine:
         would stall the scene), later the floor goes back to the player."""
         try:
             return decide_next(self.judge, state, npcs, self.shape_prior,  # type: ignore[return-value]
-                               with_dist=True)
+                               with_dist=True, first=first)
         except JudgeError as e:
             kept = self._fallback_speakers(narration)[:1] if first else []
             self._note("director_unavailable", error=str(e), fallback=kept)
@@ -1447,8 +1447,12 @@ class Engine:
                 self._note("same_speaker_stopped", npc=nxt, step=step + 1)
                 return
             last = nxt
-            shape, beat = self._choose_shape(nxt, shape, dist, step + 1,
-                                             speak=step == 0 and launch.first_step is not None)
+            answers = step == 0 and getattr(dist, "addressee", "") == nxt
+            if answers:
+                self._note("addressee_answers", npc=nxt, decider=shape.value)
+            shape, beat = self._choose_shape(
+                nxt, shape, dist, step + 1,
+                speak=answers or (step == 0 and launch.first_step is not None))
             name = self.names.real(nxt)
             if shape is Shape.SILENCE:
                 self._note("silence", npc=nxt, step=step + 1)

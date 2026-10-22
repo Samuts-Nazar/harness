@@ -30,6 +30,7 @@ PLAYER_FLOOR = "player"  # the floor returns to the player (same id as models.PL
 FIRST_TAG, ALSO_TAG = "director_first", "director_also"
 NEXT_TAG, SHAPE_TAG = "director_next", "director_shape"
 NARRATION_TAG = "director_narration"
+ADDRESSEE_TAG = "director_addressee"
 # heads the lines of the exchange so far in the director's state (absent on the first step)
 EXCHANGE_HEADER = "This exchange so far, in order (the last line was just said):"
 
@@ -81,10 +82,32 @@ _SHAPES = {
 }
 
 
-def next_floor_questions(npcs: Mapping[str, str], prior: str = "") -> dict[str, Question]:
+def addressee_question(npcs: Mapping[str, str]) -> Question:
+    """Which present character, if any, the player's latest words are a direct question or
+    request to. Nobody is listed first: an unscripted judge answers it, so nothing is forced."""
+    return choice_q(
+        "Look at the player character's latest words (the last line of the player's input). Is "
+        "it a direct question or request to one particular character who is present, someone "
+        "who is expected to answer in words (asking a price, the news, a name, the way, whether "
+        "something is so)? Choose that character. Choose nobody if it is an action, a remark to "
+        "no one in particular, or if that character cannot hear or answer (they are far away, "
+        "asleep, gone, or the narration shows they cannot).",
+        {NOBODY: "no one: not a direct question to a particular present character", **dict(npcs)},
+        tag=ADDRESSEE_TAG)
+
+
+class AddressedDist(dict):  # type: ignore[type-arg]
+    """The decider's shape distribution, marked: the player addressed `addressee` directly, so
+    the step is a spoken answer (set by `_step`, read by the exchange loop)."""
+    addressee: str = ""
+
+
+def next_floor_questions(npcs: Mapping[str, str], prior: str = "", *, first: bool = False
+                         ) -> dict[str, Question]:
     """The batch for one exchange step: `next` (an NPC, the player, or nobody) and `shape`.
     `prior`: a line about the world's usual reply length (`shape.shape_prior`), added to the
-    shape question; none without a loaded profile."""
+    shape question; none without a loaded profile. `first`: the first step of the turn, where
+    the player's own words are the last thing said: adds `addressee`."""
     options = {
         **dict(npcs),
         PLAYER_FLOOR: "the player character: someone has just addressed them (by name, by how "
@@ -92,7 +115,7 @@ def next_floor_questions(npcs: Mapping[str, str], prior: str = "") -> dict[str, 
                       "them",
         NOBODY: "no one: the talk has died down and the room goes quiet",
     }
-    return {
+    qs = {
         "next": choice_q(
             "The lines said so far in this exchange are listed in order; the last one is what "
             "was just said. Who takes the floor now? If the last line asked or addressed the "
@@ -107,6 +130,9 @@ def next_floor_questions(npcs: Mapping[str, str], prior: str = "") -> dict[str, 
             "replies in a quick exchange are short." + (f" {prior}" if prior else ""),
             {s.value: d for s, d in _SHAPES.items()}, tag=SHAPE_TAG),
     }
+    if first and npcs:
+        qs["addressee"] = addressee_question(npcs)
+    return qs
 
 
 def needs_narration_question() -> Question:
@@ -127,7 +153,17 @@ def _step(got: Mapping[str, Any], npcs: Mapping[str, str]) -> tuple[str, Shape, 
         shape = Shape(str(j.answer))
     except ValueError:
         shape = Shape.NORMAL
-    return nxt, shape, decider_dist(j.probabilities, shape.value, j.probability)
+    dist: dict[Shape, float] = decider_dist(j.probabilities, shape.value, j.probability)
+    who = str(got["addressee"].answer) if "addressee" in got else ""
+    if who in npcs:
+        # a direct question to a present character is answered by that character in words;
+        # the answer may be evasive, a refusal or a lie, but not a shrug or silence
+        spoken = {s: p for s, p in dist.items() if s not in (Shape.GESTURE, Shape.SILENCE)}
+        shape = shape if shape not in (Shape.GESTURE, Shape.SILENCE) else Shape.SHORT
+        marked = AddressedDist(spoken if sum(spoken.values()) else {shape: 1.0})
+        marked.addressee = who
+        return who, shape, marked
+    return nxt, shape, dist
 
 
 def decide_first_step(judge: Judge, state: Sequence[str], npcs: Mapping[str, str],
@@ -137,7 +173,7 @@ def decide_first_step(judge: Judge, state: Sequence[str], npcs: Mapping[str, str
     answer is yes the caller narrates and asks the first step again with the narration.
     `with_dist`: also the decider's distribution over the shapes (`shape.decider_dist`)."""
     qs = {"narration": needs_narration_question(),
-          **(next_floor_questions(npcs, prior) if npcs else {})}
+          **(next_floor_questions(npcs, prior, first=True) if npcs else {})}
     got = judge.ask(state, qs)
     need = bool(got["narration"].answer)
     if not npcs:
@@ -148,13 +184,15 @@ def decide_first_step(judge: Judge, state: Sequence[str], npcs: Mapping[str, str
 
 
 def decide_next(judge: Judge, state: Sequence[str], npcs: Mapping[str, str],
-                prior: str = "", *, with_dist: bool = False) -> tuple[Any, ...]:
+                prior: str = "", *, with_dist: bool = False, first: bool = False
+                ) -> tuple[Any, ...]:
     """One exchange step: (an NPC id, `PLAYER_FLOOR` or `NOBODY`; the shape of the response).
     `npcs`: id -> how the director knows them (never the player). An unknown answer is nobody;
-    an unknown shape is normal. `with_dist`: also the decider's distribution over the shapes."""
+    an unknown shape is normal. `with_dist`: also the decider's distribution over the shapes.
+    `first`: the first step of the turn (the player's words may be a direct question)."""
     if not npcs:
         return (NOBODY, Shape.NORMAL, {}) if with_dist else (NOBODY, Shape.NORMAL)
-    nxt, shape, dist = _step(judge.ask(state, next_floor_questions(npcs, prior)), npcs)
+    nxt, shape, dist = _step(judge.ask(state, next_floor_questions(npcs, prior, first=first)), npcs)
     return (nxt, shape, dist) if with_dist else (nxt, shape)
 
 

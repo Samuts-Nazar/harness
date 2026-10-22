@@ -713,3 +713,39 @@ def test_speech_tag_naming_an_unlearned_character_is_masked_on_the_page():
     text = eng._npc_line(eng._prep_npc("elza"))
     assert "відказала жінка в темній хустці" in text
     assert "Ельза" not in text and "жінка в темній хустці глянула на двері" in text
+
+
+# -- a direct question gets an answer in speech (smoke item 6) -----------------------------------
+def test_direct_question_to_present_npc_is_answered_in_speech():
+    """The decider picks a gesture for Horst, or another speaker: when the player's words are a
+    question to Horst he still answers aloud."""
+    eng, prov, judge = make(["Три мідяки за ніч, панове."], ["elza", PLAYER_FLOOR], ["gesture"],
+                            rules={"director_addressee": "horst"})
+    res = eng.turn("Горст, скільки коштує ніч?")
+    assert speakers(res) == ["horst"]
+    assert res.utterances[0].payload["text"] == "Три мідяки за ніч, панове."
+    assert not any(k == "gesture" for k, _, _ in res.exchange)
+    assert any(n["kind"] == "addressee_answers" for n in eng.devlog)
+
+
+def test_direct_question_not_answered_by_silence_either():
+    eng, prov, judge = make(["Дві."], ["horst", PLAYER_FLOOR], ["silence"],
+                            rules={"director_addressee": "horst"})
+    res = eng.turn("Горст, скільки?")
+    assert speakers(res) == ["horst"]
+
+
+def test_no_direct_question_keeps_the_directors_pick():
+    eng, prov, judge = make(["Елза знизує плечима."], ["elza", NOBODY], ["gesture"],
+                            rules={"director_addressee": NOBODY})
+    res = eng.turn("Сідаю біля вогню.")
+    assert speakers(res) == [] and any(k == "gesture" for k, _, _ in res.exchange)
+    assert not any(n["kind"] == "addressee_answers" for n in eng.devlog)
+
+
+def test_addressee_question_is_in_the_first_batch_only():
+    eng, prov, judge = make(["Дві."], ["horst", PLAYER_FLOOR], ["short"],
+                            rules={"director_addressee": "horst"})
+    eng.turn("Горст, скільки?")
+    first = [qs for _, qs in next_asks(judge)]
+    assert "addressee" in first[0] and all("addressee" not in qs for qs in first[1:])
