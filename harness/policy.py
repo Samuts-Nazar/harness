@@ -40,8 +40,8 @@ DENY = frozenset({
 ANTHROPIC_MARKERS = ("anthropic/", "claude")
 
 # Defaults per role (docs/tools.md, Models) and the fallback from another vendor.
-DEFAULT_NARRATOR = "openai/gpt-6-luna"
-DEFAULT_NPC = "openai/gpt-6-luna"
+DEFAULT_NARRATOR = "xiaomi/mimo-v2.6-pro"  # task 22: the user's blind "writes like a person" grading
+DEFAULT_NPC = "xiaomi/mimo-v2.6-flash"  # second in that grading; faster for many short lines
 DEFAULT_EXTRACTOR = "deepseek/deepseek-v4.1-flash-1017"
 DEFAULT_JUDGE_FIRST = "liquid/d1-ultra"
 DEFAULT_JUDGE_LLM = "openai/gpt-6-luna"  # escalation target
@@ -52,6 +52,9 @@ FALLBACKS = {
     "judge_first": "perplexity/pplx-decider-v1.2",
     "judge_llm": "deepseek/deepseek-v4.1-flash-1017",
 }
+# Sampling temperature per model, as used in the bake-off that chose it (task 22: 0.8). Models
+# not listed get the provider's default.
+MODEL_TEMPERATURE = {"xiaomi/mimo-v2.6-pro": 0.8, "xiaomi/mimo-v2.6-flash": 0.8}
 DEFAULT_JEV = DEFAULT_JUDGE_FIRST  # old name: the first-pass decision model
 
 

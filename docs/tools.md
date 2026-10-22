@@ -279,3 +279,7 @@ Role: narrator and NPC prose, judged by the user's taste, not by agent grading. 
 | bytedance-seed/seed-2-1-turbo | 2026-08-12 | 0.50/2.50 |
 
 Not taken: `google/gemini-3.6/3.7/3.8-flash` (0.75 to 0.83 input, over the ceiling), `gemini-3.5-flash-lite` (93 days old, and the user called that generation outdated), `moonshotai/kimi-k3` (output 11.9), `x-ai/grok-*` (2.0/6.0), `mistralai/mistral-large-4-0` (1.36/4.18), `google/gemma-4-*` (April, too old), `meta/muse-spark-*-contributor` (unclear data terms), tiny and infrastructure models (granite, ling, nex, mercury, nemotron, hy-mt translators). Prompts: the engine's own (`Style.load("witcher")`, no book exemplars), temperature 0.8, reasoning disabled. Results page: `app/static/human_ab.html`; summary `reports/human_ab/README.md`.
+
+### Narrator and NPC model change (2026-10-22)
+- Narrator: `xiaomi/mimo-v2.6-pro` (0.435/0.87, catalog date 2026-09-21); NPC lines: `xiaomi/mimo-v2.6-flash` (0.14/0.28, 2026-09-21); temperature 0.8 for both (`MODEL_TEMPERATURE` in `harness/policy.py`). Fallbacks unchanged (`deepseek/deepseek-v4.1-flash-1017`).
+- Reason: task 22 blind "writes like a person" grading by the user (`reports/human_ab/`): mimo-v2.6-pro mean 4.0, mimo-v2.6-flash 3.6, gpt-6-luna 3.0, deepseek 3.0, others lower; one text per model per moment, one grader. Trade-off: mimo-v2.6-pro averaged 11 s per call vs 3.5 s for luna; flash 6.9 s. `openai/gpt-6-luna` stays as the escalation judge only.

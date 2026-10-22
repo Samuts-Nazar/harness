@@ -10,7 +10,7 @@ from typing import Callable, Iterator, Protocol
 
 import httpx
 
-from .policy import Spend, check_model
+from .policy import MODEL_TEMPERATURE, Spend, check_model
 from .retry import RETRY_STATUS, backoff_delay, send_with_retry
 
 Messages = list[dict[str, str]]
@@ -68,6 +68,8 @@ class OpenRouterProvider:
         self.spend.check()
         body: dict = {"model": model, "messages": messages,  # type: ignore[type-arg]
                       "reasoning": {"enabled": False}}  # short outputs; no hidden thinking tokens
+        if model in MODEL_TEMPERATURE:
+            body["temperature"] = MODEL_TEMPERATURE[model]
         if self.session_id:
             body["session_id"] = self.session_id
         try:
@@ -88,6 +90,8 @@ class OpenRouterProvider:
         check_model(model)
         self.spend.check()
         body = {"model": model, "messages": messages, "stream": True}
+        if model in MODEL_TEMPERATURE:
+            body["temperature"] = MODEL_TEMPERATURE[model]
         if self.session_id:
             body["session_id"] = self.session_id
         resp = None

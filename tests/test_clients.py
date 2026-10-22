@@ -201,3 +201,23 @@ def test_engine_without_a_fallback_fails_the_turn_and_rolls_it_back():
         eng.turn("hi", speakers=[])
     assert eng.log.active(["utterance"]) == []
     assert PLAYER in eng.scene.present
+
+
+def test_model_temperature_is_sent_only_for_listed_models():
+    import httpx
+    from harness.policy import set_catalog
+    from harness.providers import OpenRouterProvider
+    set_catalog({"xiaomi/mimo-v2.6-pro": (0.435, 0.87), "openai/gpt-6-luna": (0.1, 0.5)})
+    bodies = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        import json
+        bodies.append(json.loads(req.content))
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}], "usage": {}})
+
+    p = OpenRouterProvider(api_key="test", client=httpx.Client(transport=httpx.MockTransport(handler)))
+    p.complete("xiaomi/mimo-v2.6-pro", [{"role": "user", "content": "hi"}])
+    p.complete("openai/gpt-6-luna", [{"role": "user", "content": "hi"}])
+    assert bodies[0]["temperature"] == 0.8
+    assert "temperature" not in bodies[1]
+    set_catalog(None)
