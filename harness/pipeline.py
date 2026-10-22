@@ -17,7 +17,7 @@ from typing import Any, Callable, Sequence
 from .agents import AgentRegistry, Intents, OffscreenUpdater, StubOffscreenUpdater
 from .attitudes import Attitudes, Notices
 from .belief import BeliefFn, neutral_belief
-from .context import ContextBuilder, NpcView
+from .context import PLAYER_CHARACTER_RULE, ContextBuilder, NpcView
 from .db import connect
 from .decisions import DecisionCount, count_since
 from .director import (
@@ -34,6 +34,7 @@ from .judge import (
 from . import knowledge
 from .memory import CharacterMemory, MemoryDeriver, MemoryWriter
 from .names import INTRODUCED, OVERHEARD, PLAYER_SAID, TOLD as NAME_TOLD, Names
+from .player_guard import PLAYER_ACT_Q, flag_player_acts, split_sentences, strip_player_quotes
 from .player_input import (
     ACTION as PART_ACTION, SPEECH as SPEECH_PART, Part, render_for_model, split_input,
 )
@@ -656,6 +657,11 @@ class Engine:
                                      [self._fix_names(a, "action") for a in out.actions],
                                      out.speakers)
             parsed = out
+            out.description, said = strip_player_quotes(out.description, player_text)
+            for q in said:
+                self._note("narrator_player_action_dropped", why="player_quote", attempt=attempt,
+                           sentence=q)
+            acts_fut = self._start_player_act_check(out.description, player_text)
             leaked = self.names.unknown_mentioned(PLAYER, "\n".join(out.texts()))
             if leaked:  # the player character has not learned this name: describe, do not name
                 self._note("narrator_unknown_name", attempt=attempt,
@@ -671,6 +677,9 @@ class Engine:
             elif self.scene_cast is not None and (
                     why := self._cast_review(out, admitted, attempt, cast)) is not None:
                 notes.append(why)
+                ok = False
+            elif self._apply_player_act_check(out, acts_fut, attempt):  # nothing left after drops
+                notes.append("Do not decide what the player character does or says.")
                 ok = False
             elif on_candidate is not None:
                 ok = on_candidate(self._valid_speakers(out))
@@ -701,6 +710,58 @@ class Engine:
         if late is not None:
             self._cast_admit(stripped, late[1], [], -1)
         return self._valid_speakers(stripped)
+
+    def _player_act_verdicts(self, sentences: list[str], player_text: str) -> list[bool]:
+        """One batched judge call: does each sentence decide something for the player character
+        that the player did not write? No verdict (judge down): the sentence is kept."""
+        try:
+            got = self.judge.ask(
+                [f"Player character: {self.ctx.name(PLAYER)}", f"The player wrote: {player_text}"],
+                {f"s{i}": yes_no_q(PLAYER_ACT_Q.format(sentence=s), "player_act")
+                 for i, s in enumerate(sentences)})
+            return [bool(got[f"s{i}"].answer) for i in range(len(sentences))]
+        except JudgeError as e:
+            self._note("player_act_check_failed", error=str(e))
+            return [False] * len(sentences)
+
+    def _start_player_act_check(self, text: str, player_text: str
+                                ) -> tuple[list[str], list[int], Any] | None:
+        """Flag the sentences about the player character's own acts (code) and start the judge
+        check next to the other narrator checks (a worker in parallel mode). None: nothing is
+        flagged, no call."""
+        sents = split_sentences(text)
+        idx = flag_player_acts(sents, self.ctx.name(PLAYER))
+        if not idx:
+            return None
+        flagged = [sents[i] for i in idx]
+        if self.parallel:
+            return sents, idx, self._submit(self._player_act_verdicts, flagged, player_text)
+        return sents, idx, self._player_act_verdicts(flagged, player_text)
+
+    def _apply_player_act_check(self, out: NarratorOutput,
+                                check: tuple[list[str], list[int], Any] | None,
+                                attempt: int) -> bool:
+        """Drop the confirmed sentences from the description. True when nothing is left."""
+        if check is None:
+            return False
+        sents, idx, res = check
+        verdicts = self._take(res) if isinstance(res, Future) else res
+        drop = {i for i, v in zip(idx, verdicts) if v}
+        for i in sorted(drop):
+            self._note("narrator_player_action_dropped", why="player_act", attempt=attempt,
+                       sentence=sents[i].strip())
+        if drop:
+            out.description = "".join(s for i, s in enumerate(sents) if i not in drop).strip()
+        return bool(drop) and not out.description
+
+    def _guard_player_prose(self, text: str, player_text: str) -> str:
+        """The same checks for a short paragraph written outside `_narrate` (resolution)."""
+        text, said = strip_player_quotes(text, player_text)
+        for q in said:
+            self._note("narrator_player_action_dropped", why="player_quote", sentence=q)
+        out = NarratorOutput(text)
+        self._apply_player_act_check(out, self._start_player_act_check(text, player_text), -1)
+        return out.description
 
     @staticmethod
     def _with_notes(messages: list[dict[str, str]], notes: Sequence[str]
@@ -1912,7 +1973,7 @@ class Engine:
         user = (self.ctx._scene_header(sc, PLAYER) + "\n\n" + o.for_narrator()
                 + "\n\nWrite one to three sentences that narrate only how this resolves, from the "
                 "player character's point of view. No speech, no quotation marks, no dialogue "
-                "dashes."
+                "dashes. " + PLAYER_CHARACTER_RULE
                 + (f" Write in {self.output_language}." if self.output_language else ""))
         for _ in range(2):
             try:
@@ -1925,7 +1986,9 @@ class Engine:
                 return ""
             text = self._fix_names(text, "narration")
             if text and not has_speaker_line(text, self._npc_names) and not has_dash_speech(text):
-                return self.names.mask(PLAYER, text)
+                text = self._guard_player_prose(text, o.text if o.actor == PLAYER else "")
+                if text:
+                    return self.names.mask(PLAYER, text)
         return ""
 
     # -- interruption ---------------------------------------------------
