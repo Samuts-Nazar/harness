@@ -64,6 +64,8 @@ class DecisionCount:
 def full_role(messages: list[dict[str, str]]) -> str:
     """The role of a model call, from its system prompt ("npc: Name" for NPC lines)."""
     sys = messages[0]["content"] if messages else ""
+    if "turn assistant" in sys:
+        return "assistant"
     if "Rumour writer" in sys:
         return "world: rumour"
     if "narrator" in sys:

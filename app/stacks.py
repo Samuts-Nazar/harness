@@ -44,6 +44,11 @@ LINES = {
         "скільки йому заплатили за твою голову, відьмаку.",
     ],
 }
+SUGGESTIONS = [
+    "*кладе руку на руків'я меча*", "Скільки саме ви готові заплатити?",
+    "*мовчки оглядає корчму*", "Розкажіть про млин докладніше.",
+    "*відсуває кошіль назад*", "Я йду туди сам, до світанку.",
+]
 GENERIC_LINES = ["Гм. Чого тобі, чужинцю?", "Я вже все сказав. Іди своєю дорогою."]
 LOOKS = {  # what the offline stack "reads" from a character file when there is one
     "label": "юнак із золотими очима та мечем",
@@ -80,6 +85,10 @@ class FakeUk:
         sys = messages[0]["content"]
         with self._lock:
             self.calls.append((model, messages))
+            if "turn assistant" in sys:  # suggestions: a different set every call
+                i = self.n.setdefault("assistant", 0)
+                self.n["assistant"] = i + 3
+                return "\n".join(SUGGESTIONS[(i + k) % len(SUGGESTIONS)] for k in range(3))
             if "narrator" in sys:
                 text, _ = NARRATIONS[self.n["narrator"] % len(NARRATIONS)]
                 self.n["narrator"] += 1

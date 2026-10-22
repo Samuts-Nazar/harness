@@ -132,13 +132,16 @@ class ModelConfig:
     npc_fallback: str | None = None
     extractor_fallback: str | None = None
     judge_fallback: str | None = None
+    assistant: str = "assistant"  # the turn assistant's suggestions (harness/assistant.py)
+    assistant_fallback: str | None = None
 
     @classmethod
     def live(cls) -> "ModelConfig":
         """The models chosen by the task 7 bake-off, each with a fallback from another vendor."""
         return cls(DEFAULT_NARRATOR, DEFAULT_NPC, DEFAULT_EXTRACTOR, DEFAULT_JUDGE_LLM,
                    FALLBACKS["narrator"], FALLBACKS["npc"], FALLBACKS["extractor"],
-                   FALLBACKS["judge_llm"])
+                   FALLBACKS["judge_llm"], assistant=DEFAULT_NPC,
+                   assistant_fallback=FALLBACKS["npc"])
 
 
 @dataclass

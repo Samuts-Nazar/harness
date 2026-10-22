@@ -11,6 +11,7 @@ import threading
 import time
 from typing import Any, Callable
 
+from harness import assistant
 from harness.decisions import DecisionCount, aggregate, count_since
 from harness.models import ACTION, PLAYER, UTTERANCE, format_time
 from harness.streaming import InterruptHandle
@@ -51,9 +52,11 @@ def explain(e: BaseException) -> str:
 
 
 class Game:
-    def __init__(self, open_campaign: Callable[[bool], Campaign], pace: float = 0.25) -> None:
+    def __init__(self, open_campaign: Callable[[bool], Campaign], pace: float = 0.25,
+                 suggestions: bool = True) -> None:
         """`open_campaign(new)`: the saved current campaign (new=False) or a fresh one."""
         self._open = open_campaign
+        self.suggest_on = suggestions  # off for replays: the assistant's calls are not recorded
         self.base_pace = pace
         self.pace = pace  # `skip()` sets it to 0 for the rest of the turn
         self.start_lock = threading.Lock()  # one start_turn at a time (interrupt, wait, start)
@@ -85,6 +88,7 @@ class Game:
             self.debug: dict[str, Any] = {}
             self.decision_log: list[tuple[str, DecisionCount]] = []  # (location, turn count)
             self.events = []
+            self._sugg: dict[str, Any] | None = None  # the turn's suggestions (see _suggest)
             self._panel = self._compute_panel()
             self._seen: list[str] = self.camp.speaker_ids()  # characters met, first seen first
             self._recency: list[str] = []  # tokens, least recently active first
@@ -288,6 +292,7 @@ class Game:
                 if self.challenging:  # a challenge began while this waited
                     raise Busy("a challenge is running")
                 self.pending = text
+                self._sugg = None  # suggestions of the turn before are stale from now on
                 self.phase = "thinking"
                 self.pace = self.base_pace
                 self.handle = InterruptHandle()
@@ -498,6 +503,54 @@ class Game:
             self._emit("settled", panel=self._panel, clock=self.clock())
             if eng.ended:
                 self._emit("ended", chronicle=self.chronicle())
+            else:
+                self._start_suggestions(getattr(self._tl, "turn", None))
+
+    # -- turn assistant ---------------------------------------------------------------------
+    def _start_suggestions(self, turn: int | None) -> None:
+        """Called on the turn's thread once the slow lane is done (it is the database's only user
+        now): render the player character's view here, then ask the model on a thread of its own.
+        The next turn does not wait for it. Call with `self.lock` held."""
+        if not self.suggest_on or turn is None or turn != self.turn_no:
+            return
+        try:
+            ctx = assistant.context(self.eng)
+        except Exception:  # noqa: BLE001 - suggestions are optional; the turn is already done
+            return
+        state: dict[str, Any] = {"turn": turn, "ctx": ctx, "items": []}
+        self._sugg = state
+        th = threading.Thread(target=self._suggest, args=(state, self.camp), daemon=True)
+        self.threads = [t for t in self.threads if t.is_alive()] + [th]
+        th.start()
+
+    def _suggest(self, state: dict[str, Any], camp: Campaign) -> None:
+        try:
+            items = assistant.ask(camp.engine, state["ctx"], 3)
+        except Exception:  # noqa: BLE001 - no suggestions is a normal outcome
+            return
+        with self.lock:
+            if self._sugg is not state or self.camp is not camp or not items:
+                return  # a new turn (or campaign) began meanwhile: the answer is stale
+            state["items"] += items
+            self._emit("suggestions", turn=state["turn"], items=list(items))
+
+    def suggestions(self, more: bool = False, n: int = 3) -> dict[str, Any]:
+        """The shown suggestions of the last turn; `more`: n new ones that avoid the shown."""
+        with self.lock:
+            state = self._sugg
+            if state is None:
+                return {"turn": self.turn_no, "items": []}
+            shown = list(state["items"])
+            if not more:
+                return {"turn": state["turn"], "items": shown}
+            camp = self.camp
+        items = assistant.ask(camp.engine, state["ctx"], n, shown)  # no database access
+        with self.lock:
+            if self._sugg is not state or self.camp is not camp:
+                return {"turn": self.turn_no, "items": []}
+            items = [i for i in items if i not in state["items"]]
+            state["items"] += items
+            return {"turn": state["turn"], "items": items}
 
     def _stream_narration(self, text: str, spoken: list[str], stamp: Callable[[], None]) -> None:
         if not text.strip():  # an empty narration is never a bubble

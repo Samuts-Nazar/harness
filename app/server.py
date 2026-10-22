@@ -110,6 +110,13 @@ def create_app(game: Game) -> Starlette:
             return JSONResponse({"error": "Недійсний колір."}, status_code=400)
         return JSONResponse({"ok": True})
 
+    async def suggestions(request: Request) -> JSONResponse:
+        more = request.query_params.get("more") == "1"
+        try:
+            return JSONResponse(await run_in_threadpool(game.suggestions, more))
+        except Exception as e:  # noqa: BLE001 - shown to the player, nothing changes
+            return JSONResponse({"error": explain(e)}, status_code=502)
+
     async def events(request: Request) -> StreamingResponse:
         after = int(request.headers.get("last-event-id") or request.query_params.get("after") or 0)
         until_idle = request.query_params.get("until_idle") == "1"  # curl/tests: end when quiet
@@ -152,6 +159,7 @@ def create_app(game: Game) -> Starlette:
         Route("/api/cast", cast),
         Route("/api/people", people),
         Route("/api/ink", ink, methods=["POST"]),
+        Route("/api/suggestions", suggestions),
         Route("/api/events", events),
         Mount("/static", StaticFiles(directory=STATIC), name="static"),
     ])
