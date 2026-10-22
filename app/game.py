@@ -60,14 +60,22 @@ def explain(e: BaseException) -> str:
 _PLAYER_WORDS = re.compile(
     r"(?<!\w)(?:the\s+)?player(?:\s+character)?(?!\w)|(?<!\w)гравц(?:ем|еві|ю|я|і)(?!\w)"
     r"|(?<!\w)гравець(?!\w)", re.IGNORECASE)
+# the player seen as «ви» in the case of the word that is replaced: no name has to be declined
+_VY = {"ем": "вами", "еві": "вам", "ю": "вам", "я": "вас", "і": "вас"}
 
 
-def _as_the_character(text: str, name: str) -> str:
+def _vy(m: "re.Match[str]") -> str:
+    w = m.group(0).lower()
+    return _VY.get(w[5:], "ви") if w.startswith("гравц") and not w.startswith("гравець") else "ви"
+
+
+def _as_the_character(text: str) -> str:
     """A record's wording for the player («гравцем», «Гравець», "the player") as the player
-    character's own name in what the people drawer shows; «ви» when there is no name."""
+    character's own point of view in what the people drawer shows: «ви» in the case of the
+    replaced word (гравцем -> вами, гравцеві/гравцю -> вам, гравця/на гравці -> вас)."""
     if not text:
         return text
-    out = _PLAYER_WORDS.sub(name or "ви", text)
+    out = _PLAYER_WORDS.sub(_vy, text)
     return out[:1].upper() + out[1:] if text[:1].isupper() else out
 
 
@@ -290,8 +298,7 @@ class Game:
         if tr is not None and flat:
             done = iter(tr(flat))
             out = {t: [next(done) for _ in facts] for t, facts in out.items()}
-        me = eng.profiles[PLAYER].name if PLAYER in eng.profiles else ""
-        return {t: [_as_the_character(f, me) for f in facts] for t, facts in out.items()}
+        return {t: [_as_the_character(f) for f in facts] for t, facts in out.items()}
 
     def people(self) -> list[dict[str, Any]]:
         with self.lock:
