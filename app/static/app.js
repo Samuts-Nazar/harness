@@ -812,6 +812,23 @@ function openNewGame() {
   if ($("drawer").open) $("drawer").close();
   $("newGame").hidden = false;
   $("newGameHead").focus();
+  loadBundled();
+}
+// the packages that come with the app: a tap puts the package in the box and checks it
+async function loadBundled() {
+  const list = $("pkgList");
+  if (list.childElementCount) return;
+  let items = [];
+  try { const r = await fetch("/api/packages"); if (r.ok) items = await r.json(); } catch (e) { items = []; }
+  for (const it of items) {
+    const b = el("button", "ng-pick");
+    b.type = "button"; b.dataset.id = it.id;
+    b.append(el("b", "", it.title));
+    if (it.pitch) b.append(el("span", "", it.pitch));
+    b.addEventListener("click", () => { $("pkgText").value = it.text; checkPackage(); });
+    const li = el("li"); li.appendChild(b); list.appendChild(li);
+  }
+  $("pkgBundled").hidden = !items.length;
 }
 function closeNewGame() { $("newGame").hidden = true; $("btnMenu").focus(); }
 function pkgErrors(list) {

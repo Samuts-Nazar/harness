@@ -454,3 +454,91 @@ def test_instruction_says_follow_needs_a_canon_start_and_unknown_names_stay_hidd
 def test_long_tone_is_capped_with_a_warning():
     pkg = parse(MINIMAL + "tone: \"" + "похмуро й повільно " * 200 + "\"\n")
     assert len(pkg.data["tone"]) <= 1_001 and any(w.field == "tone" for w in pkg.warnings)
+
+
+# -- portraits and bundled packages (character portraits task 2) ------------------------------
+
+PORTRAIT_PERSON = MINIMAL + """\
+start:
+  place: Рінде
+  who_is_here:
+    - name: Йеннефер
+      role: чародійка
+      portrait: {pid}
+"""
+
+
+def test_package_person_portrait_unknown_id():
+    got = issues(PORTRAIT_PERSON.format(pid="nobody_here"))
+    assert [i.field for i in got] == ["start.who_is_here[1].portrait"]
+    assert "nobody_here" in got[0].problem and "yennefer_rinde" in got[0].fix
+    pkg = parse(PORTRAIT_PERSON.format(pid="yennefer_rinde"))
+    assert pkg.warnings == []
+    assert pkg.data["start"]["who_is_here"][0]["portrait"] == "yennefer_rinde"
+
+
+def test_bundled_yennefer_package_starts_with_her_portrait(tmp_path):
+    text = (ROOT / "worlds" / "witcher" / "packages" / "yennefer_rinde.yaml").read_text(
+        encoding="utf-8")
+    pkg = parse(text)
+    assert pkg.warnings == []
+    assert pkg.data["canon"] == "loose" and not pkg.data["player"].get("name")
+    g, stack = make(tmp_path, text)
+    eng = g.eng
+    yen = next(c for c in eng.scene.present if c != PLAYER
+               and eng.profiles[c].portrait == "yennefer_rinde")
+    assert eng.profiles[yen].name == "Йеннефер"
+    assert eng.ctx.rung_of(yen) == "stranger"
+    assert not eng.names.knows(PLAYER, yen)
+    assert "Йеннефер" in g.camp.title
+    g.start_turn("Пані, мені сказали, що ви можете допомогти.")
+    g.wait_idle(20)
+    npc_calls = [m for _, m in stack.provider.calls
+                 if m[0]["content"].startswith("You are Йеннефер")]
+    assert npc_calls
+    portrait = eng.ctx.portraits["yennefer_rinde"]
+    assert any(st.does in npc_calls[0][1]["content"] for st in portrait.stances)
+
+
+def test_bundled_packages_listed(tmp_path, monkeypatch):
+    _, c = server(tmp_path, monkeypatch)
+    got = c.get("/api/packages").json()
+    yen = next(p for p in got if p["id"] == "yennefer_rinde")
+    assert "Йеннефер" in yen["title"] and yen["pitch"]
+    assert parse(yen["text"]).warnings == []
+    s = summary(parse(yen["text"]))
+    assert "Йеннефер" in " ".join(x["value"] for x in s["set"])
+
+
+@pytest.mark.parametrize("attitude,rung", [
+    ("дружня й приязна", "ally"), ("довіряє йому", "ally"), ("старий друг", "ally"),
+    ("не довіряє", "client"), ("недружня", "client"), ("без симпатії", "client"),
+    ("невірна", "client"), ("другий раз бачить", "client"), ("дала пораду", "client"),
+    ("подруга його сестри, але ніякої приязні", "client"), ("рада його бачити", "ally"),
+])
+def test_rung_seed_reads_negation_and_whole_words(attitude, rung):
+    assert newgame.rung_seed({"knows_player": True, "attitude": attitude}) == rung
+    assert newgame.rung_seed({"knows_player": False, "attitude": attitude}) == "stranger"
+
+
+def test_a_broken_portrait_file_is_named_in_ukrainian(monkeypatch):
+    from pathlib import Path
+
+    import harness.portrait as hp
+
+    def boom(world):
+        raise hp.PortraitError(Path("worlds/witcher/portraits/broken.yaml"), "core", "missing")
+    monkeypatch.setattr(hp, "load_world_portraits", boom)
+    got = issues(PORTRAIT_PERSON.format(pid="yennefer_rinde"))
+    assert got[0].field == "start.who_is_here[1].portrait"
+    assert "broken.yaml" in got[0].fix and "поки жодного" not in got[0].fix
+
+
+def test_portrait_person_gets_no_generated_age(tmp_path):
+    text = (ROOT / "worlds" / "witcher" / "packages" / "yennefer_rinde.yaml").read_text(
+        encoding="utf-8")
+    g, _ = make(tmp_path, text)
+    eng = g.eng
+    yen = next(c for c, p in eng.profiles.items() if p.portrait == "yennefer_rinde")
+    assert "років" not in eng.profiles[yen].description
+    assert "взяти" not in eng.profiles[yen].description   # curiosity, not what she can take

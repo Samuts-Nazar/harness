@@ -7,7 +7,8 @@ only when the viewer has learned it (`harness/names.py`), otherwise by what can 
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, replace
 from typing import Any, Callable, Sequence
 
 from .agents import Intents
@@ -20,6 +21,7 @@ from .models import (
     Scene, format_time,
 )
 from .names import Names
+from .portrait import MAX_WORDS, Portrait, Situation, Stance, select_stance, slice_text
 from .providers import Messages
 from .shape import Shape, shape_instruction
 from .state import LiveState
@@ -46,6 +48,11 @@ UNLIMITED_EXTRACTOR = (
 SAID_LIMIT = 8  # own lines shown as "already said in this scene"
 SAID_CHARS = 220  # each shortened to this
 CORRECTIONS_SHOWN = 5
+OUTCOME_EVENT = "outcome"  # harness/outcome.py (not imported: it imports the judge)
+# observable live state that means danger in the room (a drawn blade, a raised crossbow)
+DANGER = re.compile(r"\b(?:drawn|оголен\w*|витягнут\w*|наставлен\w*|націлен\w*)", re.IGNORECASE)
+# counted in the slice budget (MAX_WORDS for the whole section)
+PORTRAIT_HEAD = "Who you are now (never quote it; example lines show only the voice):"
 
 
 @dataclass
@@ -61,6 +68,7 @@ class NpcView:
     name: str
     finish: Callable[[Messages], Messages]
     character: str = ""
+    examples: tuple[str, ...] = ()  # the portrait's example lines in this prompt (copy check)
 
     def messages(self, heard_lines: Sequence[str] = (), notes: Sequence[str] = (),
                  instruction: str | None = None) -> Messages:
@@ -128,6 +136,11 @@ class ContextBuilder:
         self.log, self.facts, self.intents = log, facts, intents
         self.profiles, self.live, self.deriver = profiles, live, deriver
         self.history_limit = history_limit
+        # character portraits (harness/portrait.py): by portrait id, loaded by the engine for its
+        # world; a profile names its portrait in `CharacterProfile.portrait`
+        self.portraits: dict[str, Portrait] = {}
+        # the rung each NPC starts on toward the player (a game package's person), by NPC id
+        self.rung_seeds: dict[str, str] = {}
 
     # -- names ------------------------------------------------------------------------------
     def name(self, cid: str) -> str:
@@ -271,7 +284,8 @@ class ContextBuilder:
         # Order for prompt caching: what grows slowly first (the character's knowledge, condition),
         # the scene and what just happened last.
         parts: list[str] = []
-        core = self.core_text(prof)
+        portrait, own_lines = self._portrait_slice(character, scene)
+        core = portrait or self.core_text(prof)  # a portrait replaces the core and the manner
         if core:
             parts.append(core)
         if mem.knows:
@@ -300,7 +314,7 @@ class ContextBuilder:
         instruction = self.npc_instruction(prof)
         system = f"You are {prof.name}. {prof.description}".strip()
         if self.style is not None:
-            system = self.style.npc_system(prof)
+            system = self.style.npc_system(replace(prof, manner="") if portrait else prof)
             examples = self.style.npc_examples_section(" ".join([
                 scene.location, prof.description, *(e.payload["text"] for e in seen[-2:]),
                 *(it.fact.content for it in mem.knows[-4:])]))
@@ -314,8 +328,72 @@ class ContextBuilder:
         return NpcView(
             system=system, sections=parts,
             seen=[self._seen(e, character) for e in seen], instruction=instruction, known=known,
-            name=prof.name, character=character,
+            name=prof.name, character=character, examples=own_lines,
             finish=lambda m, c=character, k=known_names: self.finish(m, c, k))
+
+    # -- portraits ---------------------------------------------------------------------------
+    def portrait_of(self, character: str) -> Portrait | None:
+        prof = self.profiles.get(character)
+        return self.portraits.get(prof.portrait) if prof is not None and prof.portrait else None
+
+    def rung_of(self, character: str, toward: str = PLAYER) -> str:
+        """The rung of the relationship ladder `character` stands on toward `toward`. Toward the
+        player: the seed (a game package's person), else stranger. Toward another NPC: the
+        portrait's static relations. (A relations store replaces this later.)"""
+        if toward == PLAYER:
+            return self.rung_seeds.get(character, "stranger")
+        p = self.portrait_of(character)
+        return p.relations.get(toward, "stranger") if p is not None else "stranger"
+
+    def situation(self, character: str, scene: Scene) -> Situation:
+        """Power, audience and stakes for stance selection, in code. Audience: anyone present
+        besides the NPC and the player. Stakes: mortal when this turn's judged outcome kills,
+        high when an NPC acted against the player this turn or a weapon is out in the room, else
+        low. Power: the NPC's own when its act toward the player this turn worked, else even."""
+        audience = any(c not in (character, PLAYER) for c in scene.present)
+        power, stakes = "even", "low"
+        for e in reversed(self.log.active([OUTCOME_EVENT, UTTERANCE, ACTION])):
+            if e.type != OUTCOME_EVENT:
+                if (e.payload.get("speaker") or e.payload.get("actor")) == PLAYER:
+                    break  # the player's input opens the turn: older outcomes are past
+                continue
+            p = e.payload
+            if p.get("died"):
+                stakes = "mortal"
+            elif p.get("actor") not in (None, PLAYER) and stakes == "low":
+                stakes = "high"
+            if p.get("actor") == character and p.get("verdict") in ("works", "partly"):
+                power = "self"
+        if stakes == "low":
+            snap = self.live.snapshot()
+            if any(obs and DANGER.search(item)
+                   for c in scene.present for (_, item), obs in snap.get(c, {}).items()):
+                stakes = "high"
+        return Situation(power, audience, stakes)
+
+    def _portrait_slice(self, character: str, scene: Scene) -> tuple[str, tuple[str, ...]]:
+        p = self.portrait_of(character)
+        if p is None:
+            return "", ()
+        st = select_stance(p, self.rung_of(character), self.situation(character, scene))
+        text = self.portrait_text(p, st, character)
+        # the copy check compares the reply with the example lines as the NPC saw them (masked)
+        shown = tuple(m for m in (self.mask(character, x) for x in st.examples) if m in text)
+        return text, shown
+
+    def portrait_text(self, p: Portrait, stance: Stance, viewer: str) -> str:
+        """Header plus slice, at most MAX_WORDS words in all, masked for `viewer`."""
+        budget = MAX_WORDS - len(PORTRAIT_HEAD.split())
+        while True:  # masking a name with an appearance can add words: shrink until it fits
+            out = PORTRAIT_HEAD + "\n" + self.mask(viewer, slice_text(p, stance, None, budget))
+            over = len(out.split()) - MAX_WORDS  # leaks: rationed later (task 4)
+            if over <= 0 or budget <= 1:
+                return out
+            budget -= over
+
+    def portrait_section(self, character: str, scene: Scene) -> str:
+        """The portrait slice for this NPC's prompt (masked for the NPC); "" without a portrait."""
+        return self._portrait_slice(character, scene)[0]
 
     def npc_instruction(self, prof: CharacterProfile, shape: Shape | None = None,
                         bounds: tuple[int, int] | None = None, beat: bool | None = None) -> str:

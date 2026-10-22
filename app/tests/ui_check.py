@@ -455,6 +455,17 @@ def main() -> None:
         assert "version" in errs and "Як виправити" in errs and "player" in errs, errs
         no_hscroll(page, "package errors")
         shot(page, "10-newgame-errors")
+        # the bundled packages: a tap on «Йеннефер у Рінде» fills the box and shows the card
+        page.wait_for_selector("#pkgBundled:not([hidden]) .ng-pick")
+        pick = page.locator(".ng-pick", has_text="Йеннефер у Рінде")
+        assert pick.count() == 1, page.inner_text("#pkgBundled")
+        pick.click()
+        page.wait_for_selector(".ng-card h3")
+        assert "portrait: yennefer_rinde" in page.input_value("#pkgText")
+        card = page.inner_text("#pkgResult")
+        assert "Йеннефер" in card and "Задано у файлі" in card, card
+        no_hscroll(page, "bundled package")
+        shot(page, "13-newgame-bundled")
         page.fill("#pkgText", EXAMPLE)
         page.click("#pkgCheck")
         page.wait_for_selector(".ng-card h3")
@@ -493,7 +504,7 @@ def main() -> None:
     assert not errors, errors
     print("OK: 5 turns (exchange + gesture, skip, cut in by typing, ✋), legend, ink recolour, "
           "suggestions, line menu rules, drawer, debug, reload signature, new game from a file "
-          "(errors, summary, start, first turn); no console errors")
+          "(errors, bundled list, summary, start, first turn); no console errors")
 
 
 if __name__ == "__main__":

@@ -75,10 +75,20 @@ CHOICE_UK = {
     "classic": "класичний", "on": "увімкнено", "off": "вимкнено",
 }
 TOP = ("version", "world", "player", "start", "canon", "tone", "pace", "limits", "outcomes",
-       "dialogue", "assistant", "inks", "notes")
+       "dialogue", "assistant", "inks", "notes", "title", "pitch")
 PLAYER_KEYS = ("name", "description", "appearance", "traits", "knows", "unbounded", "hidden")
 START_KEYS = ("canon", "place", "day", "time", "situation", "who_is_here")
-PERSON_KEYS = ("name", "role", "appearance", "attitude", "goal", "knows_player")
+PERSON_KEYS = ("name", "role", "appearance", "attitude", "goal", "knows_player", "portrait")
+PACKAGES = ROOT / "worlds" / "witcher" / "packages"  # bundled game packages (the new-game list)
+# an `attitude` that reads as friendly: a person who knows the player starts as an ally
+# whole words only, so «другий», «подруга», «порада», «недружня», «невірна» do not count
+FRIENDLY = re.compile(r"(?:друг|друга|другом|друзі|друзів|дружн\w*|дружб\w*|дружелюбн\w*|"
+                      r"приязн\w*|прихильн\w*|тепл\w*|довір\w*|симпат\w*|радий|рада|раді|"
+                      r"радіє|люб\w*|вірн\w*)", re.IGNORECASE)
+# a word before it that turns it around («не довіряє», «без симпатії», «ніякої приязні»)
+NEGATION = {"не", "ні", "без", "ніякої", "ніякого", "жодної", "жодного", "аніскільки", "анітрохи",
+            "зовсім"}
+_UK_WORD = re.compile(r"[\w'’-]+")
 PACE_EN = {"slow": "slow: unhurried, detailed narration; let moments breathe",
            "fast": "fast: short narration that moves straight to what matters"}
 
@@ -107,6 +117,35 @@ class Package:
 
     def to_json(self) -> dict[str, Any]:
         return self.data
+
+
+def world_portraits() -> tuple[dict[str, Any], str]:
+    """The portraits of the Witcher world by id, and "" or what is wrong (Ukrainian) when a
+    portrait file cannot be read (then no portraits)."""
+    from harness import portrait as hp
+    try:
+        return hp.load_world_portraits("witcher"), ""
+    except hp.PortraitError as e:
+        return {}, (f"файл портрета «{Path(e.path).name}» зіпсований (поле {e.field}: "
+                    f"{e.problem})")
+    except OSError as e:
+        return {}, f"портрети світу не читаються ({e.strerror or e})"
+
+
+def bundled_packages() -> list[dict[str, str]]:
+    """The game packages that come with the app (`worlds/witcher/packages/*.yaml`) for the
+    new-game list: id, Ukrainian title and pitch, and the text that fills the box."""
+    out = []
+    for f in sorted(PACKAGES.glob("*.yaml")):
+        text = f.read_text(encoding="utf-8")
+        try:
+            raw = yaml.safe_load(text) or {}
+        except yaml.YAMLError:
+            continue
+        if isinstance(raw, dict):
+            out.append({"id": f.stem, "title": str(raw.get("title") or f.stem),
+                        "pitch": str(raw.get("pitch") or ""), "text": text})
+    return out
 
 
 def start_points() -> dict[str, dict[str, Any]]:
@@ -304,6 +343,18 @@ def _people(c: _Checker, v: Any) -> list[dict[str, Any]] | None:
                 "перенести в attitude або notes."))
         kp = c.flag(f"{pf}.knows_player", p.get("knows_player"))
         person["knows_player"] = bool(kp)
+        pid = c.text(f"{pf}.portrait", p.get("portrait"))
+        if pid:
+            known, broken = world_portraits()
+            if pid in known:
+                person["portrait"] = pid
+            elif broken:
+                c.err(f"{pf}.portrait", f"Портрет «{_show(pid)}» зараз недоступний.",
+                      f"У застосунку {broken}; приберіть поле portrait або виправте файл.")
+            else:
+                c.err(f"{pf}.portrait", f"Невідомий портрет «{_show(pid)}».",
+                      "Оберіть один із готових портретів світу: " + (", ".join(sorted(known))
+                      or "(поки жодного)") + "; або приберіть поле portrait.")
         if not (person.get("role") or person.get("name") or person.get("appearance")):
             c.err(pf, "Невідомо, хто це: немає ні ролі, ні імені, ні зовнішності.",
                   "Додайте хоча б role (наприклад, «корчмар»).")
@@ -463,6 +514,11 @@ def parse(text: str) -> Package:
             if ok:
                 d["inks"] = ok
 
+    for k, cap in (("title", 80), ("pitch", 400)):  # the bundled list's name and blurb
+        v = c.text(k, raw.get(k))
+        if v:
+            d[k] = v[:cap]
+
     notes = c.text("notes", _joined(raw.get("notes")))
     if c.extra:
         notes = "\n".join(([notes] if notes else []) + ["Інші побажання з файлу:"] + c.extra)
@@ -511,6 +567,8 @@ def _clock(minute: int) -> str:
 def title(pkg: Package, place: str | None = None) -> str:
     """The line above the page: the canon moment's title, or the start place."""
     st = pkg.data["start"]
+    if pkg.data.get("title"):
+        return str(pkg.data["title"])
     if "canon" in st:
         return str(start_points()[st["canon"]].get("title", st["canon"]))
     place = place or st.get("place")
@@ -680,16 +738,31 @@ def _build_people(eng: Engine, people: list[dict[str, Any]]) -> tuple[list[str],
                              description=q.get("attitude", ""))
         if q.get("name"):
             spec = replace(spec, name=q["name"])
+        # a portrait person's age is the portrait's business: no generated age to contradict it
+        age = "" if q.get("portrait") else f", {spec.vitals.age(eng.scene.time)} років"
         desc = " ".join(x for x in (
-            f"{spec.name.split()[0]}, {spec.occupation}, {spec.vitals.age(eng.scene.time)} "
-            "років.", q.get("attitude") and f"Toward the newcomer: {q['attitude']}.",
+            f"{spec.name.split()[0]}, {spec.occupation}{age}.", q.get("attitude") and f"Toward the newcomer: {q['attitude']}.",
             q.get("goal") and f"Wants: {q['goal']}.") if x)
         eng.add_npc(spec, description=desc, appearance=look)
         ids.append(spec.id)
         goals[spec.id] = q.get("goal") or q.get("attitude") or f"go about the day as a {spec.occupation}"
         if q.get("knows_player"):
             eng.acquaint(spec.id, PLAYER)
+        if q.get("portrait"):
+            eng.bind_portrait(spec.id, q["portrait"], rung_seed(q))
     return ids, goals
+
+
+def rung_seed(person: dict[str, Any]) -> str:
+    """The rung a package person starts on toward the player: one who knows the player is an
+    ally when the attitude reads friendly, else a client; anyone else is a stranger."""
+    if not person.get("knows_player"):
+        return "stranger"
+    words = [w.lower() for w in _UK_WORD.findall(person.get("attitude", ""))]
+    for i, w in enumerate(words):
+        if FRIENDLY.fullmatch(w) and not (i and words[i - 1] in NEGATION):
+            return "ally"
+    return "client"
 
 
 def _passers_by(eng: Engine, place_id: str) -> list[dict[str, Any]]:
