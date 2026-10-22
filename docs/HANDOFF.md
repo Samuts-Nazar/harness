@@ -33,16 +33,42 @@ You are the lead ("brain") for the harness project. The user talks to you; Sonne
 - Every report to the user gives full absolute paths.
 - Never commit `.env`, `data/`, `campaigns/`, character files. Repo is public for now.
 
-## State on 2026-10-19 (evening)
-- main has tasks 4-15 merged: engine on chosen models (luna narrator/NPC, deepseek extractor, d1-ultra decider), parallel turn, saved campaigns, phone app (`app/`, port 8765 open on the LAN, run `nix develop --command python -m app --live --host 0.0.0.0`), prose narration + scene director, names as knowledge, "how does he know that" with spoiler, actions in *asterisks*, player looks from the local character file, Sapkowski style sheet + NPC beats + manner notes, one glossary, canon ingestion pilot (`harness/canon/`, `reports/canon_pilot/SUMMARY.md`).
-- Running (background workers, own worktrees under `.claude/worktrees/`, briefs in `docs/tasks/`): task 16 canon in play, task 17 world beyond the scene, task 18A/18B prior-art research (reports go into the final message; write them to `reports/research/`). If a session dies, check each worktree's branch (`git log main..<branch>`), resume or start a new worker on the same branch with the same brief, then review, merge, push, verify with `git ls-remote origin`, delete branch and worktree.
-- Next after 16+17: Vizima pilot scene, situation A (tavern «Під Лисом», day 3 evening), player = limitless demon; test plan `docs/pilot_vizima_test_plan.md`. Adjust the plan if 18A/18B recommend changing the core first.
-- All decisions agreed in chat up to 2026-10-20 are in `docs/decisions.md` (written 2026-10-20). Pilot setup (not a design rule): Vizima situation A, tavern «Під Лисом», day 3 evening; player = limitless demon (own creature in the spirit of Master Mirror, not O'Dimm); Ragnar will be replayed from scratch once the harness is ready; checklist page `app/static/checklist.html`.
-- User feedback to remember: the first NPC lines read as "neural-network style", not Sapkowski; this drove task 15. The A/B style page `/static/ab.html` awaits the user's verdict. Ragnar's chronicle will be replayed from scratch once the harness is ready.
-- Open user question: none pending.
+## How we work now (since 2026-10-21)
+- The superpowers plugin is installed. New features go through the following, without exceptions for "small" features:
+  - `superpowers:brainstorming`: questions one at a time, playbacks, a visual companion for anything visual;
+  - a design doc in `docs/superpowers/specs/`, then a builder check by a fresh subagent, then the user's approval;
+  - `superpowers:writing-plans`, with the plan in `docs/superpowers/plans/`;
+  - `superpowers:subagent-driven-development`: one implementer per task, a task reviewer after each, scoped re-reviews of fixes, a final whole-branch review on opus.
+- The ledger and workspace of each plan live in `<worktree>/.superpowers/sdd/<plan>/progress.md`, git-ignored. Read it first after a restart; tasks marked complete are done.
+- Before merging, run pytest yourself and check the real exit code. Run the Playwright check `app/tests/ui_check.py` for UI changes. Then merge into main, push, verify with `git ls-remote`, and delete the branch and worktree. Save the ledger's rulings and deferred items to `reports/<area>/deferred_and_rulings.md`.
+- The user's preferences learned so far:
+  - choices about taste (models, UI) are made by the user's blind grading, never by agent grading;
+  - they distrust OpenAI models;
+  - they reject outdated models;
+  - they want parallel work when tasks are independent;
+  - they dislike Telegram-like UI;
+  - they want the game to read like Sapkowski's book.
+- Every money spend needs the user's OK when it exceeds what a brief already allows. They refused a $2 Gemini comparison; small budgets (≤ $0.20) per task are fine.
 
-## Checkpoint 2026-10-21 (session paused at usage limit)
-- Living-dialogue plan (`docs/superpowers/plans/2026-10-21-living-dialogue.md`, spec in `docs/superpowers/specs/`) runs with superpowers subagent-driven-development; the ledger is `.claude/worktrees/living-dialogue/.superpowers/sdd/2026-10-21-living-dialogue/progress.md` (read it first; tasks marked complete are done).
-- Branches: `living-dialogue` (tasks 1-8 + 10), `ld-t9`, `ld-t11` (pending review/merge). Nothing of these is on main yet.
-- Research done and on main: `reports/research/21A_decisions.md`, `21B_tone_leaks.md`.
-- Open user questions: model bake-off above the price ceiling?; approve an 8 GB local Gemma 4 E4B download for a base-model tone test?
+## State on 2026-10-22 (for a fresh session)
+- **main is the truth.** It has:
+  - the engine (tasks 4–19);
+  - living dialogue (spec `2026-10-21-living-dialogue-design.md`, plan `…-living-dialogue.md`, report `reports/dialogue/SUMMARY.md`): world profile, response shapes, NPC exchanges, optional narration, cut-in, scene cast, and challenge removal;
+  - research reports `reports/research/18A/18B/21A/21B`;
+  - the human-writing bake-off (`reports/human_ab/`);
+  - the model switch: narrator `xiaomi/mimo-v2.6-pro`, NPC `xiaomi/mimo-v2.6-flash`, temperature 0.8. The user's blind grading was mimo-pro 4.0, mimo-flash 3.6, luna 3.0.
+- **In progress: the interactive book UI.**
+  - Spec: `docs/superpowers/specs/2026-10-22-interactive-book-ui-design.md` (approved). Plan: `docs/superpowers/plans/2026-10-22-interactive-book-ui.md`. Mockups: `docs/design/ui-mockups/`.
+  - Branch `book-ui`, worktree `.claude/worktrees/book-ui`, ledger `.claude/worktrees/book-ui/.superpowers/sdd/2026-10-22-interactive-book-ui/progress.md`.
+  - Task 1 is complete (tokens, inks, `/api/cast`, `/api/people`).
+  - Task 2, the turn assistant, was dispatched at the session switch. Check `git -C .claude/worktrees/book-ui log --oneline 625cb29..` and the worktree status; if the agent is lost, re-dispatch Task 2 from its brief in the ledger folder.
+  - Tasks 3 (client page) and 4 (places and a live check) remain, then the final review and the merge.
+- **Next, after the UI:** active play tests by the user on the Vizima pilot (`docs/pilot_vizima_test_plan.md`, `app/static/checklist.html`). Start: `nix develop --command python -m app --live --host 0.0.0.0 --budget 0.5`; phone at `http://192.168.1.109:8765/`.
+- **Later projects agreed with the user:**
+  - project 2, a decision layer against averaging (`reports/research/21A_decisions.md`);
+  - project 3, prose tone (`21B`);
+  - a bake-off of models on the known failures.
+- **Open user questions:**
+  - whether a bake-off may test models above the price ceiling (the user said no to Gemini 3.8 Flash for now);
+  - an 8 GB Gemma 4 E4B local download for a base-model tone test (not answered).
+- **Known test-data defects:** `experiments/bakeoff/testset/npc.json` c07 lists Marta as Roche's rumour source, and the old tests predate names-as-knowledge. Fix them when touching these sets.
