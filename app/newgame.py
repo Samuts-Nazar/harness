@@ -547,7 +547,10 @@ def summary(pkg: Package) -> dict[str, Any]:
     put("Хто поруч", [", ".join(x for x in (q.get("name"), q.get("role")) if x)
                       or q.get("appearance", "") for q in people],
         "Люди поруч" if "canon" not in st else None)
-    put("Канон", CHOICE_UK[d["canon"]] if "canon" in d else None)
+    canon = CHOICE_UK[d["canon"]] if "canon" in d else None
+    if canon and d["canon"] == "follow" and "canon" not in st:  # gravity needs a canon moment
+        canon += " — діє лише з канонічним стартом; у власній сцені сюжет книг не притягується"
+    put("Канон", canon)
     put("Тон", d.get("tone"), "Тон (як у Сапковського)")
     put("Темп", CHOICE_UK[d["pace"]] if "pace" in d else None)
     lim = d.get("limits", {})

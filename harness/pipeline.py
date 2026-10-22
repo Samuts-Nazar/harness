@@ -59,7 +59,7 @@ from .narrator import (
 )
 from .npcgen import NpcSpec, VitalsBook, generate_npc, taken_names, with_core
 from .outcome import (
-    CHARACTER_DEATH, FAILS, CampaignEnded, Outcome, OutcomeJudge, record_death, record_outcome,
+    CHARACTER_DEATH, FAILS, OUTCOME, CampaignEnded, Outcome, OutcomeJudge, record_death, record_outcome,
 )
 from .perception import ACTION, DESCRIPTION, SPEECH, perceivers
 from .policy import (
@@ -2040,14 +2040,46 @@ class Engine:
                 return None
         return None
 
+    def _turn_input_before(self, old: Event) -> tuple[str, Outcome | None]:
+        """The turn's input as the narrator read it (`render_for_model` of the verbatim text) and
+        the world's judgment of the player's attempt in that turn, for a narration `old`."""
+        mine = [e for e in self.log.active([UTTERANCE, ACTION_EVENT])
+                if e.id < old.id and (e.payload.get("speaker") == PLAYER
+                                      or (e.type == ACTION_EVENT
+                                          and e.payload.get("actor") == PLAYER))]
+        if not mine:
+            return "", None
+        last = mine[-1]
+        if last.payload.get("part"):  # a split input: the first part carries the raw text
+            first = next((e for e in reversed(mine)
+                          if e.payload.get("part") == 1 and "raw" in e.payload), last)
+        else:
+            first = last
+        raw = str(first.payload.get("raw", first.payload["text"]))
+        model_text = render_for_model(split_input(raw), raw)
+        judged = [e for e in self.log.active([OUTCOME])
+                  if first.id < e.id < old.id and e.payload.get("actor", PLAYER) == PLAYER]
+        return model_text, (self._outcome_of(judged[-1]) if judged else None)
+
+    @staticmethod
+    def _outcome_of(ev: Event) -> Outcome:
+        p = ev.payload
+        return Outcome(p.get("verdict", FAILS), p.get("reason", "none"), bool(p.get("died")),
+                       p.get("actor", PLAYER), p.get("text", ""), bool(p.get("unbounded")), ev.id)
+
     def _renarrate(self, old: Event, res: "Challenge") -> None:
         """Replace the narration passage `old` by a new one written with the corrections in the
         narrator's context. The player's input stays. Failing puts the old text back."""
-        said = [e for e in self.log.active([UTTERANCE]) if e.payload.get("speaker") == PLAYER]
-        player_text = (said[-1].payload.get("raw", said[-1].payload["text"]) if said else "")
+        model_text, outcome = self._turn_input_before(old)
+        cause = self.log.get(old.cause_id) if old.cause_id is not None else None
         self.log.rollback(old.id, "model error: narration")
         try:
-            text = self._narrate(player_text).description
+            if cause is not None and cause.type == OUTCOME:  # an NPC act's resolution paragraph
+                text = self._resolution_paragraph(self._outcome_of(cause))
+                if not text:
+                    raise RuntimeError("the resolution could not be narrated again")
+            else:
+                text = self._narrate(model_text, outcome=outcome).description
         except Exception:
             self._event(NARRATION, [], {"text": old.payload["text"], "replaces": old.id,
                                         "restored": True}, witnesses=[], notability=0.4)

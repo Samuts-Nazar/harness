@@ -155,6 +155,9 @@ def test_people_are_masked_and_carry_known_facts():
     assert people and all(set(x) == {"tok", "label", "ink", "present", "known"} for x in people)
     assert "horst" not in r.text and "Горст" not in r.text  # not introduced
     assert all(isinstance(f, str) for x in people for f in x["known"])
+    assert any(x["known"] for x in people), "the drawer shows what the character knows"
+    shown = " ".join(f for x in people for f in x["known"])
+    assert "гравц" not in shown.lower() and "player" not in shown.lower()
 
 
 def test_ink_rejects_malformed_json():
@@ -162,3 +165,54 @@ def test_ink_rejects_malformed_json():
     assert c.post("/api/ink", content=b"{nope", headers={"content-type": "application/json"}
                   ).status_code == 400
     assert c.post("/api/ink", json=[1]).status_code == 400
+
+
+def test_auto_inks_of_present_characters_are_distinct_with_many_met():
+    """Final review, finding 2: more than eight met, at most eight present: the present ones
+    never share an auto-assigned ink (absent characters do not use up the palette)."""
+    import dataclasses
+
+    g = make()
+    base = g.eng.profiles["horst"]
+    absent = [f"gone{i}" for i in range(8)]
+    here = [f"here{i}" for i in range(6)]
+    for i, cid in enumerate(absent + here):
+        g.eng.profiles[cid] = dataclasses.replace(base, id=cid, name=f"Ім'я{i}",
+                                                  appearance=f"постать {i}")
+    with g.lock:
+        g._seen = list(absent)  # met before, gone now; their inks fill the whole palette
+        for cid, ink in zip(absent, PALETTE):
+            g.camp.inks.set(g.camp.tok(cid), ink)
+            g._touch(g.camp.tok(cid))
+        g.eng.scene.present = (PLAYER, "horst", "elza", *here)
+        g._seen += ["horst", "elza", *here]
+        g._cast = g._compute_cast()
+    present = [x for x in g.cast() if x["present"]]
+    assert len(present) == 8
+    assert len({x["ink"] for x in present}) == 8, [x["ink"] for x in present]
+
+
+def _contrast(a: str, b: str) -> float:
+    def lum(h: str) -> float:
+        c = [int(h[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+        c = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
+        return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+    hi, lo = sorted((lum(a), lum(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def test_ink_and_placeholder_contrast_on_the_page():
+    """Final review: the inks' contrast comment holds, and the input placeholder is >= 4.5:1."""
+    import re
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parents[1] / "static" / "style.css").read_text()
+    var = dict(re.findall(r"--([a-z0-9-]+):\s*(#[0-9a-fA-F]{6})", css))
+    for ink in PALETTE:
+        assert _contrast(ink, var["paper"]) >= 6.5, ink
+        assert _contrast(ink, var["paper3"]) >= 5.0, ink
+    m = re.search(r"#input::placeholder\s*\{[^}]*color:\s*([^;]+);", css)
+    col = m.group(1).strip()
+    col = var[col[6:-1]] if col.startswith("var(--") else col
+    for bg in ("paper", "paper2"):
+        assert _contrast(col, var[bg]) >= 4.5, (col, bg)

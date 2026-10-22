@@ -411,3 +411,36 @@ def test_a_huge_request_is_refused_readably(tmp_path, monkeypatch):
     r = c.post("/api/package/check", json={"text": MINIMAL + "notes: " + "я" * 500_000 + "\n"})
     assert r.status_code == 200 and r.json()["errors"][0]["field"] == "файл"
     assert "завеликий" in r.json()["errors"][0]["problem"]
+
+
+# -- final whole-branch review (minors) ----------------------------------------------------------
+OFF_MAP = MINIMAL + """\
+start:
+  place: хутір за трьома ярами
+"""
+
+
+def test_free_start_off_the_map_shows_no_places(tmp_path):
+    """A start place the map does not know is added unlinked: no list of places with made-up
+    distances from it."""
+    g, _ = make(tmp_path, OFF_MAP)
+    assert g.eng.scene.location == "хутір за трьома ярами"
+    assert g.places() == []
+    g2, _ = make(tmp_path / "b", EXAMPLE)   # the market is on the map: its places are listed
+    assert g2.places() and all("minutes" in p for p in g2.places())
+
+
+def test_canon_follow_without_a_canon_start_is_said_on_the_card():
+    card = summary(parse(MINIMAL + "canon: follow\n"))
+    canon = [x for x in card["set"] if x[0] == "Канон"] if card["set"] and isinstance(
+        card["set"][0], (list, tuple)) else [x for x in card["set"] if x.get("label") == "Канон"]
+    text = str(canon)
+    assert "лише з канонічним стартом" in text, card["set"]
+    card2 = summary(parse(CANON + "canon: follow\n"))
+    assert "лише з канонічним стартом" not in str(card2["set"])
+
+
+def test_instruction_says_follow_needs_a_canon_start_and_unknown_names_stay_hidden():
+    doc = (ROOT / "docs" / "new_game_instruction.md").read_text(encoding="utf-8")
+    assert "лише для канонічного старту" in doc
+    assert "knows_player: false" in doc and "доки не представиться" in doc

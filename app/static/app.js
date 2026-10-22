@@ -324,30 +324,62 @@ function showAnswer(block, ok, d) {
   } else res.textContent = "Не вдалося перевірити (суддя недоступний).";
   block.appendChild(res);
 }
-// «Помилка моделі» and «Перебити тут»: shown only when the server offers them (state.actions)
+// «Помилка моделі» and «Перебити тут»: shown only when the server offers them (state.actions).
+// In the turn's slow lane the server waits for it, so the button says «Зачекайте…» meanwhile;
+// true when it worked (the page is reloaded), false after an error (shown).
 async function postAndReload(url, body) {
   let r, d = {};
   try { r = await fetch(url, { method: "POST", body: JSON.stringify(body) }); if (!r.ok) d = await r.json(); }
   catch (e) { r = { ok: false }; d = { error: "Немає зв'язку." }; }
-  if (!r.ok) { showError(d.error || "Не вдалося."); return; }
+  if (!r.ok) { showError(d.error || "Не вдалося."); return false; }
   load();
+  return true;
 }
 function openModelError(block) {
-  inlineBox(block, "Що саме не так? (обов'язково)", "Переписати", (note, go) => {
+  inlineBox(block, "Що саме не так? (обов'язково)", "Переписати", async (note, go) => {
     if (!note.value.trim()) { note.focus(); return; }
-    go.disabled = true;
-    postAndReload("/api/model_error", { event: Number(block.dataset.event) || null, explanation: note.value.trim() });
+    const label = go.textContent;
+    go.disabled = true; go.textContent = "Зачекайте…";
+    const ok = await postAndReload("/api/model_error", { event: Number(block.dataset.event) || null, explanation: note.value.trim() });
+    if (!ok) { go.disabled = false; go.textContent = label; }   // the player can try again
   });
 }
+// the cut points of a line: after each spoken word but the last; words of a *beat* are not
+// spoken, so they are shown (without asterisks) but cannot be a cut point. `after` counts every
+// word of the stored text, as the server does.
+function cutPoints(raw) {
+  const words = String(raw || "").split(/\s+/).filter(Boolean);
+  let inBeat = false;
+  const out = words.map((w, i) => {
+    const opens = !inBeat && w.startsWith("*");
+    const beat = inBeat || opens;
+    const t = beat ? w.replace(/\*/g, "") : w;
+    if (beat && (opens ? w.length > 1 && w.slice(1).includes("*") : w.includes("*"))) inBeat = false;
+    else if (opens) inBeat = true;
+    return { text: t, beat, after: i + 1 };
+  }).filter((x) => x.text);
+  const spoken = out.filter((x) => !x.beat);
+  const lastSpoken = spoken.length ? spoken[spoken.length - 1].after : 0;
+  return out.map((x) => ({ ...x, cut: !x.beat && x.after < lastSpoken }));
+}
 function openCut(block) {   // tap the word after which he is cut off
-  const words = String(block._raw || "").split(/\s+/).filter(Boolean);
   const body = el("span", "body cutpick");
   body.appendChild(el("span", "note", "Торкніться слова, після якого перебити: "));
-  words.forEach((w, i) => {
-    const b = el("button", "cw", w); b.type = "button";
-    b.addEventListener("click", () => postAndReload("/api/cut", { event: Number(block.dataset.event), after_words: i + 1 }));
+  const buttons = [];
+  for (const w of cutPoints(block._raw)) {
+    if (!w.cut) { body.append(el("span", w.beat ? "beat" : "cwx", w.text), document.createTextNode(" ")); continue; }
+    const b = el("button", "cw", w.text); b.type = "button";
+    b.addEventListener("click", async () => {
+      buttons.forEach((x) => { x.disabled = true; });
+      b.textContent = w.text + " (зачекайте…)";
+      if (!(await postAndReload("/api/cut", { event: Number(block.dataset.event), after_words: w.after }))) {
+        buttons.forEach((x) => { x.disabled = false; });
+        b.textContent = w.text;
+      }
+    });
+    buttons.push(b);
     body.append(b, document.createTextNode(" "));
-  });
+  }
   const cancel = el("button", "btn ghost", "Скасувати"); cancel.type = "button";
   cancel.addEventListener("click", () => fillBody(block, block._raw));
   body.appendChild(cancel);
@@ -550,6 +582,7 @@ const handlers = {
   settled(e) {            // the slow lane is done: the panel now shows what the turn changed
     $("clock").textContent = e.clock + tag;
     setPanel(e.panel);
+    if (Array.isArray(e.actions)) actions = e.actions;   // what the server supports now
     loadCast();           // a learned name changes a label; token and ink stay
     if ($("drawer").open) loadPeople();
     if (!$("debugPanel").hidden) loadDebug();
@@ -569,7 +602,7 @@ const handlers = {
   },
   ink(e) { setInk(e.tok, e.ink); renderLegend(); },
   ended(e) { showFinale(e.chronicle); },
-  reset() {},
+  reset() { load(); },   // a new campaign (from another tab too): the page starts over
 };
 // events of a turn whose text the transcript already holds (a reload during its slow lane)
 const FEED_EVENTS = new Set(["turn_start", "narr_start", "narr_word", "narr_end", "speaker", "npc_act", "word", "turn_done"]);

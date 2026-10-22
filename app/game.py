@@ -7,6 +7,7 @@ background gets `transcript` + the events it missed.
 """
 from __future__ import annotations
 
+import re
 import threading
 import time
 from typing import Any, Callable
@@ -56,6 +57,20 @@ def explain(e: BaseException) -> str:
     return f"Не вдалося виконати хід ({name}): {str(e)[:200]}"
 
 
+_PLAYER_WORDS = re.compile(
+    r"(?<!\w)(?:the\s+)?player(?:\s+character)?(?!\w)|(?<!\w)гравц(?:ем|еві|ю|я|і)(?!\w)"
+    r"|(?<!\w)гравець(?!\w)", re.IGNORECASE)
+
+
+def _as_the_character(text: str, name: str) -> str:
+    """A record's wording for the player («гравцем», «Гравець», "the player") as the player
+    character's own name in what the people drawer shows; «ви» when there is no name."""
+    if not text:
+        return text
+    out = _PLAYER_WORDS.sub(name or "ви", text)
+    return out[:1].upper() + out[1:] if text[:1].isupper() else out
+
+
 class Game:
     def __init__(self, open_campaign: Callable[[bool], Campaign], pace: float = 0.25,
                  suggestions: bool = True,
@@ -69,6 +84,9 @@ class Game:
         self.pace = pace  # `skip()` sets it to 0 for the rest of the turn
         self.start_lock = threading.Lock()  # one start_turn at a time (interrupt, wait, start)
         self.lock = threading.RLock()
+        # the event list has its own small lock: the SSE stream reads it without ever waiting
+        # for the game's lock (which a turn's bookkeeping may hold)
+        self._ev_lock = threading.Lock()
         self.visible = threading.Event()
         self.visible.set()
         self.seq = 0
@@ -91,31 +109,40 @@ class Game:
             if self.running or self.challenging or self.building:
                 raise Busy("a turn is running")
             self.building = True
-        try:  # the build (a model call, the database) runs without the lock: state() still answers
+        try:  # the build (a model call, the database) and the first views (translations) run
+            # without the lock: state() still answers with the campaign before
             camp = (opener or self._open)(new)
+            ended = camp.engine.ended
+            transcript: list[dict[str, Any]] = camp.transcript()
+            seen: list[str] = camp.speaker_ids()  # characters met, first seen first
+            recency: list[str] = []  # tokens, least recently active first
+            for t in transcript:
+                if t.get("tok"):
+                    self._touch(t["tok"], recency)
+            panel = self._compute_panel(camp)
+            cast = self._compute_cast(camp, seen, recency)
+            known = self._compute_known(cast, camp)
+            camp.inks.flush()
         finally:
             with self.lock:
                 self.building = False
         with self.lock:
             self.camp = camp
-            self._ended = self.eng.ended  # read again whenever no turn's thread uses the database
-            self.transcript: list[dict[str, Any]] = self.camp.transcript()
+            self._ended = ended  # read again whenever no turn's thread uses the database
+            self.transcript = transcript
             self.phase = "idle"  # idle | thinking | narrating | speaking
             self.handle: InterruptHandle | None = None
             self.skip_narration = False
             self.debug: dict[str, Any] = {}
             self.decision_log: list[tuple[str, DecisionCount]] = []  # (location, turn count)
-            self.events = []
+            with self._ev_lock:
+                self.events = []
             self._sugg: dict[str, Any] | None = None  # the turn's suggestions (see _suggest)
-            self._panel = self._compute_panel()
-            self._seen: list[str] = self.camp.speaker_ids()  # characters met, first seen first
-            self._recency: list[str] = []  # tokens, least recently active first
-            for t in self.transcript:
-                if t.get("tok"):
-                    self._touch(t["tok"])
-            self._cast = self._compute_cast()
-            self._known: dict[str, list[str]] = self._compute_known()
-            self.camp.inks.flush()
+            self._panel = panel
+            self._seen = seen
+            self._recency = recency
+            self._cast = cast
+            self._known: dict[str, list[str]] = known
             self.turn_start_seq = self.seq
             self._emit("reset")
             self.turn_start_seq = self.seq
@@ -136,9 +163,9 @@ class Game:
 
     def _is_ended(self) -> bool:
         """Is the player character dead? Read from the database only while no turn's thread is
-        alive (one SQLite connection must not be used from two threads at once); otherwise the
-        value that thread left after its turn. Call with `self.lock` held."""
-        if not self.running:
+        alive and no correction runs (one SQLite connection must not be used from two threads at
+        once); otherwise the value left by the last user. Call with `self.lock` held."""
+        if not self.running and not self.challenging:
             self._ended = self.eng.ended
         return self._ended
 
@@ -147,21 +174,23 @@ class Game:
         turn = getattr(self._tl, "turn", None)
         if turn is not None:
             data.setdefault("turn", turn)
-        with self.lock:
+        with self._ev_lock:
             self.seq += 1
             ev = {"seq": self.seq, "type": type, **data}
             self.events.append(ev)
             return ev
 
     def events_after(self, after: int) -> list[dict[str, Any]]:
-        with self.lock:
+        """Never waits for the game's lock: only for the event list's own, held for a moment."""
+        with self._ev_lock:
             return [e for e in self.events if e["seq"] > after]
 
     # -- cast and inks ------------------------------------------------------------------------
-    def _touch(self, tok: str) -> None:
-        if tok in self._recency:
-            self._recency.remove(tok)
-        self._recency.append(tok)
+    def _touch(self, tok: str, recency: list[str] | None = None) -> None:
+        rec = self._recency if recency is None else recency
+        if tok in rec:
+            rec.remove(tok)
+        rec.append(tok)
 
     def _note_speaker(self, cid: str) -> str:
         """A character spoke or acted: they join the cast and become the most recent. Returns the
@@ -174,21 +203,37 @@ class Game:
             self._cast = self._compute_cast()
             return tok
 
-    def _compute_cast(self) -> list[dict[str, Any]]:
+    def _compute_cast(self, camp: Campaign | None = None, seen: list[str] | None = None,
+                      recency: list[str] | None = None) -> list[dict[str, Any]]:
         """Who the player character has met or sees now: token, the label the character perceives
-        (a stranger by appearance), ink and presence. Inks are assigned on first sight."""
-        eng, book = self.eng, self.camp.inks
+        (a stranger by appearance), ink and presence. Inks are assigned on first sight; only the
+        characters present now compete for distinct inks. Reads the database (labels): call it
+        on the thread that may use it."""
+        camp = camp or self.camp
+        eng, book = camp.engine, camp.inks
+        seen = self._seen if seen is None else seen
+        recency = list(self._recency if recency is None else recency)
         present = set(eng.scene.present)
-        ids = [c for c in self._seen if c != PLAYER]
+        ids = [c for c in seen if c != PLAYER]
         ids += [c for c in eng.scene.present if c != PLAYER and c not in ids]
-        toks = {c: self.camp.tok(c) for c in ids}
-        for c in ids:
-            t = toks[c]
-            if t not in book.inks:
-                others = [toks[o] for o in ids if o != c]
-                book.set(t, assign_ink(others, book.inks, self._recency))
-        return [{"tok": toks[c], "label": eng.ctx.label(PLAYER, c), "ink": book.inks[toks[c]],
-                 "present": c in present} for c in ids]
+        toks = {c: camp.tok(c) for c in ids}
+        labels = {c: eng.ctx.label(PLAYER, c) for c in ids}
+        with book.lock:
+            for c in ids:
+                t = toks[c]
+                if t not in book.inks:
+                    others = [toks[o] for o in ids if o != c and o in present]
+                    book.set(t, assign_ink(others, book.inks, recency))
+            return [{"tok": toks[c], "label": labels[c], "ink": book.inks[toks[c]],
+                     "present": c in present} for c in ids]
+
+    def _swap_cast(self, cast: list[dict[str, Any]]) -> None:
+        """Put a cast computed outside the lock in place; an ink the player picked meanwhile
+        wins. Call with `self.lock` held."""
+        book = self.camp.inks
+        for c in cast:
+            c["ink"] = book.get(c["tok"]) or c["ink"]
+        self._cast = cast
 
     def cast(self) -> list[dict[str, Any]]:
         with self.lock:
@@ -198,8 +243,8 @@ class Game:
         """The player picks a character's ink (any character of the campaign, by token)."""
         if not isinstance(ink, str) or not INK_RE.match(ink):
             raise ValueError("bad ink")
-        with self.lock:
-            if tok not in {self.camp.tok(c) for c in self.eng.profiles if c != PLAYER}:
+        with self.lock:  # the cast is the request thread's view: no database read here
+            if not any(c["tok"] == tok for c in self._cast):
                 raise KeyError(tok)
             self.camp.inks.set(tok, ink.lower())
             for c in self._cast:
@@ -208,16 +253,23 @@ class Game:
             self._emit("ink", tok=tok, ink=ink.lower())
         self.camp.inks.flush()
 
-    def _compute_known(self) -> dict[str, list[str]]:
+    def _compute_known(self, cast: list[dict[str, Any]] | None = None,
+                       camp: Campaign | None = None) -> dict[str, list[str]]:
         """Per cast token, a few short things the player character knows about that person,
         from the character's own derived memory and masked like everything the player sees.
-        A fact counts as about a person when it mentions their name or appearance."""
-        eng = self.eng
+        A fact counts as about a person when it mentions their name or appearance. The records'
+        wording for the player («гравець», "the player") becomes the character's own name. All
+        translations go in one call. Reads the database and may call a model: never under the
+        game's lock."""
+        camp = camp or self.camp
+        cast = self._cast if cast is None else cast
+        eng = camp.engine
         mem = eng.deriver.derive(PLAYER, eng.scene.time)
         raw = [it.fact.content for it in mem.knows]
+        by_tok = {camp.tok(i): i for i in eng.profiles}
         out: dict[str, list[str]] = {}
-        for c in self._cast:
-            cid = next((i for i in eng.profiles if self.camp.tok(i) == c["tok"]), None)
+        for c in cast:
+            cid = by_tok.get(c["tok"])
             if cid is None:
                 continue
             p = eng.profiles[cid]
@@ -232,11 +284,14 @@ class Game:
                     continue  # the mask missed a form of the name: better nothing than a leak
                 if shown not in facts:
                     facts.append(shown)
-            tr = self.camp.translate
-            if tr is not None and facts:
-                facts = tr(facts[-4:])
             out[c["tok"]] = facts[-4:]
-        return out
+        tr = camp.translate
+        flat = [f for facts in out.values() for f in facts]
+        if tr is not None and flat:
+            done = iter(tr(flat))
+            out = {t: [next(done) for _ in facts] for t, facts in out.items()}
+        me = eng.profiles[PLAYER].name if PLAYER in eng.profiles else ""
+        return {t: [_as_the_character(f, me) for f in facts] for t, facts in out.items()}
 
     def people(self) -> list[dict[str, Any]]:
         with self.lock:
@@ -247,22 +302,24 @@ class Game:
         """Cached view (recomputed only when no turn runs, so the DB has a single user)."""
         return self._panel
 
-    def _compute_panel(self) -> dict[str, Any]:
+    def _compute_panel(self, camp: Campaign | None = None) -> dict[str, Any]:
         """The player character's state as the character perceives it: chips for live state
         (own body is perceived, hidden or not) and a few sentences from what the character knows.
         Nothing the character did not perceive can appear: it is read from the character's own
-        derived memory."""
-        mem = self.eng.deriver.derive(PLAYER, self.eng.scene.time)
+        derived memory. Reads the database and may call a model: never under the game's lock."""
+        camp = camp or self.camp
+        eng = camp.engine
+        mem = eng.deriver.derive(PLAYER, eng.scene.time)
         items = [e.item for e in mem.state]
-        prose = [self.eng.ctx.mask(PLAYER, it.fact.content).rstrip(".") + "."
+        prose = [eng.ctx.mask(PLAYER, it.fact.content).rstrip(".") + "."
                  for it in mem.knows[-4:]]
-        tr = self.camp.translate  # records are English; the panel is shown in Ukrainian
+        tr = camp.translate  # records are English; the panel is shown in Ukrainian
         if tr is not None:
             both = tr(items + prose)
             items, prose = both[: len(items)], both[len(items):]
         chips = [{"text": t, "category": e.category, "label": CATEGORY_UK[e.category],
                   "observable": e.observable} for t, e in zip(items, mem.state)]
-        return {"name": self.eng.profiles[PLAYER].name, "chips": chips, "prose": prose}
+        return {"name": eng.profiles[PLAYER].name, "chips": chips, "prose": prose}
 
     def state(self) -> dict[str, Any]:
         with self.lock:
@@ -271,13 +328,19 @@ class Game:
                 "transcript": list(self.transcript), "panel": self.panel(),
                 "running": self.running, "phase": self.phase, "turn": self.turn_no,
                 "ended": self._is_ended(), "assistant": self.camp.assistant,
-                "actions": ([] if self.running or self.challenging or self._is_ended()
-                            else ["model_error", "cut"]),
+                # what the server supports; the client offers them when it is not busy (a
+                # correction asked for in the slow lane waits for it, see _begin_edit)
+                "actions": self.actions(),
                 "chronicle": self.chronicle() if self._is_ended() and not self.running else [],
                 # a client replays everything after this; for an idle game that is nothing
                 "resume_after": self.turn_start_seq if self.running else self.seq,
                 "pending_turn": getattr(self, "pending", None) if self.running else None,
             }
+
+    def actions(self) -> list[str]:
+        """The optional line actions this server supports (none once the campaign ended).
+        Call with `self.lock` held."""
+        return [] if self._is_ended() else ["model_error", "cut"]
 
     def clock(self) -> str:
         return clock(self.eng.scene.time)
@@ -325,7 +388,8 @@ class Game:
                 self.skip_narration = False
                 # keep the turn before (from its start): a client polling the stream must still
                 # get its turn_done when this new text cut it in a moment ago
-                self.events = [e for e in self.events if e["seq"] > self.turn_start_seq]
+                with self._ev_lock:
+                    self.events = [e for e in self.events if e["seq"] > self.turn_start_seq]
                 self.turn_start_seq = self.seq
                 self.turn_no += 1
                 self._emit("turn_start", text=text, turn=self.turn_no)
@@ -344,10 +408,7 @@ class Game:
         how the character knows (type and rough time; the full event for the spoiler tap)."""
         from dataclasses import asdict
 
-        with self.lock:
-            if self.running or self.challenging or self.building:
-                raise Busy("a turn is running")
-            self.challenging = True
+        self._claim(check_ended=False)
         try:
             res = self.eng.challenge_line(event, explanation)
             out = asdict(res)
@@ -374,20 +435,46 @@ class Game:
         self._refresh_after_edit()
 
     def _refresh_after_edit(self) -> None:
+        """Called with `challenging` set (this thread is the database's only user): the views
+        and the assistant's context are computed outside the lock, then swapped in."""
+        panel, cast, known = self._views()
+        ctx = self._assistant_context(self.turn_no)
         with self.lock:
-            self._panel = self._compute_panel()
-            self._cast = self._compute_cast()
-            self._known = self._compute_known()
+            self._panel = panel
+            self._swap_cast(cast)
+            self._known = known
             self._sugg = None  # the suggestions were made for the output that changed
-            self._start_suggestions(self.turn_no)
+            self._start_suggestions(self.turn_no, ctx)
+
+    def _views(self) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, list[str]]]:
+        """Panel, cast and what the character knows about each person. Reads the database and
+        may call the translator: only on the thread that is the database's user, without the
+        lock (so the stream and the other requests keep answering)."""
+        panel = self._compute_panel()
+        cast = self._compute_cast()
+        return panel, cast, self._compute_known(cast)
+
+    def _claim(self, wait: float = 60.0, check_ended: bool = True) -> None:
+        """Take the engine for a correction. Busy while a turn is being told or another
+        correction or a build runs. In a turn's slow lane (the player is reading) this waits
+        for it, up to `wait` seconds, like a new turn would."""
+        with self.start_lock:  # no new turn starts while this waits
+            end = time.monotonic() + wait
+            while True:
+                with self.lock:
+                    if self.challenging or self.building or self.phase != "idle":
+                        raise Busy("a turn is running")
+                    if not self.running:
+                        if check_ended and self._is_ended():
+                            raise Ended("the character is dead; the campaign is read-only")
+                        self.challenging = True
+                        return
+                if time.monotonic() > end:
+                    raise Busy("the turn's bookkeeping did not finish")
+                time.sleep(0.02)
 
     def _begin_edit(self) -> None:
-        with self.lock:
-            if self.running or self.challenging or self.building:
-                raise Busy("a turn is running")
-            if self._is_ended():
-                raise Ended("the character is dead; the campaign is read-only")
-            self.challenging = True
+        self._claim()
 
     def model_error(self, event: int | None, explanation: str) -> dict[str, Any]:
         """«Помилка моделі»: only the last world output is regenerated with the player's
@@ -451,6 +538,8 @@ class Game:
                 return []
             wmap = world.map
             here = wmap.resolve(self.eng.scene.location)
+            if here is not None and not wmap.edges.get(here.id):
+                return []  # a start place off the map (added unlinked): no made-up distances
             out = []
             for p in wmap.places.values():
                 if here is not None and p.id == here.id:
@@ -628,26 +717,42 @@ class Game:
                              fast_s=fast_s, waited=waited)
             if world is not None:
                 self.debug = {**self.debug, "world": world.report(since)}
-            self._panel = self._compute_panel()
-            self._cast = self._compute_cast()  # labels may have changed: a name was learned
-            self._known = self._compute_known()
-            self._emit("settled", panel=self._panel, clock=self.clock())
-            if eng.ended:
-                self._emit("ended", chronicle=self.chronicle())
+        # this thread is the database's only user until it ends: the views (one translator call
+        # each), the chronicle and the assistant's context are made without the lock, so the
+        # stream and the other requests keep answering meanwhile
+        panel, cast, known = self._views()  # labels may have changed: a name was learned
+        turn = getattr(self._tl, "turn", None)
+        ended = eng.ended
+        chron = self.chronicle() if ended else None
+        ctx = None if ended else self._assistant_context(turn)
+        with self.lock:
+            self._ended = ended
+            self._panel = panel
+            self._swap_cast(cast)
+            self._known = known
+            self._emit("settled", panel=self._panel, clock=self.clock(), actions=self.actions())
+            if ended:
+                self._emit("ended", chronicle=chron)
             else:
-                self._start_suggestions(getattr(self._tl, "turn", None))
+                self._start_suggestions(turn, ctx)
 
     # -- turn assistant ---------------------------------------------------------------------
-    def _start_suggestions(self, turn: int | None) -> None:
-        """Called on the turn's thread once the slow lane is done (it is the database's only user
-        now): render the player character's view here, then ask the model on a thread of its own.
-        The next turn does not wait for it. Call with `self.lock` held."""
+    def _assistant_context(self, turn: int | None) -> Any:
+        """The player character's view for the turn assistant, rendered on the thread that is
+        the database's only user (the turn's, or a correction's), without the lock. None: no
+        suggestions for this turn."""
         if (not self.suggest_on or not self.camp.assistant or turn is None
                 or turn != self.turn_no):
-            return
+            return None
         try:
-            ctx = assistant.context(self.eng)
+            return assistant.context(self.eng)
         except Exception:  # noqa: BLE001 - suggestions are optional; the turn is already done
+            return None
+
+    def _start_suggestions(self, turn: int | None, ctx: Any) -> None:
+        """Ask the model for suggestions on a thread of its own, from a context rendered before
+        (`_assistant_context`). The next turn does not wait for it. Call with `self.lock` held."""
+        if ctx is None or turn is None or turn != self.turn_no:
             return
         state: dict[str, Any] = {"turn": turn, "ctx": ctx, "items": []}
         self._sugg = state

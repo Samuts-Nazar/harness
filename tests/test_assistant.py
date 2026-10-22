@@ -81,3 +81,33 @@ def test_avoid_is_in_the_prompt_and_filtered_from_the_answer():
     out = assistant.suggest(eng, 3, avoid=["*оглядається*"])
     assert "- *оглядається*" in spy.prompts[-1]
     assert "*оглядається*" not in out and out
+
+
+def test_content_limits_reach_the_assistant_prompt():
+    """Final review, finding 7: the campaign's content limits are in the assistant's SYSTEM."""
+    eng, _ = make({})
+    eng.ctx.limits = "No gore. ZQ-LIMIT-MARK."
+    spy = Spy(eng.provider)
+    eng.provider = spy
+    ctx = assistant.context(eng)
+    assert "ZQ-LIMIT-MARK" in ctx.system
+    assistant.ask(eng, ctx, 3)
+    assert "ZQ-LIMIT-MARK" in spy.prompts[-1]
+
+
+class NamingSpy(Spy):
+    def complete(self, model, messages):
+        self.prompts.append("\n".join(m["content"] for m in messages))
+        return "Горсте, налий ще.\n*киває Горстові*\nЩо скажете?"
+
+
+def test_suggestions_mask_names_the_player_character_does_not_know():
+    """Finding 7: a suggestion naming an unlearned character is masked like the feed, with the
+    known snapshot taken when the context was rendered (ask runs on a thread of its own)."""
+    eng, _ = make({})
+    eng.provider = NamingSpy(eng.provider)
+    ctx = assistant.context(eng)
+    assert ctx.known is not None and "horst" not in ctx.known
+    out = assistant.ask(eng, ctx, 3)
+    assert out and not any("Горст" in s for s in out), out
+    assert any(HORST.lower() in s.lower() for s in out), out

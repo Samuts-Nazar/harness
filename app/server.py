@@ -26,8 +26,10 @@ def create_app(game: Game) -> Starlette:
     async def index(_: Request) -> FileResponse:
         return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
 
+    # the views take the game's lock (never held across a model call, but it may wait on a
+    # database read): they run in the thread pool, so the event loop and the stream never wait
     async def state(_: Request) -> JSONResponse:
-        return JSONResponse(game.state())
+        return JSONResponse(await run_in_threadpool(game.state))
 
     async def turn(request: Request) -> JSONResponse:
         body = await request.json()
@@ -56,10 +58,10 @@ def create_app(game: Game) -> Starlette:
 
     async def new_campaign(_: Request) -> JSONResponse:
         try:
-            game.reset()
+            await run_in_threadpool(game.reset)
         except Busy:
             return JSONResponse({"error": "Хід триває."}, status_code=409)
-        return JSONResponse(game.state())
+        return JSONResponse(await run_in_threadpool(game.state))
 
     PACKAGE_BYTES = 400_000  # a request body bigger than this is refused before parsing
 
@@ -105,10 +107,10 @@ def create_app(game: Game) -> Starlette:
             return JSONResponse({"error": "Хід триває. Дочекайтеся кінця ходу."}, status_code=409)
         except Exception as e:  # noqa: BLE001 - shown to the player; the old campaign stays
             return JSONResponse({"error": explain(e)}, status_code=502)
-        return JSONResponse(game.state())
+        return JSONResponse(await run_in_threadpool(game.state))
 
     async def panel(_: Request) -> JSONResponse:
-        return JSONResponse(game.panel())
+        return JSONResponse(await run_in_threadpool(game.panel))
 
     async def debug(_: Request) -> JSONResponse:
         return JSONResponse(game.debug)
@@ -166,7 +168,7 @@ def create_app(game: Game) -> Starlette:
         return await edit(request, "cut")
 
     async def places(_: Request) -> JSONResponse:
-        return JSONResponse(game.places())
+        return JSONResponse(await run_in_threadpool(game.places))
 
     async def knowledge(_: Request) -> JSONResponse:
         try:
@@ -175,10 +177,10 @@ def create_app(game: Game) -> Starlette:
             return JSONResponse({"error": "Хід триває."}, status_code=409)
 
     async def cast(_: Request) -> JSONResponse:
-        return JSONResponse(game.cast())
+        return JSONResponse(await run_in_threadpool(game.cast))
 
     async def people(_: Request) -> JSONResponse:
-        return JSONResponse(game.people())
+        return JSONResponse(await run_in_threadpool(game.people))
 
     async def ink(request: Request) -> JSONResponse:
         try:
@@ -188,11 +190,13 @@ def create_app(game: Game) -> Starlette:
         except ValueError:
             return JSONResponse({"error": "Недійсний запит."}, status_code=400)
         try:
-            game.set_ink(str(body.get("tok", "")), body.get("ink"))
+            await run_in_threadpool(game.set_ink, str(body.get("tok", "")), body.get("ink"))
         except KeyError:
             return JSONResponse({"error": "Невідомий персонаж."}, status_code=404)
         except ValueError:
             return JSONResponse({"error": "Недійсний колір."}, status_code=400)
+        except Exception:  # noqa: BLE001 - e.g. the disk: the player gets a message, not a 500 page
+            return JSONResponse({"error": "Не вдалося зберегти колір."}, status_code=500)
         return JSONResponse({"ok": True})
 
     async def suggestions(request: Request) -> JSONResponse:
@@ -211,7 +215,7 @@ def create_app(game: Game) -> Starlette:
             quiet = 0.0
             yield "retry: 1000\n\n"
             while not await request.is_disconnected():
-                batch = game.events_after(after)
+                batch = game.events_after(after)  # its own short lock, never the game's
                 for ev in batch:
                     after = ev["seq"]
                     yield f"id: {ev['seq']}\nevent: {ev['type']}\ndata: {json.dumps(ev, ensure_ascii=False)}\n\n"

@@ -113,7 +113,7 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 #btnIdea.wait { opacity: .5; }
 #input { flex: 1; min-width: 0; resize: none; background: transparent; border: 0; border-bottom: 1px solid var(--rule2);
   border-radius: 0; padding: 8px 2px; font-size: 17px; line-height: 1.4; color: var(--ink); max-height: 160px; }
-#input::placeholder { color: #8f7d60; font-style: italic; }
+#input::placeholder { color: var(--muted); font-style: italic; }   /* 5.8:1 on the page */
 #input:focus-visible { outline: none; border-bottom-color: var(--pen); }
 .send { margin-bottom: 2px; border-color: transparent; color: var(--pen); font-size: 20px; }
 .send:disabled { opacity: .4; cursor: default; }

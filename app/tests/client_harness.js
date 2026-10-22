@@ -15,7 +15,9 @@ function node(tag) {
     append(...cs) { for (const c of cs) this.appendChild(typeof c === "object" ? c : { textContent: String(c), children: [] }); },
     remove() { if (this.parent) this.parent.children = this.parent.children.filter((x) => x !== this); this.parent = null; },
     replaceWith(c) { const p = this.parent; if (!p) return; p.children[p.children.indexOf(this)] = c; c.parent = p; this.parent = null; },
-    querySelector() { return null; }, addEventListener() {}, setAttribute() {}, focus() {},
+    querySelector() { return null; }, setAttribute() {}, focus() {},
+    _l: {}, addEventListener(t, f) { (this._l[t] = this._l[t] || []).push(f); },
+    click() { return Promise.all((this._l.click || []).map((f) => f({ target: this }))); },
     requestSubmit() {} };
   return n;
 }
@@ -38,6 +40,8 @@ if (Array.isArray(job)) job = { events: job };
 if (job.state) ctx.__render(job.state);
 if (job.load) ctx.__load(job.load);   // as after a reload: events go through the replay filter
 for (const e of job.events || []) (job.load ? ctx.__dispatch : (t, ev) => ctx.__h[t](ev))(e.type, e);
+(async () => {
+const value = job.eval ? await ctx.__eval(job.eval) : null;
 const feed = ids.feed;
 const text = (n) => (n.textContent || "") + (n.children || []).map(text).join("");
 console.log(JSON.stringify({ feed: feed.children.map((n) => ({ cls: n.className, line: n.dataset.line,
@@ -46,4 +50,5 @@ console.log(JSON.stringify({ feed: feed.children.map((n) => ({ cls: n.className,
   beat: (n.children || []).flatMap((c) => c.children || []).filter((c) => c.className === "beat").map((c) => c.textContent),
   ink: n.style && n.style["--c"] })),
   busy: ctx.__state().busy, input: ids.input.value, root: document.documentElement.style,
-  value: job.eval ? ctx.__eval(job.eval) : null }));
+  value }));
+})();

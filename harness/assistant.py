@@ -43,9 +43,12 @@ SYSTEM = (
 
 @dataclass(frozen=True)
 class Context:
-    """The player character's view, rendered. Plain text: safe to keep and use from any thread."""
+    """The player character's view, rendered. Plain text: safe to keep and use from any thread.
+    `known`: the ids whose names the player character knew when it was rendered (the suggestions
+    are masked with it, so `ask` never reads the database)."""
     system: str
     user: str
+    known: frozenset[str] | None = None
 
 
 def context(engine: "Engine") -> Context:
@@ -72,9 +75,10 @@ def context(engine: "Engine") -> Context:
         parts.append("What just happened (as the character perceived it):\n"
                      + "\n".join(ctx._seen(e, PLAYER) for e in seen))
     known = engine.names.known_set(PLAYER) if engine.names else None
-    msgs = ctx.finish([{"role": "system", "content": SYSTEM},
+    msgs = ctx.finish([{"role": "system", "content": SYSTEM + ctx.limits_section()},
                        {"role": "user", "content": "\n\n".join(parts)}], PLAYER, known)
-    return Context(msgs[0]["content"], msgs[1]["content"])
+    return Context(msgs[0]["content"], msgs[1]["content"],
+                   known if known is not None else frozenset())
 
 
 def parse(raw: str, n: int, avoid: Sequence[str] = ()) -> list[str]:
@@ -120,7 +124,14 @@ def ask(engine: "Engine", ctx: Context, n: int = 3, avoid: Sequence[str] = ()) -
         raw = call()
         if foreign_runs(raw, lang):
             raw = "\n".join(cut_foreign(line, lang) for line in raw.splitlines())
-    return parse(raw, n, avoid)
+    out = parse(raw, n, avoid)
+    if ctx.known is not None:  # a name the character has not learned stays an appearance
+        masked = [engine.ctx.mask(PLAYER, s, ctx.known) for s in out]
+        out = []
+        for s in masked:
+            if s not in out and s.strip().lower() not in {a.strip().lower() for a in avoid}:
+                out.append(s)
+    return out
 
 
 def suggest(engine: "Engine", n: int = 3, avoid: Sequence[str] = ()) -> list[str]:

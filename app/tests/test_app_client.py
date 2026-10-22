@@ -220,3 +220,76 @@ def test_reload_after_an_error_does_not_swallow_the_next_turn():
     got = run({"load": state, "events": evs})
     texts = [p["text"] for p in got["feed"]]
     assert texts == ["Перша.", "він: — Раз.", "Перша-б.", "— Два.", "Третя.", "— Три."], texts
+
+
+# -- final whole-branch review -------------------------------------------------------------------
+def _slow_lane_state(actions):
+    return {"title": "t", "live": False, "clock": "x", "panel": PANEL, "running": True,
+            "phase": "idle", "turn": 1, "actions": actions, "transcript": [
+                {"kind": "player", "text": "Перша.", "turn": 1},
+                {"kind": "npc", "tok": "aa", "label": "він", "text": "Раз два три.", "event": 4,
+                 "turn": 1}]}
+
+
+LAST_SAY_ITEMS = "sheetItems(lineInfo(lines()[lines().length - 1]), actions)"
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_reload_in_the_slow_lane_still_offers_the_corrections_afterwards():
+    """Finding 3: a load() during the slow lane keeps «Помилка моделі» and the cut (the server
+    lists them always), and a settled event refreshes them."""
+    got = run({"load": _slow_lane_state(["model_error", "cut"]), "events": [
+        {"type": "settled", "turn": 1, "clock": "x", "panel": PANEL,
+         "actions": ["model_error", "cut"]}], "eval": LAST_SAY_ITEMS})
+    assert "model_error" in got["value"] and "cut" in got["value"]
+    # an older server's empty list during the slow lane is corrected by settled
+    got = run({"load": _slow_lane_state([]), "events": [
+        {"type": "settled", "turn": 1, "clock": "x", "panel": PANEL,
+         "actions": ["model_error", "cut"]}], "eval": LAST_SAY_ITEMS})
+    assert "model_error" in got["value"] and "cut" in got["value"]
+
+
+FAIL_FETCH = ("fetch = () => Promise.resolve({ ok: false, "
+              "json: () => Promise.resolve({ error: 'Хід триває.' }) });")
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_model_error_button_is_enabled_again_after_a_failure():
+    """Finding 4: the dialog's button says «Зачекайте…» while it waits and comes back on error."""
+    expr = ("(async () => { " + FAIL_FETCH +
+            " const p = lines()[lines().length - 1]; openModelError(p);"
+            " const box = p.children[p.children.length - 1];"
+            " const [note, go] = box.children; note.value = 'не так';"
+            " const seen = []; const orig = postAndReload;"
+            " postAndReload = async (u, b) => { seen.push([go.disabled, go.textContent]);"
+            " return orig(u, b); };"
+            " await go.click(); return [seen[0], go.disabled, go.textContent,"
+            " document.getElementById('errbar').textContent]; })()")
+    got = run({"state": _slow_lane_state(["model_error", "cut"]), "eval": expr})["value"]
+    assert got[0] == [True, "Зачекайте…"]
+    assert got[1] is False and got[2] == "Переписати" and got[3] == "Хід триває."
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_cut_picker_skips_beats_and_the_last_word_and_recovers_after_a_failure():
+    pts = run({"events": [], "eval": f"cutPoints({json.dumps(SAID)})"})["value"]
+    assert [p["text"] for p in pts if "*" in p["text"]] == []
+    cuts = [p["after"] for p in pts if p["cut"]]
+    assert cuts == [1, 2, 7, 8, 9, 10, 11, 12], cuts   # not in the beat, not after «живуть.»
+    beats = [p["text"] for p in pts if p["beat"]]
+    assert beats == ["потер", "палець", "об", "палець"]
+    one = run({"events": [], "eval": "cutPoints('*киває* Так.')"})["value"]
+    assert [p["cut"] for p in one] == [False, False]
+    expr = ("(async () => { " + FAIL_FETCH +
+            " const p = lines()[lines().length - 1]; openCut(p);"
+            " const bs = p._body.children.filter((c) => c.className === 'cw');"
+            " await bs[0].click(); return [bs.length, bs.every((b) => !b.disabled), bs[0].textContent]; })()")
+    got = run({"state": _slow_lane_state(["model_error", "cut"]), "eval": expr})["value"]
+    assert got == [2, True, "Раз"]
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_reset_event_reloads_the_page():
+    expr = ("(() => { let n = 0; fetch = () => { n++; return new Promise(() => {}); };"
+            " handlers.reset({}); return n; })()")
+    assert run({"events": [], "eval": expr})["value"] >= 1

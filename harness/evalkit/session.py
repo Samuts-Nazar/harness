@@ -30,12 +30,13 @@ def _models_dict(m: ModelConfig) -> dict[str, Any]:
     return dict(vars(m))
 
 
-def play(stack: Stack, turns: Sequence[str], root: Path | str, *, timeout: float = 240.0
-         ) -> tuple[Game, list[dict[str, Any]]]:
-    """Run the turns through the app's Game (threads, slow lane) and collect per-turn timing."""
+def play(stack: Stack, turns: Sequence[str], root: Path | str, *, timeout: float = 240.0,
+         dialogue: str = "classic") -> tuple[Game, list[dict[str, Any]]]:
+    """Run the turns through the app's Game (threads, slow lane) and collect per-turn timing.
+    `dialogue`: the header's mode (recordings without one are classic)."""
     game = Game(lambda new: open_vizima(stack, root=root, new=True, name=NAME, canon_db=False,  # type: ignore[arg-type]
-                                        seed=SEED, dialogue="classic"), pace=0.0,
-                suggestions=False)  # stored recordings are classic
+                                        seed=SEED, dialogue=dialogue), pace=0.0,
+                suggestions=False)
     rows: list[dict[str, Any]] = []
     for i, text in enumerate(turns, 1):
         t0 = time.monotonic()
@@ -52,23 +53,39 @@ def play(stack: Stack, turns: Sequence[str], root: Path | str, *, timeout: float
     return game, rows
 
 
-def record(stack: Stack, turns: Sequence[str], path: Path | str, *, keep_prompts: bool = False
-           ) -> tuple[Game, list[dict[str, Any]]]:
+def record(stack: Stack, turns: Sequence[str], path: Path | str, *, keep_prompts: bool = False,
+           dialogue: str = "classic") -> tuple[Game, list[dict[str, Any]]]:
     """Play on `stack` (live or fake) and write the cassette."""
     cas = Cassette(path, {"scenario": SCENARIO, "turns": list(turns),
-                          "models": _models_dict(stack.models), "name": NAME, "seed": SEED})
+                          "models": _models_dict(stack.models), "name": NAME, "seed": SEED,
+                          "dialogue": dialogue})
     rec = Stack(RecordingProvider(stack.provider, cas, keep_prompts=keep_prompts),
                 RecordingJudge(stack.judge, cas), stack.models, stack.spend, stack.live)
-    game, rows = play(rec, turns, tempfile.mkdtemp(prefix="eval-rec-"))
+    game, rows = play(rec, turns, tempfile.mkdtemp(prefix="eval-rec-"), dialogue=dialogue)
     cas.write({"k": "f", "transcript": game.transcript})
     return game, rows
 
 
+_SALTED = ("turn", "tok")
+
+
 def _story(transcript: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The transcript without the bookkeeping that older recordings do not have (a turn id on each
-    entry, the event id of a narration passage)."""
-    return [{k: v for k, v in e.items() if k != "turn" and not (k == "event" and e["kind"] == "narr")}
-            for e in transcript]
+    """The transcript without the bookkeeping that differs between runs or that older recordings
+    do not have: a turn id on each entry, the event id of a narration passage, and the speaker's
+    token (salted at random per campaign, so it never matches between a recording and its
+    replay). Who speaks is compared by the label the player sees; an older recording's `who` or
+    `name` counts as that label."""
+    out = []
+    for e in transcript:
+        d = {k: v for k, v in e.items()
+             if k not in _SALTED and k not in ("who", "name")
+             and not (k == "event" and e["kind"] == "narr")}
+        if e.get("kind") in ("npc", "npc_act") and "label" not in d:
+            old = e.get("name") or e.get("who")
+            if old is not None:
+                d["label"] = old
+        out.append(d)
+    return out
 
 
 def replay(path: Path | str, *, strict: bool = True) -> tuple[Game, dict[str, Any]]:
@@ -77,7 +94,8 @@ def replay(path: Path | str, *, strict: bool = True) -> tuple[Game, dict[str, An
     prov = ReplayProvider(path, strict=strict)
     judge = ReplayJudge(path, strict=strict)
     stack = Stack(prov, judge, ModelConfig(**header["models"]), None, False)
-    game, rows = play(stack, header["turns"], tempfile.mkdtemp(prefix="eval-rep-"))
+    game, rows = play(stack, header["turns"], tempfile.mkdtemp(prefix="eval-rep-"),
+                      dialogue=header.get("dialogue", "classic"))
     footer = next((r for r in recs if r["k"] == "f"), None)
     same = footer is not None and _story(footer["transcript"]) == _story(game.transcript)
     return game, {"misses": prov.misses + judge.misses, "same_story": same, "rows": rows}
