@@ -1,6 +1,6 @@
 # Interactive book UI — design
 
-Date: 2026-10-22. Status: draft for the user's approval.
+Date: 2026-10-22. Status: approved by the user on 2026-10-22.
 
 ## Intent and the why
 
