@@ -39,6 +39,9 @@ DECAY_TARGET = {**ENTRY_WARMTH, "stranger": -0.2, "enemy": ENEMY_AT}
 CLOSE_HELD = 1  # close needs ally held across this many scene changes
 LOVER_HELD, LOVER_DISTINCT = 2, 3  # lover: close held across 2, and 3 distinct positive ids
 ENEMY_HELD = 1
+# a scene ends with the game day, or after this many game minutes with the NPC not judged
+SCENE_GAP = 120
+DAY = 24 * 60
 
 
 @dataclass(frozen=True)
@@ -98,11 +101,21 @@ class Relations:
         return Relationship(npc, other, rung, w, t, "", None)
 
     def scene_key(self, npc: str, scene: Scene) -> str:
-        """One scene for `npc`: the location and the NPC's latest entry (0: there from the
-        start)."""
+        """One scene for `npc` toward the player: the location, the NPC's latest entry (0: there
+        from the start) and the game minute the scene began. A new scene begins on another
+        location or entry, on a new day, or after a gap of SCENE_GAP minutes or more since the
+        NPC was last judged (its latest RELATION event); otherwise the latest event's key goes
+        on."""
         entries = [e.id for e in self.log.active([SCENE_ENTRY])
                    if e.payload.get("character") == npc]
-        return f"{scene.location}#{entries[-1] if entries else 0}"
+        base = f"{scene.location}#{entries[-1] if entries else 0}"
+        evs = self._events(npc, PLAYER)
+        if evs:
+            last, key = evs[-1], evs[-1].payload.get("scene") or ""
+            if (key.split("@")[0] == base and last.game_time // DAY == scene.time // DAY
+                    and scene.time - last.game_time < SCENE_GAP):
+                return key
+        return f"{base}@{scene.time}"
 
     def pace(self, npc: str, other: str, key: str) -> Pace:
         """The pacing history of the pair as of a turn in scene `key`. Scenes are runs of events

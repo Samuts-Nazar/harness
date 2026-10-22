@@ -141,7 +141,7 @@ def test_pace_from_the_log():
     rs = Relations(e.log)
     sc_a, sc_b = Scene("A", (PLAYER, "yen"), 0), Scene("B", (PLAYER, "yen"), 0)
     rs.seed("yen", PLAYER, "client", sc_a)
-    assert rs.get("yen", PLAYER).scene == "A#0"
+    assert rs.get("yen", PLAYER).scene == rs.scene_key("yen", sc_a)
     rs.set("yen", PLAYER, "ally", 0.3, 0.5, "a", sc_a, None, key="A#0", counted=("a",))
     p = rs.pace("yen", PLAYER, "A#0")
     assert (p.changed, p.this_scene, p.held, p.distinct) == (False, {"a"}, 0, {"a"})
@@ -371,3 +371,41 @@ def test_yennefer_helpless_trigger_excludes_her_and_the_player():
     sw = {s.id: s for s in load_world_portraits("witcher")["yennefer_rinde"].switches}
     assert "other than her and the player" in sw["helpless_nearby"].trigger
     assert "not someone else's child" in sw["wound"].trigger
+
+
+def test_scene_key_advances_with_game_time():
+    e = eng()
+    rs = Relations(e.log)
+    sc = Scene("Кімната", (PLAYER, "yen"), 10 * 60)                 # day 1, 10:00
+    rs.seed("yen", PLAYER, "stranger", sc)
+    k0 = rs.scene_key("yen", sc)
+    assert k0 == rs.get("yen", PLAYER).scene
+    sc.time += 119                                                  # under 2 h: same scene
+    assert rs.scene_key("yen", sc) == k0
+    rs.set("yen", PLAYER, "stranger", -0.2, 0.2, "", sc, None, key=k0)   # judged at 11:59
+    sc.time += 119
+    assert rs.scene_key("yen", sc) == k0                            # 2 h since the start, < 2 h gap
+    sc.time += 1                                                    # a 2 h gap since last judged
+    k1 = rs.scene_key("yen", sc)
+    assert k1 != k0
+    rs.set("yen", PLAYER, "stranger", -0.2, 0.2, "", sc, None, key=k1)   # judged 13:59
+    sc.time = 24 * 60 + 30                                          # next day 00:30, same room
+    k2 = rs.scene_key("yen", sc)
+    assert k2 not in (k0, k1)
+    assert rs.pace("yen", PLAYER, k2).changed
+    # judged again in the new scene: it continues
+    rs.set("yen", PLAYER, "stranger", -0.2, 0.2, "", sc, None, key=k2)
+    assert rs.scene_key("yen", sc) == k2
+
+
+def test_a_positive_switch_counts_again_in_a_later_scene_of_the_same_room():
+    e = yen_engine({"portrait_switch": True}, npc=("— Що?", "— Ну?", "— Знову ти."))
+    e.turn("Я приніс тобі води.", speakers=["yen"])
+    assert e.ctx.relations.get("yen", PLAYER).counted == ("w",)
+    e.turn("Я приніс тобі ще води.", speakers=["yen"])
+    r = e.ctx.relations.get("yen", PLAYER)
+    assert r.counted == () and nums(r) == ("client", 0.0, 0.3)       # once per scene
+    e.scene.time += 24 * 60                                             # the next day, same room
+    e.turn("Я знову приніс тобі води.", speakers=["yen"])
+    r = e.ctx.relations.get("yen", PLAYER)
+    assert r.counted == ("w",) and nums(r) == ("client", 0.075, 0.3375)  # x0.75 client, x0.5 repeat
