@@ -2427,6 +2427,7 @@ class Engine:
             raise ValueError(f"unknown rung {rung!r}")
         self.profiles[npc] = replace(self.profiles[npc], portrait=portrait)
         self.ctx.rung_seeds[npc] = rung
+        self.ctx.relations.seed(npc, PLAYER, rung, self.scene)  # the store; seeds only back old campaigns
         if self._owns_conn:
             self._save_setup()
 

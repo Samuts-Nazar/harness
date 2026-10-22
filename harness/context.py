@@ -21,6 +21,7 @@ from .models import (
     Scene, format_time,
 )
 from .names import Names
+from .relations import SEED_VALUES, Relations
 from .portrait import MAX_WORDS, Portrait, Situation, Stance, select_stance, slice_text
 from .providers import Messages
 from .shape import Shape, shape_instruction
@@ -141,6 +142,7 @@ class ContextBuilder:
         self.portraits: dict[str, Portrait] = {}
         # the rung each NPC starts on toward the player (a game package's person), by NPC id
         self.rung_seeds: dict[str, str] = {}
+        self.relations = Relations(log)
 
     # -- names ------------------------------------------------------------------------------
     def name(self, cid: str) -> str:
@@ -288,6 +290,13 @@ class ContextBuilder:
         core = portrait or self.core_text(prof)  # a portrait replaces the core and the manner
         if core:
             parts.append(core)
+        if portrait:  # the NPC's own standing toward the player (never the narrator's)
+            rel = self.relations.get(character, PLAYER)
+            rung = self.rung_of(character)
+            w, t = (rel.warmth, rel.trust) if rel.event_id is not None else SEED_VALUES.get(
+                rung, (rel.warmth, rel.trust))
+            parts.append(f"Your standing toward {self.ref(character, PLAYER)}: {rung}, "
+                         f"warmth {w:g}, trust {t:g}.")
         if mem.knows:
             parts.append("What you know:\n" + "\n".join(self.knowledge_lines(mem)))
         if mem.state:
@@ -337,13 +346,34 @@ class ContextBuilder:
         return self.portraits.get(prof.portrait) if prof is not None and prof.portrait else None
 
     def rung_of(self, character: str, toward: str = PLAYER) -> str:
-        """The rung of the relationship ladder `character` stands on toward `toward`. Toward the
-        player: the seed (a game package's person), else stranger. Toward another NPC: the
-        portrait's static relations. (A relations store replaces this later.)"""
+        """The rung of the relationship ladder `character` stands on toward `toward`: the latest
+        RELATION event; without one, toward the player the package seed (campaigns made before
+        the store), else stranger; toward another NPC the portrait's static relations."""
+        rel = self.relations.get(character, toward)
+        if rel.event_id is not None:
+            return rel.rung
         if toward == PLAYER:
             return self.rung_seeds.get(character, "stranger")
         p = self.portrait_of(character)
         return p.relations.get(toward, "stranger") if p is not None else "stranger"
+
+    def relation_line(self, npc: str, scene: Scene | None = None) -> str:
+        """The NPC's standing toward the player for the omniscient judges (real names). With a
+        scene and a portrait, the stance that standing selects."""
+        rel = self.relations.get(npc, PLAYER)
+        rung = self.rung_of(npc)
+        w, t = (rel.warmth, rel.trust) if rel.event_id is not None else (
+            SEED_VALUES.get(rung, (rel.warmth, rel.trust)))
+        line = f"{self.name(npc)} → the player: {rung}, warmth {w:g}, trust {t:g}"
+        p = self.portrait_of(npc)
+        if p is not None and scene is not None:
+            line += f"; stance: {select_stance(p, rung, self.situation(npc, scene)).id}"
+        return line
+
+    def relation_lines(self, scene: Scene) -> list[str]:
+        """One line per present NPC with a portrait (judges only)."""
+        return [self.relation_line(c, scene) for c in scene.present
+                if c != PLAYER and self.portrait_of(c) is not None]
 
     def situation(self, character: str, scene: Scene) -> Situation:
         """Power, audience and stakes for stance selection, in code. Audience: anyone present
@@ -549,6 +579,9 @@ class ContextBuilder:
         lines.append(f"The player does/says: {player_input}")
         if narration:  # none when the moment is just talk (living dialogue)
             lines.append(f"Narration: {narration}")
+        rel = self.relation_lines(scene)
+        if rel:
+            lines.append("Relationships:\n" + "\n".join(rel))
         g = self.glossary
         return [g.apply(x) for x in lines] if g else lines
 

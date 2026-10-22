@@ -111,6 +111,9 @@ class OutcomeJudge:
             lines.append("Recent:\n" + "\n".join(
                 eng.ctx._seen(e) if e.type != "narration" else f"[narration] {e.payload['text']}"
                 for e in recent))
+        rel = eng.ctx.relation_lines(sc)
+        if rel:
+            lines.append("Relationships:\n" + "\n".join(rel))
         lines.extend(extra)
         return lines
 

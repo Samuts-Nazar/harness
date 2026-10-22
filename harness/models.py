@@ -21,6 +21,7 @@ NOTICED = "noticed"  # salience verdict of one observer on one observation
 NOTICE_SHOWN = "notice_shown"  # a noteworthy observation was surfaced in the NPC's context
 ATTITUDE = "attitude"
 NAME_LEARNED = "name_learned"  # a character learned another's name (through a channel)
+RELATION = "relation"  # an NPC's rung, warmth and trust toward someone (harness/relations.py)
 CORRECTION = "correction"  # the player's note on a model error, kept per campaign
 
 # Live-state categories and operations
