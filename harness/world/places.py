@@ -67,8 +67,17 @@ class WorldMap:
         return UNLINKED_MINUTES * 4  # not connected: far
 
 
-def vizima() -> WorldMap:
-    """The pilot map (task 17). Distances are rough walking minutes inside the city."""
+# Places a start point may add to the pilot map (named in `vizima(...)`): kept out of the base map so
+# that the recorded offline sessions of the pilot keep their prompts.
+VIZIMA_EXTRA: dict[str, tuple[Place, dict[str, int]]] = {
+    "office": (Place("office", "кабінет бургомістра", "the burgomaster's office, where petitioners wait",
+                     to="до кабінету бургомістра"), {"market": 6, "guardhouse": 10}),
+}
+
+
+def vizima(*extra: str) -> WorldMap:
+    """The pilot map (task 17). Distances are rough walking minutes inside the city. `extra`: ids of
+    `VIZIMA_EXTRA` places to add (the burgomaster's office for the canon start in front of it)."""
     m = WorldMap()
     m.add_place(Place("tavern", "корчма «Під Лисом»", "evening crowd, merchants and soldiers", to="до корчми «Під Лисом»"))
     m.add_place(Place("market", "ринок", "the main square market", to="на ринок"), {"tavern": 10})
@@ -78,4 +87,7 @@ def vizima() -> WorldMap:
     m.add_place(Place("palace", "старий палац", "the old palace", to="до старого палацу"), {"guardhouse": 3})
     m.add_place(Place("lake", "берег озера", "the lake shore outside the walls", to="до берега озера"),
                 {"gate": 25, "palace": 20})
+    for pid in extra:
+        place, links = VIZIMA_EXTRA[pid]
+        m.add_place(place, links)
     return m

@@ -24,7 +24,7 @@ from __future__ import annotations
 import json
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable
 
@@ -35,7 +35,7 @@ from harness.models import PLAYER, CharacterProfile, Scene
 from harness.npcgen import NORTHERN, infer_sex, pick_name
 from harness.pipeline import Engine
 from harness.world import pilot
-from harness.world.places import Place, WorldMap, vizima
+from harness.world.places import VIZIMA_EXTRA, Place, WorldMap, vizima
 from harness.world.world import World
 
 from . import vizima as viz
@@ -115,6 +115,13 @@ def start_points() -> dict[str, dict[str, Any]]:
     except (OSError, yaml.YAMLError):
         return {}
     return {str(k): v for k, v in got.items() if isinstance(v, dict)}
+
+
+def canon_start(cid: str) -> pilot.CanonStart:
+    """The engine-side start of a canon moment (`start_points.yaml` entry `cid`); the intro is
+    the entry's `situation`, or the built-in text of situation A."""
+    st = pilot.CanonStart.from_dict(cid, start_points()[cid])
+    return replace(st, intro=st.intro or viz.INTRO)
 
 
 # -- parsing ----------------------------------------------------------------------------------
@@ -507,7 +514,7 @@ def title(pkg: Package, place: str | None = None) -> str:
     if "canon" in st:
         return str(start_points()[st["canon"]].get("title", st["canon"]))
     place = place or st.get("place")
-    if place and vizima().resolve(place):
+    if place and vizima(*VIZIMA_EXTRA).resolve(place):
         return f"Визім · {place}"
     name = pkg.data["player"].get("name")
     return " · ".join(x for x in (place, name) if x) or "Нова гра"
@@ -538,6 +545,8 @@ def summary(pkg: Package) -> dict[str, Any]:
         sp = start_points()[st["canon"]]
         put("Старт", f"канонічний момент: {sp.get('title', st['canon'])} "
             f"({sp.get('book', '')}), {day_phrase(int(sp.get('day', 1)), _minute(sp))}")
+        put("Ситуація", sp.get("pitch"))
+        put("Де Ґеральт", sp.get("geralt"))
     else:
         put("Старт", " · ".join(x for x in (
             st.get("place"), st.get("day") and f"день {st['day']}",
@@ -549,8 +558,10 @@ def summary(pkg: Package) -> dict[str, Any]:
         put("Ситуація", st.get("situation") and _short(st["situation"], 220),
             "Ситуація на старті")
     people = st.get("who_is_here") or []
-    put("Хто поруч", [", ".join(x for x in (q.get("name"), q.get("role")) if x)
-                      or q.get("appearance", "") for q in people],
+    cast = ([str(start_points()[st["canon"]]["who"])] if "canon" in st
+            and start_points()[st["canon"]].get("who") else [])
+    put("Хто поруч", cast + [", ".join(x for x in (q.get("name"), q.get("role")) if x)
+                             or q.get("appearance", "") for q in people],
         "Люди поруч" if "canon" not in st else None)
     canon = CHOICE_UK[d["canon"]] if "canon" in d else None
     if canon and d["canon"] == "follow" and "canon" not in st:  # gravity needs a canon moment
@@ -607,6 +618,8 @@ def intent_text(pkg: Package) -> str:
         lines.append("- Canon: the books are only background here; do not pull events toward "
                      "the saga's plot.")
     sit = d["start"].get("situation")
+    if not sit and d["start"].get("canon") in start_points():
+        sit = start_points()[d["start"]["canon"]].get("situation")  # a canon moment's own opening
     if sit:
         lines.append(f"- The opening situation the player chose (the start of the story): {sit}")
     if d.get("notes"):
@@ -650,7 +663,7 @@ def _player_profile(pkg: Package, name: str, label: str) -> CharacterProfile:
 
 def _free_map(place: str) -> tuple[WorldMap, str]:
     """The world map with the start place on it (a place not on the map is added, unlinked)."""
-    wmap = vizima()
+    wmap = vizima(*VIZIMA_EXTRA)
     got = wmap.resolve(place)
     if got is None:
         got = wmap.add_place(Place("start", place, "the start place of this campaign"))
@@ -666,7 +679,6 @@ def _build_people(eng: Engine, people: list[dict[str, Any]]) -> tuple[list[str],
         spec = eng.fresh_npc(f"here{i}", NORTHERN, occupation=role, appearance=look,
                              description=q.get("attitude", ""))
         if q.get("name"):
-            from dataclasses import replace
             spec = replace(spec, name=q["name"])
         desc = " ".join(x for x in (
             f"{spec.name.split()[0]}, {spec.occupation}, {spec.vitals.age(eng.scene.time)} "
@@ -759,24 +771,27 @@ def open_package(stack: Stack, pkg: Package, *, root: Path | str = CAMPAIGNS,
     filled = {"name": pname} if not d["player"].get("name") else {}
     if not free:
         canon = viz.load_canon(stack, canon_db)
+        cs = canon_start(st["canon"])
         eng, play = viz.create_situation_a(rec, root, name, canon, kw, player=player,
-                                           unbounded=unbounded(pkg), kind=KIND, setup=setup)
+                                           unbounded=unbounded(pkg), kind=KIND, setup=setup,
+                                           start=cs)
         if d.get("canon") == "loose":
             canon_used = None  # the books only as background: no canon gravity or guard
         else:
             canon_used = canon
-        world = viz.situation_a_world(eng, canon_used, stack.judge, play if canon_used else None)
+        world = viz.situation_a_world(eng, canon_used, stack.judge, play if canon_used else None,
+                                      start=cs)
         if canon_used is None:
             eng.canon_guard = None
         sp = start_points()[st["canon"]]
-        intro, ttl = viz.INTRO, str(sp.get("title", viz.TITLE))
+        intro, ttl = cs.intro, str(sp.get("title", viz.TITLE))
         people = st.get("who_is_here") or []
         extra_ids, _goals = _build_people(eng, people) if people else ([], {})
         for c in extra_ids:
             eng.enter_scene(c)
-            world.cast[c] = world.here() or "tavern"
+            world.cast[c] = world.here() or cs.place_id
             world.goals[c] = _goals[c]
-        meta_world = {"kind": "situation_a", "canon": canon_used is not None,
+        meta_world = {"kind": "situation_a", "canon": canon_used is not None, "start": cs.id,
                       "cast": {c: world.cast[c] for c in extra_ids}, "goals": _goals}
     else:
         place = st.get("place") or "корчма «Під Лисом»"
@@ -847,7 +862,10 @@ def reopen(stack: Stack, name: str, *, root: Path | str = CAMPAIGNS, canon_db: A
     mw = saved.get("world") or {}
     if mw.get("kind") == "situation_a":
         canon = viz.load_canon(stack, canon_db) if mw.get("canon") else None
-        world = viz.situation_a_world(eng, canon, stack.judge)
+        cid = mw.get("start")
+        world = viz.situation_a_world(
+            eng, canon, stack.judge,
+            start=canon_start(cid) if cid in start_points() else pilot.SITUATION_A)
         if canon is None:
             eng.canon_guard = None
         world.cast.update(mw.get("cast", {}))
