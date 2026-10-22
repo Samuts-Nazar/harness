@@ -13,10 +13,11 @@ from typing import Any, Callable
 
 from harness import assistant
 from harness.decisions import DecisionCount, aggregate, count_since
-from harness.models import ACTION, PLAYER, UTTERANCE, format_time
+from harness.models import ACTION, NARRATION, PLAYER, UTTERANCE, format_time
 from harness.streaming import InterruptHandle
 
 from harness.outcome import CampaignEnded
+from harness.pipeline import InterruptionError
 
 from .campaigns import Campaign
 from .inks import INK_RE, assign_ink
@@ -245,8 +246,10 @@ class Game:
             return {
                 "title": self.camp.title, "live": self.camp.live, "clock": self.clock(),
                 "transcript": list(self.transcript), "panel": self.panel(),
-                "running": self.running, "phase": self.phase,
+                "running": self.running, "phase": self.phase, "turn": self.turn_no,
                 "ended": self._is_ended(),
+                "actions": ([] if self.running or self.challenging or self._is_ended()
+                            else ["model_error", "cut"]),
                 "chronicle": self.chronicle() if self._is_ended() and not self.running else [],
                 # a client replays everything after this; for an idle game that is nothing
                 "resume_after": self.turn_start_seq if self.running else self.seq,
@@ -325,21 +328,110 @@ class Game:
         try:
             res = self.eng.challenge_line(event, explanation)
             out = asdict(res)
-            if res.regenerated:
-                for en in self.transcript:
-                    if en.get("kind") == "npc" and en.get("event") == event:
-                        en.update(text=res.text, event=res.new_event)
-                        en.pop("cut", None)
-                self._panel = self._compute_panel()
-            elif res.withdrawn:  # the line is gone and nothing replaces it: no empty bubble
-                self.transcript[:] = [en for en in self.transcript
-                                      if not (en.get("kind") == "npc" and en.get("event") == event)]
-                self._panel = self._compute_panel()
+            self._apply_regen(res, event, "npc")
             self.debug = {**self.debug, "challenge": out,
                           "notes": self.debug.get("notes", []) + self.eng.devlog[-3:]}
             return out
         finally:
             self.challenging = False
+
+    def _apply_regen(self, res: Any, event: int, kind: str) -> None:
+        """Show a regenerated (or withdrawn) output in the transcript and refresh what depends
+        on the log. Call with `challenging` set (no turn thread uses the database)."""
+        if res.regenerated:
+            for en in self.transcript:
+                if en.get("kind") == kind and en.get("event") == event:
+                    en.update(text=res.text, event=res.new_event)
+                    en.pop("cut", None)
+        elif res.withdrawn:  # the line is gone and nothing replaces it: no empty bubble
+            self.transcript[:] = [en for en in self.transcript
+                                  if not (en.get("kind") == kind and en.get("event") == event)]
+        else:
+            return
+        self._refresh_after_edit()
+
+    def _refresh_after_edit(self) -> None:
+        with self.lock:
+            self._panel = self._compute_panel()
+            self._cast = self._compute_cast()
+            self._known = self._compute_known()
+            self._sugg = None  # the suggestions were made for the output that changed
+            self._start_suggestions(self.turn_no)
+
+    def _begin_edit(self) -> None:
+        with self.lock:
+            if self.running or self.challenging:
+                raise Busy("a turn is running")
+            if self._is_ended():
+                raise Ended("the character is dead; the campaign is read-only")
+            self.challenging = True
+
+    def model_error(self, event: int | None, explanation: str) -> dict[str, Any]:
+        """«Помилка моделі»: only the last world output is regenerated with the player's
+        explanation (stored per campaign, fed to later generations); the turn stays. `event`
+        None: the last narration passage."""
+        from dataclasses import asdict
+
+        explanation = explanation.strip()
+        if not explanation:
+            raise ValueError("the explanation is required")
+        self._begin_edit()
+        try:
+            if event is None:
+                last_player = max((i for i, en in enumerate(self.transcript)
+                                   if en["kind"] == "player"), default=-1)
+                narr = [en for en in self.transcript[last_player + 1:] if en["kind"] == "narr"
+                        and en.get("event") is not None]
+                if not narr:
+                    raise ValueError("no narration to rewrite")
+                event, kind = narr[-1]["event"], "narr"
+            else:
+                entry = next((en for en in self.transcript
+                              if en.get("event") == event and en["kind"] in ("npc", "narr")), None)
+                if entry is None:
+                    raise ValueError("unknown output")
+                kind = entry["kind"]
+            res = self.eng.model_error(event, explanation)
+            out = asdict(res)
+            self._apply_regen(res, event, kind)
+            self.debug = {**self.debug, "model_error": out,
+                          "notes": self.debug.get("notes", []) + self.eng.devlog[-3:]}
+            return out
+        finally:
+            self.challenging = False
+
+    def cut(self, event: int, after_words: int) -> dict[str, Any]:
+        """Retroactive interruption of the last NPC line after `after_words` words: what follows
+        was never said (facts from it are rolled back by the engine), the NPC keeps the rest as a
+        private intent. Allowed only while that line is the last thing in the story."""
+        self._begin_edit()
+        try:
+            tail = self.transcript[-1] if self.transcript else {}
+            if tail.get("kind") != "npc" or tail.get("event") != event or tail.get("cut"):
+                raise ValueError("only the last NPC line, once")
+            try:
+                kept = self.eng.interrupt_retroactive(int(after_words))
+            except InterruptionError as e:
+                raise ValueError(str(e)) from e
+            tail.update(text=kept.payload["text"], event=kept.id, cut=True)
+            self._refresh_after_edit()
+            return {"event": kept.id, "text": kept.payload["text"], "cut": True}
+        finally:
+            self.challenging = False
+
+    def places(self) -> list[dict[str, Any]]:
+        """Where the player character can go from here: the world map's other places with the
+        walking minutes, nearest first. [] when the campaign has no world."""
+        with self.lock:
+            world = getattr(self.camp, "world", None)
+            if world is None:
+                return []
+            wmap = world.map
+            here = wmap.resolve(self.eng.scene.location)
+            out = [{"name": p.name, "minutes": wmap.minutes(here.id, p.id) if here else
+                    wmap.minutes(p.id, p.id)}
+                   for p in wmap.places.values() if here is None or p.id != here.id]
+            return sorted(out, key=lambda x: (x["minutes"], x["name"]))
 
     def knowledge(self) -> dict[str, Any]:
         """The debug view: per character, what they know and from where."""
@@ -405,6 +497,7 @@ class Game:
                  "cost": getattr(spend, "total", 0.0)}
         first_word: list[float] = []
         new_events: list[dict[str, Any]] = []
+        narr_ids: list[int] = []
         entries: list[dict[str, Any]] = [{"kind": "player", "text": text}]
         cur: dict[str, Any] = {"who": None}  # the NPC whose block the next word extends
 
@@ -415,6 +508,8 @@ class Game:
         def on_event(ev) -> None:  # type: ignore[no-untyped-def]
             new_events.append({"id": ev.id, "type": ev.type, "game_time": ev.game_time,
                                "payload": ev.payload, "participants": list(ev.participants)})
+            if ev.type == NARRATION and str(ev.payload.get("text", "")).strip():
+                narr_ids.append(ev.id)
             if ev.type == UTTERANCE:
                 cur["who"] = None  # the line is over: the next word starts a new block
             elif ev.type == ACTION and ev.payload.get("gesture"):
@@ -479,6 +574,11 @@ class Game:
                 en["cut"] = True
         line_ids = [en["event"] for en in npc_entries if "event" in en]
         cut_ids = [en["event"] for en in npc_entries if en.get("cut") and "event" in en]
+        for en, nid in zip([en for en in entries if en["kind"] == "narr"], narr_ids):
+            en["event"] = nid  # lets the player say what is wrong with the narration
+        turn_id = getattr(self._tl, "turn", None)
+        for en in entries:
+            en["turn"] = turn_id  # a reloaded client matches its replay by this
         fast_s = round(time.monotonic() - t0, 2)
         with self.lock:
             self.transcript += entries

@@ -72,8 +72,8 @@ def test_a_reopened_campaign_shows_the_verbatim_input_once():
     before = [dict(t) for t in g.transcript]
     g.eng.close()
     g2 = make(root=root)
-    assert [t for t in g2.transcript if t["kind"] == "player"] == [
-        t for t in before if t["kind"] == "player"]
+    assert [t["text"] for t in g2.transcript if t["kind"] == "player"] == [
+        t["text"] for t in before if t["kind"] == "player"]
     assert [t["text"] for t in g2.transcript if t["kind"] == "player"] == ["*киваю* Так."]
 
 

@@ -194,7 +194,7 @@ class Campaign:
         out: list[dict[str, Any]] = [{"kind": "intro", "text": self.intro}]
         for e in self.engine.log.active([NARRATION, UTTERANCE, ACTION]):
             if e.type == NARRATION:
-                out.append({"kind": "narr", "text": e.payload["text"]})
+                out.append({"kind": "narr", "text": e.payload["text"], "event": e.id})
                 continue
             if e.type == ACTION and e.payload.get("gesture"):
                 # a gesture-only step of an NPC, shown as their action (as the live path does)

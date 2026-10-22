@@ -133,3 +133,28 @@ def test_slow_suggestions_do_not_delay_the_next_turns_first_word():
     finally:
         gm.assistant.ask = real
         g.wait_idle(20)
+
+
+def test_suggestions_in_a_foreign_script_are_asked_again_then_cut():
+    from harness import assistant
+    from harness.assistant import Context
+
+    g = make()
+    eng = g.eng
+    eng.output_language = "Ukrainian"
+    answers = ["*дістає меч 天天爱彩票*\nСкільки платите?\nЩо там?",
+               "*дістає меч*\nСкільки платите?\nЩо там?"]
+    calls = []
+
+    class P:
+        def complete(self, model, messages):
+            calls.append(model)
+            return answers[min(len(calls) - 1, len(answers) - 1)]
+
+    eng.provider = P()
+    got = assistant.ask(eng, Context("sys {n}", "user"), 3)
+    assert len(calls) == 2 and all("天" not in x for x in got) and got[0] == "*дістає меч*"
+    answers[:] = ["*дістає меч 天天爱彩票*\nСкільки платите?\nЩо там?"]
+    calls.clear()
+    got = assistant.ask(eng, Context("sys {n}", "user"), 3)
+    assert len(calls) == 2 and all("天" not in x for x in got) and len(got) == 3

@@ -208,11 +208,14 @@ class ContextBuilder:
                   ) -> Messages:
         return self.character_view(character, scene, mem).messages()
 
-    def corrections(self, character: str | None = None) -> list[str]:
+    def corrections(self, character: str | None = None, *, narration: bool = False) -> list[str]:
         """The player's notes on model errors (stored per campaign), newest last: a line by
-        `character` that the player marked as impossible, with the player's reason."""
+        `character` that the player marked as impossible, with the player's reason.
+        `narration`: the notes on the narrator's passages instead (they never reach the NPCs)."""
         out = []
         for e in self.log.active([CORRECTION]):
+            if bool(e.payload.get("narration")) != narration:
+                continue
             if character is not None and e.payload.get("npc") not in (None, character):
                 continue
             out.append(f"- \"{e.payload.get('line', '')[:200]}\" was wrong: "
@@ -367,6 +370,10 @@ class ContextBuilder:
             parts.append("Recent events:\n" + "\n".join(fmt(e) for e in recent))
         npcs = ", ".join(f"{c} ({self.ref(PLAYER, c)})" for c in scene.present if c != PLAYER)
         tail = f"The player does/says: {player_input}\n"
+        notes = self.corrections(narration=True)
+        if notes:
+            tail += ("The player has pointed out mistakes in earlier narration; do not repeat "
+                     "them:\n" + "\n".join(notes) + "\n")
         if outcome:
             tail += outcome + "\n"
         tail += "Narrate what happens next."

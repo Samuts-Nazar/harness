@@ -83,6 +83,43 @@ def create_app(game: Game) -> Starlette:
             return JSONResponse({"error": explain(e)}, status_code=502)
         return JSONResponse(out)
 
+    async def edit(request: Request, name: str) -> JSONResponse:
+        """model_error / cut: the player's corrections of the last output."""
+        try:
+            body = await request.json()
+            if not isinstance(body, dict):
+                raise ValueError
+            ev = body.get("event")
+            event = None if ev is None else int(ev)
+            if name == "cut":
+                if event is None:
+                    raise ValueError
+                args: tuple = (event, int(body["after_words"]))
+            else:
+                args = (event, str(body.get("explanation", "")))
+        except (ValueError, KeyError, TypeError):
+            return JSONResponse({"error": "Недійсний запит."}, status_code=400)
+        try:
+            out = await run_in_threadpool(getattr(game, name), *args)
+        except Busy:
+            return JSONResponse({"error": "Хід триває."}, status_code=409)
+        except Ended:
+            return JSONResponse({"error": "Кампанію завершено.", "ended": True}, status_code=423)
+        except (ValueError, KeyError):
+            return JSONResponse({"error": "Цього не можна виправити."}, status_code=400)
+        except Exception as e:  # noqa: BLE001 - shown to the player, nothing else changes
+            return JSONResponse({"error": explain(e)}, status_code=502)
+        return JSONResponse(out)
+
+    async def model_error(request: Request) -> JSONResponse:
+        return await edit(request, "model_error")
+
+    async def cut(request: Request) -> JSONResponse:
+        return await edit(request, "cut")
+
+    async def places(_: Request) -> JSONResponse:
+        return JSONResponse(game.places())
+
     async def knowledge(_: Request) -> JSONResponse:
         try:
             return JSONResponse(await run_in_threadpool(game.knowledge))
@@ -155,6 +192,9 @@ def create_app(game: Game) -> Starlette:
         Route("/api/panel", panel),
         Route("/api/debug", debug),
         Route("/api/challenge", challenge, methods=["POST"]),
+        Route("/api/model_error", model_error, methods=["POST"]),
+        Route("/api/cut", cut, methods=["POST"]),
+        Route("/api/places", places),
         Route("/api/knowledge", knowledge),
         Route("/api/cast", cast),
         Route("/api/people", people),

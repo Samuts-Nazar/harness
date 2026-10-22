@@ -261,21 +261,9 @@ def main() -> None:
         no_hscroll(page, "after the exchange")
         shot(page, "05b-exchange-with-gesture")
 
-        # line menu: the last NPC line versus an old line, versus a gesture (the server does not
-        # offer model error / retroactive cut yet; with them offered, they show on the right line)
-        assert sheet_items(page, esel, page.locator(esel).count() - 1) == ["challenge", "ink"]
-        assert sheet_items(page, hsel, 0) == ["challenge", "ink"]
-        assert sheet_items(page, f"{ACT}[data-tok='{horst}']", 0) == ["ink"]
-
-        def with_actions(route):
-            r = route.fetch()
-            body = r.json()
-            body["actions"] = ["model_error", "cut"]
-            route.fulfill(response=r, body=json.dumps(body))
-
-        page.route("**/api/state", with_actions)
-        page.reload()
-        wait_idle(page)
+        # line menu: the last NPC line versus an old line, versus a gesture (the server offers
+        # model error and the retroactive cut: state.actions)
+        assert page.evaluate("actions") == ["model_error", "cut"]
         last_e = page.locator(esel).count() - 1
         got = sheet_items(page, esel, last_e)
         assert got == ["challenge", "model_error", "cut", "ink"], got
@@ -286,9 +274,6 @@ def main() -> None:
         page.keyboard.press("Escape")
         assert sheet_items(page, hsel, 0) == ["challenge", "ink"], "old line: no cut, no rewrite"
         assert sheet_items(page, f"{ACT}[data-tok='{horst}']", 0) == ["model_error", "ink"]
-        page.unroute("**/api/state")
-        page.reload()
-        wait_idle(page)
 
         # ink: picked from the line menu of an old line; every past line of him changes at once
         page.locator(hsel).first.click(button="right")

@@ -1997,6 +1997,62 @@ class Engine:
         self._regenerate(ev, res, explanation)
         return res
 
+    def model_error(self, event_id: int, explanation: str) -> "Challenge":
+        """«Помилка моделі»: the player says what is wrong with the last world output. The note
+        is stored for the campaign and fed to later generations (NPC lines: to that NPC's lines;
+        narration: to the narrator). Only the last output is regenerated, the player's turn
+        stays: the last NPC line (like `challenge_line` without the channel check) or the last
+        narration passage. An older output only gets the note."""
+        explanation = explanation.strip()
+        if not explanation:
+            raise ValueError("a model error needs the player's explanation")
+        ev = self.log.get(event_id)
+        if not self.log.is_active(event_id):
+            raise ValueError("this output is no longer part of the story")
+        if ev.type == UTTERANCE and ev.payload.get("speaker") != PLAYER:
+            npc, text = ev.payload["speaker"], ev.payload["text"]
+            self._event(CORRECTION, [npc], {"npc": npc, "line": text, "explanation": explanation,
+                                            "line_event": event_id, "reason": "model error"},
+                        witnesses=[], notability=0.1)
+            res = Challenge("model_error", npc=npc, event=event_id)
+            last = self.log.last_npc_utterance()
+            if last is not None and last.id == event_id:
+                self._regenerate(ev, res, explanation)
+            return res
+        if ev.type != NARRATION:
+            raise ValueError("only a line or a narration passage can be a model error")
+        text = ev.payload["text"]
+        self._event(CORRECTION, [], {"npc": None, "line": text, "explanation": explanation,
+                                     "line_event": event_id, "reason": "model error",
+                                     "narration": True}, witnesses=[], notability=0.1)
+        res = Challenge("model_error", event=event_id)
+        later = [e for e in self.log.active([NARRATION]) if e.id > event_id]
+        if not later:
+            self._renarrate(ev, res)
+        return res
+
+    def _renarrate(self, old: Event, res: "Challenge") -> None:
+        """Replace the narration passage `old` by a new one written with the corrections in the
+        narrator's context. The player's input stays. Failing puts the old text back."""
+        said = [e for e in self.log.active([UTTERANCE]) if e.payload.get("speaker") == PLAYER]
+        player_text = (said[-1].payload.get("raw", said[-1].payload["text"]) if said else "")
+        self.log.rollback(old.id, "model error: narration")
+        try:
+            text = self._narrate(player_text).description
+        except Exception:
+            self._event(NARRATION, [], {"text": old.payload["text"], "replaces": old.id,
+                                        "restored": True}, witnesses=[], notability=0.4)
+            self.refresh_memory()
+            raise
+        new = self._event(NARRATION, [], {"text": text, "replaces": old.id, "regenerated": True},
+                          witnesses=[], notability=0.4)
+        try:
+            self._commit(self._extract([("narration", text)]), {"narration": new})
+        except ExtractionRejected:
+            self._note("regenerated_narration_not_extracted", event=new.id)
+        self.refresh_memory()
+        res.regenerated, res.text, res.new_event = True, text, new.id
+
     def _find_channel(self, npc: str, text: str, explanation: str,
                       items: list["knowledge.Item"]) -> "knowledge.Item | None":
         """Which of the character's channels explains the claim, if any (one choice judgment)."""

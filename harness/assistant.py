@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Sequence
 
 from .models import PLAYER
 from .providers import ProviderError
+from .style import cut_foreign, foreign_runs
 
 if TYPE_CHECKING:
     from .pipeline import Engine
@@ -101,15 +102,24 @@ def ask(engine: "Engine", ctx: Context, n: int = 3, avoid: Sequence[str] = ()) -
     # Not Engine._complete: that counts into the turn's shared llm_calls/devlog, and this runs on
     # a thread that may overlap the next turn. Assistant calls are counted on their own.
     models = engine.models
-    engine.assistant_calls.append(ROLE)
-    try:
-        raw = engine.provider.complete(models.assistant, messages)
-    except ProviderError:
-        fallback = models.assistant_fallback
-        if not fallback:
-            raise
+    lang = getattr(engine, "output_language", None)
+
+    def call() -> str:
         engine.assistant_calls.append(ROLE)
-        raw = engine.provider.complete(fallback, messages)
+        try:
+            return engine.provider.complete(models.assistant, messages)
+        except ProviderError:
+            fallback = models.assistant_fallback
+            if not fallback:
+                raise
+            engine.assistant_calls.append(ROLE)
+            return engine.provider.complete(fallback, messages)
+
+    raw = call()
+    if foreign_runs(raw, lang):  # the engine's script-switch check: once more, then cut
+        raw = call()
+        if foreign_runs(raw, lang):
+            raw = "\n".join(cut_foreign(line, lang) for line in raw.splitlines())
     return parse(raw, n, avoid)
 
 

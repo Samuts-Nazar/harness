@@ -64,6 +64,13 @@ def record(stack: Stack, turns: Sequence[str], path: Path | str, *, keep_prompts
     return game, rows
 
 
+def _story(transcript: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The transcript without the bookkeeping that older recordings do not have (a turn id on each
+    entry, the event id of a narration passage)."""
+    return [{k: v for k, v in e.items() if k != "turn" and not (k == "event" and e["kind"] == "narr")}
+            for e in transcript]
+
+
 def replay(path: Path | str, *, strict: bool = True) -> tuple[Game, dict[str, Any]]:
     """Re-run a recorded session offline. Returns the game and {misses, same_story}."""
     header, recs = load(path)
@@ -72,7 +79,7 @@ def replay(path: Path | str, *, strict: bool = True) -> tuple[Game, dict[str, An
     stack = Stack(prov, judge, ModelConfig(**header["models"]), None, False)
     game, rows = play(stack, header["turns"], tempfile.mkdtemp(prefix="eval-rep-"))
     footer = next((r for r in recs if r["k"] == "f"), None)
-    same = footer is not None and footer["transcript"] == game.transcript
+    same = footer is not None and _story(footer["transcript"]) == _story(game.transcript)
     return game, {"misses": prov.misses + judge.misses, "same_story": same, "rows": rows}
 
 

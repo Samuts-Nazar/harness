@@ -586,10 +586,10 @@ function showFinale(lines) {
 }
 
 function beginReplay(state) {
-  const players = (state.transcript || []).filter((t) => t.kind === "player");
-  // the transcript holds the running turn only once its fast part is done (not after an error)
-  const holds = state.running && state.phase === "idle" && players.length > 0 &&
-    players[players.length - 1].text === state.pending_turn;
+  // the transcript holds the running turn only once its fast part is done (not after an error);
+  // its entries carry the turn id
+  const holds = state.running && state.phase === "idle" && state.turn != null &&
+    (state.transcript || []).some((t) => t.kind === "player" && t.turn === state.turn);
   replay = holds ? { turn: null } : null;
 }
 function dispatch(type, e) {
@@ -693,11 +693,17 @@ async function loadPlaces() {   // "where can I go" (Task 4); nothing when the e
   if (list && !Array.isArray(list)) list = list.places || [];
   const ul = $("places"); ul.textContent = "";
   for (const pl of list || []) {
-    const name = typeof pl === "string" ? pl : (pl.label || pl.name || pl.title || "");
+    const name = typeof pl === "string" ? pl : (pl.name || pl.label || pl.title || "");
     if (!name) continue;
-    const li = el("li", "", name);
-    const extra = typeof pl === "object" ? (pl.how || pl.distance || pl.note || "") : "";
-    if (extra) li.appendChild(el("small", "", " · " + extra));
+    const li = el("li");
+    const b = el("button", "linkbtn", name); b.type = "button";   // a tap writes «Іду до …»
+    b.addEventListener("click", () => {
+      $("input").value = "Іду до " + name; syncSend(); grow();
+      $("drawer").close(); $("input").focus();
+    });
+    li.appendChild(b);
+    const mins = typeof pl === "object" ? Number(pl.minutes) : NaN;
+    if (mins >= 0) li.appendChild(el("small", "", " · ~" + mins + " хв"));
     ul.appendChild(li);
   }
   $("placesSec").hidden = !ul.children.length;

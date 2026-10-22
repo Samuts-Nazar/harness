@@ -168,12 +168,15 @@ def test_speaker_named_only_where_the_speaker_changes_and_never_on_gestures():
 
 
 def _reload_state(last_player, pending):
+    # the turn id decides what the transcript holds: the running turn is 2, the error case's
+    # last player entry belongs to turn 1
+    t = 2 if last_player == pending else 1
     return {"title": "t", "live": False, "clock": "x", "panel": PANEL, "running": True,
-            "phase": "idle", "pending_turn": pending, "transcript": [
-                {"kind": "player", "text": "Перша."},
-                {"kind": "npc", "tok": "aa", "label": "він", "text": "Раз.", "event": 1},
-                {"kind": "player", "text": last_player},
-                {"kind": "npc", "tok": "aa", "label": "він", "text": "Два.", "event": 2},
+            "phase": "idle", "pending_turn": pending, "turn": 2, "transcript": [
+                {"kind": "player", "text": "Перша.", "turn": 1},
+                {"kind": "npc", "tok": "aa", "label": "він", "text": "Раз.", "event": 1, "turn": 1},
+                {"kind": "player", "text": last_player, "turn": t},
+                {"kind": "npc", "tok": "aa", "label": "він", "text": "Два.", "event": 2, "turn": t},
             ]}
 
 
