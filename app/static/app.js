@@ -135,8 +135,8 @@ function render(state) {
     if (t.kind === "intro") add(el("p", "intro", t.text), false);
     else if (t.kind === "player") add(el("p", "me", t.text), false);
     else if (t.kind === "narr") { if (t.text && t.text.trim()) add(el("p", "narr", t.text), false); }
-    else if (t.kind === "npc_act") add(actBlock(t.who, t.name, t.text), false);
-    else add(npcBlock(t.who, t.name, t.text, t.cut, t.event), false);
+    else if (t.kind === "npc_act") add(actBlock(t.tok, t.label, t.text), false);
+    else add(npcBlock(t.tok, t.label, t.text, t.cut, t.event), false);
   }
   setPanel(state.panel);
   feed.scrollTop = feed.scrollHeight;
@@ -158,8 +158,8 @@ const handlers = {
   narr_start() { cur = null; setBusy(true, "narrating"); },   // the bubble appears with its first word
   narr_word(e) { if (!cur || !cur.classList.contains("narr")) cur = add(el("p", "narr")); addWord(cur, e.w); },
   narr_end() { setBusy(true, "thinking"); },
-  speaker(e) { cur = add(npcBlock(e.who, e.name, "")); turnNpc.push(cur); setBusy(true, "speaking"); },
-  npc_act(e) { cur = add(actBlock(e.who, e.name, e.text)); },
+  speaker(e) { cur = add(npcBlock(e.tok, e.label, "")); turnNpc.push(cur); setBusy(true, "speaking"); },
+  npc_act(e) { cur = add(actBlock(e.tok, e.label, e.text)); },
   word(e) { if (cur) addWord(cur, e.w); },
   turn_done(e) {
     $("clock").textContent = e.clock + tag;

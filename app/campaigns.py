@@ -25,6 +25,7 @@ from harness.providers import Messages, Provider
 from harness.state import StateChange, StateError
 
 from .character import Traits, derive_traits
+from .inks import InkBook, token_for
 from harness.style import Style
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -163,6 +164,30 @@ class Campaign:
     title: str = TITLE
     intro: str = INTRO
     world: Any = None  # harness.world.World when the campaign has a world beyond the scene (task 17)
+    inks: InkBook | None = None
+
+    def __post_init__(self) -> None:
+        if self.inks is None:
+            d = self.engine.campaign_dir
+            self.inks = InkBook(d / "inks.json" if d else None)
+
+    def tok(self, cid: str) -> str:
+        """The opaque client key of a character in this campaign."""
+        return token_for(self.name or "campaign", cid)
+
+    def speaker_ids(self) -> list[str]:
+        """Everyone the player has seen speak or act, in order of first appearance."""
+        out: list[str] = []
+        for e in self.engine.log.active([UTTERANCE, ACTION]):
+            if e.type == ACTION and e.payload.get("gesture"):
+                who = e.payload.get("by") or (e.participants[0] if e.participants else "")
+            elif e.type == UTTERANCE:
+                who = e.payload.get("speaker")
+            else:
+                continue
+            if who and who != PLAYER and who not in out:
+                out.append(who)
+        return out
 
     def transcript(self) -> list[dict[str, Any]]:
         """What the player has seen so far, rebuilt from the event log (a reopened campaign)."""
@@ -178,8 +203,8 @@ class Campaign:
                 text = (names.mask(PLAYER, str(e.payload.get("text", "")), before=e.id)
                         if names else str(e.payload.get("text", ""))).strip()
                 if text:
-                    out.append({"kind": "npc_act", "who": by, "text": text,
-                                "name": self.engine.ctx.label(PLAYER, by, e.id)})
+                    out.append({"kind": "npc_act", "tok": self.tok(by), "text": text,
+                                "label": self.engine.ctx.label(PLAYER, by, e.id)})
                 continue
             if e.type == ACTION and e.payload.get("actor") != PLAYER:
                 continue  # observable actions of narration are not shown as such
@@ -190,8 +215,8 @@ class Campaign:
                 out.append({"kind": "player", "text": e.payload.get("raw", e.payload["text"])})
             else:
                 # the label is what the player knew of this person when they spoke
-                item = {"kind": "npc", "who": who, "event": e.id,
-                        "name": self.engine.ctx.label(PLAYER, who, e.id),
+                item = {"kind": "npc", "tok": self.tok(who), "event": e.id,
+                        "label": self.engine.ctx.label(PLAYER, who, e.id),
                         "text": e.payload["text"]}
                 if e.payload.get("interrupted"):
                     item["cut"] = True

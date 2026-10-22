@@ -25,8 +25,8 @@ def replay(events):
 def test_late_retract_removes_only_its_own_turn():
     evs = [
         {"type": "turn_start", "turn": 1, "text": "Перша."},
-        {"type": "speaker", "turn": 1, "who": "horst", "name": "Горст"},
-        {"type": "word", "turn": 1, "who": "horst", "w": "Так."},
+        {"type": "speaker", "turn": 1, "tok": "tk_horst", "label": "Горст"},
+        {"type": "word", "turn": 1, "tok": "tk_horst", "w": "Так."},
         {"type": "turn_done", "turn": 1, "clock": "x", "panel": PANEL, "lines": [], "cut_lines": []},
         {"type": "turn_start", "turn": 2, "text": "Друга."},
         {"type": "retract", "turn": 1, "text": "Перша.", "message": "збій"},

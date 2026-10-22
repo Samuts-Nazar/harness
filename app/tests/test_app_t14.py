@@ -36,9 +36,9 @@ def test_strangers_are_described_not_named_in_the_feed_until_they_say_who_they_a
     t = g.transcript
     assert "Горст" not in t[0]["text"] and "Ельза" not in t[0]["text"], "the intro names nobody"
     npc = next(e for e in t if e["kind"] == "npc")
-    assert npc["name"] == "Кремезний сивий чоловік" and isinstance(npc["event"], int)
+    assert npc["label"] == "Кремезний сивий чоловік" and isinstance(npc["event"], int)
     speaker = next(e for e in g.events_after(0) if e["type"] == "speaker")
-    assert speaker["name"] == "Кремезний сивий чоловік"
+    assert speaker["label"] == "Кремезний сивий чоловік"
     assert "Горст" not in json.dumps(g.state()["panel"], ensure_ascii=False)
 
 
@@ -47,7 +47,7 @@ def test_a_name_the_player_types_is_known_to_the_player():
     g.start_turn("Привіт, Горсте.")
     g.wait_idle()
     npc = next(e for e in g.transcript if e["kind"] == "npc")
-    assert npc["name"] == "Горст"
+    assert npc["label"] == "Горст"
 
 
 # -- actions --------------------------------------------------------------------------------------

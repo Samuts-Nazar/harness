@@ -72,7 +72,7 @@ def main() -> None:
         for t in game.transcript[before:]:  # this turn's lines only
             if t["kind"] == "npc":
                 s = stems(t["text"])
-                seen = prior.setdefault(t["who"], set())
+                seen = prior.setdefault(t["tok"], set())
                 ov = len(s & seen) / len(s) if s else 0.0
                 overlaps.append(ov)
                 seen |= s

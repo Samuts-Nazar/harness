@@ -68,7 +68,7 @@ def test_narration_streams_before_the_first_npc_word_and_second_npc_hears_the_fi
     evs = g.events_after(0)
     types = [e["type"] for e in evs]
     assert types.index("narr_end") < types.index("speaker")
-    assert [e["who"] for e in evs if e["type"] == "speaker"] == ["horst", "elza"]
+    assert [e["tok"] for e in evs if e["type"] == "speaker"] == [g.camp.tok("horst"), g.camp.tok("elza")]
     elza_ctx = [m for _, m in g.camp.recorder.inner.calls
                 if m[0]["content"].startswith("You are Ельза")][-1][1]["content"]
     assert "Горст: " in elza_ctx.split("Recent conversation:")[-1]

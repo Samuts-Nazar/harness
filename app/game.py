@@ -18,6 +18,7 @@ from harness.streaming import InterruptHandle
 from harness.outcome import CampaignEnded
 
 from .campaigns import Campaign
+from .inks import INK_RE, assign_ink
 
 CATEGORY_UK = {"injury": "тіло", "clothing": "одяг", "inventory": "речі",
                "equipment": "спорядження", "internal": "відчуття", "appearance": "вигляд"}
@@ -85,6 +86,12 @@ class Game:
             self.decision_log: list[tuple[str, DecisionCount]] = []  # (location, turn count)
             self.events = []
             self._panel = self._compute_panel()
+            self._seen: list[str] = self.camp.speaker_ids()  # characters met, first seen first
+            self._recency: list[str] = []  # tokens, least recently active first
+            for t in self.transcript:
+                if t.get("tok"):
+                    self._touch(t["tok"])
+            self._cast = self._compute_cast()
             self.turn_start_seq = self.seq
             self._emit("reset")
             self.turn_start_seq = self.seq
@@ -119,6 +126,56 @@ class Game:
     def events_after(self, after: int) -> list[dict[str, Any]]:
         with self.lock:
             return [e for e in self.events if e["seq"] > after]
+
+    # -- cast and inks ------------------------------------------------------------------------
+    def _touch(self, tok: str) -> None:
+        if tok in self._recency:
+            self._recency.remove(tok)
+        self._recency.append(tok)
+
+    def _note_speaker(self, cid: str) -> str:
+        """A character spoke or acted: they join the cast and become the most recent. Returns the
+        opaque token. Called from the turn's thread (the only user of the database then)."""
+        with self.lock:
+            tok = self.camp.tok(cid)
+            if cid not in self._seen:
+                self._seen.append(cid)
+            self._touch(tok)
+            self._cast = self._compute_cast()
+            return tok
+
+    def _compute_cast(self) -> list[dict[str, Any]]:
+        """Who the player character has met or sees now: token, the label the character perceives
+        (a stranger by appearance), ink and presence. Inks are assigned on first sight."""
+        eng, book = self.eng, self.camp.inks
+        present = set(eng.scene.present)
+        ids = [c for c in self._seen if c != PLAYER]
+        ids += [c for c in eng.scene.present if c != PLAYER and c not in ids]
+        toks = {c: self.camp.tok(c) for c in ids}
+        for c in ids:
+            t = toks[c]
+            if t not in book.inks:
+                others = [toks[o] for o in ids if o != c]
+                book.set(t, assign_ink(others, book.inks, self._recency))
+        return [{"tok": toks[c], "label": eng.ctx.label(PLAYER, c), "ink": book.inks[toks[c]],
+                 "present": c in present} for c in ids]
+
+    def cast(self) -> list[dict[str, Any]]:
+        with self.lock:
+            return [dict(c) for c in self._cast]
+
+    def set_ink(self, tok: str, ink: str) -> None:
+        """The player picks a character's ink (any character of the campaign, by token)."""
+        if not isinstance(ink, str) or not INK_RE.match(ink):
+            raise ValueError("bad ink")
+        with self.lock:
+            if tok not in {self.camp.tok(c) for c in self.eng.profiles if c != PLAYER}:
+                raise KeyError(tok)
+            self.camp.inks.set(tok, ink.lower())
+            for c in self._cast:
+                if c["tok"] == tok:
+                    c["ink"] = ink.lower()
+            self._emit("ink", tok=tok, ink=ink.lower())
 
     # -- views ------------------------------------------------------------------------------
     def panel(self) -> dict[str, Any]:
@@ -318,11 +375,12 @@ class Game:
             elif ev.type == ACTION and ev.payload.get("gesture"):
                 # a gesture-only step of an NPC: shown as their action, in its place in the talk
                 who = ev.payload.get("by") or (ev.participants[0] if ev.participants else "")
-                name = eng.ctx.label(PLAYER, who)
+                label = eng.ctx.label(PLAYER, who)
                 act = eng.ctx.mask(PLAYER, str(ev.payload.get("text", ""))).strip()
                 if act:
-                    entries.append({"kind": "npc_act", "who": who, "name": name, "text": act})
-                    self._emit("npc_act", who=who, name=name, text=act)
+                    tok = self._note_speaker(who)
+                    entries.append({"kind": "npc_act", "tok": tok, "label": label, "text": act})
+                    self._emit("npc_act", tok=tok, label=label, text=act)
                 cur["who"] = None
 
         def on_narration(narration: str) -> None:
@@ -336,12 +394,13 @@ class Game:
             if cur["who"] != npc or entries[-1]["kind"] != "npc":
                 cur["who"] = npc
                 self.phase = "speaking"
-                name = eng.ctx.label(PLAYER, npc)  # a stranger stays "a stout grey-haired man"
-                self._emit("speaker", who=npc, name=name)
-                entries.append({"kind": "npc", "who": npc, "name": name, "text": ""})
+                label = eng.ctx.label(PLAYER, npc)  # a stranger stays "a stout grey-haired man"
+                tok = self._note_speaker(npc)
+                self._emit("speaker", tok=tok, label=label)
+                entries.append({"kind": "npc", "tok": tok, "label": label, "text": ""})
             stamp()
             entries[-1]["text"] = (entries[-1]["text"] + " " + w).strip()
-            self._emit("word", who=npc, w=w)
+            self._emit("word", tok=self.camp.tok(npc), w=w)
             pace = self.pace  # a tap on the stream sets it to 0 mid-turn
             if pace:
                 time.sleep(pace)
@@ -396,6 +455,7 @@ class Game:
             if world is not None:
                 self.debug = {**self.debug, "world": world.report(since)}
             self._panel = self._compute_panel()
+            self._cast = self._compute_cast()  # labels may have changed: a name was learned
             self._emit("settled", panel=self._panel, clock=self.clock())
             if eng.ended:
                 self._emit("ended", chronicle=self.chronicle())

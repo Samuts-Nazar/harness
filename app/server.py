@@ -89,6 +89,19 @@ def create_app(game: Game) -> Starlette:
         except Busy:
             return JSONResponse({"error": "Хід триває."}, status_code=409)
 
+    async def cast(_: Request) -> JSONResponse:
+        return JSONResponse(game.cast())
+
+    async def ink(request: Request) -> JSONResponse:
+        body = await request.json()
+        try:
+            game.set_ink(str(body.get("tok", "")), body.get("ink"))
+        except KeyError:
+            return JSONResponse({"error": "Невідомий персонаж."}, status_code=404)
+        except ValueError:
+            return JSONResponse({"error": "Недійсний колір."}, status_code=400)
+        return JSONResponse({"ok": True})
+
     async def events(request: Request) -> StreamingResponse:
         after = int(request.headers.get("last-event-id") or request.query_params.get("after") or 0)
         until_idle = request.query_params.get("until_idle") == "1"  # curl/tests: end when quiet
@@ -128,6 +141,8 @@ def create_app(game: Game) -> Starlette:
         Route("/api/debug", debug),
         Route("/api/challenge", challenge, methods=["POST"]),
         Route("/api/knowledge", knowledge),
+        Route("/api/cast", cast),
+        Route("/api/ink", ink, methods=["POST"]),
         Route("/api/events", events),
         Mount("/static", StaticFiles(directory=STATIC), name="static"),
     ])

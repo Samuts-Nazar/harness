@@ -51,7 +51,7 @@ def main() -> None:
         game.wait_idle(240)
         err = next((e for e in game.events_after(0) if e["type"] == "error"), None)
         d = game.debug
-        spk = [e["who"] for e in game.events_after(0) if e["type"] == "speaker"]
+        spk = [e["tok"] for e in game.events_after(0) if e["type"] == "speaker"]
         npc_s = [c["seconds"] for c in d["calls"] if c["role"].startswith("npc")]
         row = {"turn": i, "error": err and err["message"], "speakers": spk,
                "first_word_s": d["timing"]["first_word_s"], "total_s": d["timing"]["total_s"],
