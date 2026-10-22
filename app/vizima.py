@@ -129,24 +129,41 @@ def open_vizima(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = False
                     world=world)
 
 
+# The canon people a start puts in the first scene (`here`) have no profile without the canon
+# store; the narrator still describes them, and a person who is only described never answers. A
+# code-made stand-in keeps the scene whole (slot, occupation, home, look, goal).
+_STAND_INS = {
+    "char:innkeeper": ("innkeeper", "корчмар", "tavern", "кремезний корчмар за стійкою",
+                       "keep the tavern open and stay out of trouble with the guard"),
+}
+
+
+def _stand_ins(start: pilot.CanonStart) -> tuple[tuple[str, str, str, str, str], ...]:
+    return tuple(_STAND_INS[c] for c in start.here if c in _STAND_INS)
+
+
 def _populate_without_canon(eng: Engine, start: pilot.CanonStart = pilot.SITUATION_A) -> None:
-    """No canon store: the same place with the code-made people only."""
-    for slot, occ, _home, look, _goal in start.extras:
+    """No canon store: the same place with the code-made people only (and a stand-in for each
+    canon person who would have been here)."""
+    stand = _stand_ins(start)
+    for slot, occ, _home, look, _goal in (*start.extras, *stand):
         eng.add_npc(eng.fresh_npc(slot, "northern", occupation=occ, appearance=look), appearance=look)
-    ids = pilot.canon_extra_ids(start)
+    ids = {**pilot.canon_extra_ids(start), **{s: f"npc_{s}" for s, *_ in stand}}
     for a, b in start.pairs:
         a, b = ids.get(a, a), ids.get(b, b)
         if a in eng.profiles and b in eng.profiles:
             eng.acquaint(a, b)
-    for c in (*start.in_scene(), "player"):
+    here = [f"npc_{s}" for s, _o, home, _l, _g in stand if home == start.place_id]
+    for c in (*start.in_scene(), *here, "player"):
         eng.enter_scene(c)
 
 
 def _world_without_canon(eng: Engine, start: pilot.CanonStart = pilot.SITUATION_A) -> World:
     wmap = start.world_map()
-    ids = pilot.canon_extra_ids(start)
-    cast = {ids[s]: home for s, _o, home, _l, _g in start.extras}
-    goals = {ids[s]: g for s, _o, _h, _l, g in start.extras}
+    stand = _stand_ins(start)
+    ids = {**pilot.canon_extra_ids(start), **{s: f"npc_{s}" for s, *_ in stand}}
+    cast = {ids[s]: home for s, _o, home, _l, _g in (*start.extras, *stand)}
+    goals = {ids[s]: g for s, _o, _h, _l, g in (*start.extras, *stand)}
     return World(eng, wmap, collectives=pilot.canon_collectives(wmap, _NoNames()), cast=cast,
                  goals=goals)
 
