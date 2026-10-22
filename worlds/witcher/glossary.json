@@ -7,7 +7,7 @@
   {"canonical": "Ельза", "kind": "person", "stem": "Ельз", "latin": ["Elza", "Elsa"]},
   {"canonical": "Ґеральт", "kind": "person", "latin": ["Geralt", "Gerald", "Geralt of Rivia"], "wrong": ["Геральт", "Гелальт", "Ґералт"], "cases": ["Ґеральта", "Ґеральту", "Ґеральтом", "Ґеральте"], "titles": ["відьмак", "рівієць", "Ґеральт із Рівії"], "id": "char:geralt"},
   {"canonical": "Цірі", "kind": "person", "latin": ["Ciri", "Cirilla"], "wrong": ["Цирі"]},
-  {"canonical": "Йеннефер", "kind": "person", "latin": ["Yennefer"], "wrong": ["Єнніфер", "Йенефер", "Єнефер"]},
+  {"canonical": "Йеннефер", "kind": "person", "latin": ["Yennefer"], "wrong": ["Єнніфер", "Йенефер", "Єнефер", "Єніфер"]},
   {"canonical": "Любисток", "kind": "person", "stem": "Любистк", "latin": ["Jaskier (Dandelion)", "Jaskier", "Dandelion"], "wrong": ["Лютик", "Яскер", "Яск'єр", "Яскьєр"]},
   {"canonical": "Весемір", "kind": "person", "latin": ["Vesemir"]},
   {"canonical": "Ламберт", "kind": "person", "latin": ["Lambert"]},
