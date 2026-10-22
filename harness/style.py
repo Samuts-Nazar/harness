@@ -52,6 +52,7 @@ class NpcOutput:
     speech: str  # what is said aloud, joined
     beats: list[str] = field(default_factory=list)  # own actions and manner, as written
     has_dash: bool = False  # the text used dialogue dashes at all
+    tags: list[str] = field(default_factory=list)  # bare speech tags ("відказала Ванда"), as written
 
 
 def _is_tag(beat: str) -> bool:
@@ -137,6 +138,7 @@ def split_npc_output(text: str, names: Iterable[str] = ()) -> NpcOutput:
         return NpcOutput(text, [], False)
     speech: list[str] = []
     beats: list[str] = []
+    tags: list[str] = []
     for para in (p.strip() for p in re.split(r"\n+", text)):
         if not para:
             continue
@@ -161,7 +163,9 @@ def split_npc_output(text: str, names: Iterable[str] = ()) -> NpcOutput:
                         speech.append(piece)
                     speech_closed = False
                     continue
-                if not _is_tag(piece):
+                if _is_tag(piece):
+                    tags.append(piece)
+                else:
                     beats.append(piece)
                 speech_closed = True
             else:
@@ -173,7 +177,7 @@ def split_npc_output(text: str, names: Iterable[str] = ()) -> NpcOutput:
         if joined and joined.endswith(",") and piece[:1].isupper():
             joined = joined[:-1] + "."
         joined = f"{joined} {piece}" if joined else piece
-    return NpcOutput(_speech_tail(joined) if joined else "", beats, True)
+    return NpcOutput(_speech_tail(joined) if joined else "", beats, True, tags)
 
 
 def beat_as_action(beat: str, name: str, aliases: Iterable[str] = ()) -> str:

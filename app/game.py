@@ -300,7 +300,7 @@ class Game:
         tr = camp.translate
         flat = [f for facts in out.values() for f in facts]
         if tr is not None and flat:
-            done = iter(tr(flat))
+            done = iter(eng.ctx.mask(PLAYER, t) for t in tr(flat))  # again: see _compute_panel
             out = {t: [next(done) for _ in facts] for t, facts in out.items()}
         me = eng.profiles[PLAYER].name if PLAYER in eng.profiles else ""
         return {t: [_as_the_character(f, me) for f in facts] for t, facts in out.items()}
@@ -328,6 +328,9 @@ class Game:
         tr = camp.translate  # records are English; the panel is shown in Ukrainian
         if tr is not None:
             both = tr(items + prose)
+            # the records may spell a name in Latin, which the mask does not know; the translator
+            # turns it into the Ukrainian one: mask the translated text again
+            both = [eng.ctx.mask(PLAYER, t) for t in both]
             items, prose = both[: len(items)], both[len(items):]
         chips = [{"text": t, "category": e.category, "label": CATEGORY_UK[e.category],
                   "observable": e.observable} for t, e in zip(items, mem.state)]

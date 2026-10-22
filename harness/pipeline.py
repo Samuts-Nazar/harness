@@ -920,7 +920,7 @@ class Engine:
         parsed = split_npc_output(text, self._name_words)
         if not parsed.has_dash:
             return text
-        for beat in parsed.beats:
+        for beat in [*parsed.beats, *parsed.tags]:  # a bare tag ("відказала Ванда") names too
             masked = self.names.mask(PLAYER, beat, known=prep.player_known)
             if masked != beat:
                 text = text.replace(beat, masked)
