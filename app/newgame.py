@@ -1,0 +1,815 @@
+"""New game from a file (book UI task 5): the game package a player brings from any AI chat.
+
+The package is YAML (UTF-8, Ukrainian values). Only `version: 1`, `world: witcher` and
+`player.description` are required; a missing field means the world decides. `parse` validates it
+with Ukrainian errors (field, problem, how to fix) and never fails on unknown fields: they are kept
+in `notes` with a warning. `summary` is the card the player sees before starting: what is set and
+what the world will decide. `open_package` builds the campaign through the existing builders:
+
+- a canon start (`start.canon`, an id of `worlds/witcher/start_points.yaml`) is situation A of
+  `app/vizima.py` with the package's player character (the canon store when present);
+- a free start (`start.place/day/time/situation`) is a scene on the world map with people from
+  `who_is_here`, made whole by `harness/npcgen.py` (or two passers-by when nobody is given).
+
+The player sheet is used like the local character file of the inn campaign: `derive_traits` reads
+it once (the one cheap call of the start, recorded) and gives the looks and the hidden traits.
+Tone, pace, content limits, the canon setting and the notes go to the narrator as campaign intent
+(`ContextBuilder.intent`); they never override `docs/decisions.md`. The full content-limit feature
+(pause, veil and skip buttons) is not built here.
+
+The format is documented for external AIs in `docs/new_game_instruction.md`.
+"""
+from __future__ import annotations
+
+import json
+import re
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Callable
+
+import yaml
+
+from harness.glossary import Glossary
+from harness.models import PLAYER, CharacterProfile, Scene
+from harness.npcgen import NORTHERN, infer_sex, pick_name
+from harness.pipeline import Engine
+from harness.world import pilot
+from harness.world.places import Place, WorldMap, vizima
+from harness.world.world import World
+
+from . import vizima as viz
+from .campaigns import (
+    CAMPAIGNS, Campaign, Recorder, Stack, Translator, _pointer, seed_player_state,
+)
+from .character import MAX_FILE, derive_traits
+from .inks import INK_RE
+
+ROOT = Path(__file__).resolve().parent.parent
+START_POINTS = ROOT / "worlds" / "witcher" / "start_points.yaml"
+KIND = "package"
+WORLDS = ("witcher",)
+MAX_PEOPLE = 6
+
+# parts of the day a package may name instead of a clock time (minutes after midnight)
+DAY_PARTS = {"світанок": 5 * 60, "ранок": 8 * 60, "полудень": 12 * 60, "день": 14 * 60,
+             "вечір": 19 * 60, "ніч": 23 * 60, "північ": 0}
+PART_OF = ((5 * 60, "Ніч"), (11 * 60, "Ранок"), (17 * 60, "День"), (22 * 60, "Вечір"),
+           (24 * 60, "Ніч"))
+ORDINAL_GEN = ("першого", "другого", "третього", "четвертого", "п'ятого", "шостого", "сьомого",
+               "восьмого", "дев'ятого", "десятого")
+CHOICES = {
+    "canon": ("follow", "loose"), "pace": ("slow", "normal", "fast"),
+    "outcomes": ("real", "unbounded"), "dialogue": ("living", "classic"),
+    "assistant": ("on", "off"),
+}
+CHOICE_UK = {
+    "follow": "книги як тяжіння", "loose": "канон лише як тло", "slow": "повільний",
+    "normal": "звичайний", "fast": "швидкий", "real": "справжні (невдачі й смерть можливі)",
+    "unbounded": "без меж (дії персонажа завжди вдаються)", "living": "живий",
+    "classic": "класичний", "on": "увімкнено", "off": "вимкнено",
+}
+TOP = ("version", "world", "player", "start", "canon", "tone", "pace", "limits", "outcomes",
+       "dialogue", "assistant", "inks", "notes")
+PLAYER_KEYS = ("name", "description", "appearance", "traits", "knows", "unbounded", "hidden")
+START_KEYS = ("canon", "place", "day", "time", "situation", "who_is_here")
+PERSON_KEYS = ("name", "role", "appearance", "attitude", "goal", "knows_player")
+PACE_EN = {"slow": "slow: unhurried, detailed narration; let moments breathe",
+           "fast": "fast: short narration that moves straight to what matters"}
+
+
+@dataclass
+class Issue:
+    """One problem (or warning) in a package, for the player: Ukrainian text."""
+    field: str
+    problem: str
+    fix: str
+
+    def to_json(self) -> dict[str, str]:
+        return {"field": self.field, "problem": self.problem, "fix": self.fix}
+
+
+class PackageError(ValueError):
+    def __init__(self, issues: list[Issue]) -> None:
+        super().__init__("; ".join(f"{i.field}: {i.problem}" for i in issues))
+        self.issues = issues
+
+
+@dataclass
+class Package:
+    data: dict[str, Any]                       # normalised values (see `parse`)
+    warnings: list[Issue] = field(default_factory=list)
+
+    def to_json(self) -> dict[str, Any]:
+        return self.data
+
+
+def start_points() -> dict[str, dict[str, Any]]:
+    try:
+        got = yaml.safe_load(START_POINTS.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return {}
+    return {str(k): v for k, v in got.items() if isinstance(v, dict)}
+
+
+# -- parsing ----------------------------------------------------------------------------------
+
+_FENCE = re.compile(r"```[ \t]*(?:ya?ml)?[ \t]*\n(.*?)```", re.DOTALL | re.IGNORECASE)
+
+
+def _strip_chat(text: str) -> str:
+    """The YAML of a package pasted together with the chat around it: the fenced block that
+    holds `version:`, else the text as is."""
+    blocks = _FENCE.findall(text)
+    for b in blocks:
+        if re.search(r"^\s*version\s*:", b, re.MULTILINE):
+            return b
+    return blocks[0] if blocks else text
+
+
+def _show(v: Any) -> str:
+    if isinstance(v, (dict, list)):
+        return json.dumps(v, ensure_ascii=False)
+    return str(v)
+
+
+class _Checker:
+    def __init__(self) -> None:
+        self.errors: list[Issue] = []
+        self.warnings: list[Issue] = []
+        self.extra: list[str] = []  # unknown fields, kept in notes
+
+    def err(self, f: str, problem: str, fix: str) -> None:
+        self.errors.append(Issue(f, problem, fix))
+
+    def unknown(self, where: str, d: dict[str, Any], known: tuple[str, ...]) -> None:
+        for k, v in d.items():
+            if k in known:
+                continue
+            f = f"{where}.{k}" if where else str(k)
+            self.warnings.append(Issue(
+                f, "Невідоме поле: застосунок його не розуміє.",
+                "Нічого робити не треба: значення збережено в нотатках (notes) і оповідач його "
+                "побачить. Якщо це одне з відомих полів, виправте назву."))
+            self.extra.append(f"{f}: {_show(v)}")
+
+    def text(self, f: str, v: Any, *, required: bool = False) -> str | None:
+        if v is None or (isinstance(v, str) and not v.strip()):
+            if required:
+                self.err(f, "Поле обов'язкове, а його немає або воно порожнє.",
+                         f"Додайте {f} з текстом українською.")
+            return None
+        if isinstance(v, bool) or isinstance(v, (dict, list)):
+            self.err(f, "Тут має бути текст.", f"Запишіть {f} як звичайний рядок тексту.")
+            return None
+        return str(v).strip()
+
+    def texts(self, f: str, v: Any) -> list[str] | None:
+        """A text or a list of texts, as a list."""
+        if v is None:
+            return None
+        items = v if isinstance(v, list) else [v]
+        out: list[str] = []
+        for i, it in enumerate(items):
+            if isinstance(it, (dict, list, bool)) or it is None:
+                self.err(f"{f}[{i + 1}]" if isinstance(v, list) else f,
+                         "Тут має бути текст або список текстових пунктів.",
+                         f"Запишіть кожен пункт {f} окремим рядком, що починається з «- ».")
+                return None
+            s = str(it).strip()
+            if s:
+                out.append(s)
+        return out or None
+
+    def flag(self, f: str, v: Any) -> bool | None:
+        if v is None:
+            return None
+        if isinstance(v, bool):
+            return v
+        s = str(v).strip().lower()
+        if s in ("true", "yes", "так", "on"):
+            return True
+        if s in ("false", "no", "ні", "off"):
+            return False
+        self.err(f, f"Незрозуміле значення «{_show(v)}»: потрібно так або ні.",
+                 f"Напишіть {f}: true або {f}: false.")
+        return None
+
+    def choice(self, f: str, v: Any) -> str | None:
+        if v is None:
+            return None
+        allowed = CHOICES[f]
+        if isinstance(v, bool) and allowed == ("on", "off"):
+            return "on" if v else "off"  # YAML 1.1 reads on/off as booleans
+        s = str(v).strip().lower()
+        if s in allowed:
+            return s
+        self.err(f, f"Незрозуміле значення «{_show(v)}».",
+                 f"Оберіть одне з: {', '.join(allowed)} (або приберіть поле, тоді вирішить "
+                 "світ).")
+        return None
+
+
+def _time_of_day(c: _Checker, f: str, v: Any) -> int | None:
+    if v is None:
+        return None
+    if isinstance(v, bool):
+        c.err(f, "Тут має бути час.", "Напишіть, наприклад, time: \"20:00\" або time: вечір.")
+        return None
+    if isinstance(v, int):  # YAML 1.1 reads 20:00 as 1200 (base 60): minutes after midnight
+        if 0 <= v < 24 * 60:
+            return v
+    else:
+        s = str(v).strip().lower()
+        m = re.fullmatch(r"(\d{1,2})[:.](\d{2})", s)
+        if m and int(m.group(1)) < 24 and int(m.group(2)) < 60:
+            return int(m.group(1)) * 60 + int(m.group(2))
+        if s in DAY_PARTS:
+            return DAY_PARTS[s]
+    c.err(f, f"Незрозумілий час «{_show(v)}».",
+          "Напишіть годину в лапках, як \"20:00\", або одне слово: "
+          + ", ".join(DAY_PARTS) + ".")
+    return None
+
+
+def _people(c: _Checker, v: Any) -> list[dict[str, Any]] | None:
+    f = "start.who_is_here"
+    if v is None:
+        return None
+    if not isinstance(v, list):
+        c.err(f, "Тут має бути список людей.",
+              "Запишіть кожну людину окремим пунктом «- role: ...» (див. приклад).")
+        return None
+    if len(v) > MAX_PEOPLE:
+        c.err(f, f"Забагато людей у першій сцені ({len(v)}).",
+              f"Залиште до {MAX_PEOPLE} найважливіших; решту світ додасть сам, коли треба.")
+        return None
+    out = []
+    for i, p in enumerate(v):
+        pf = f"{f}[{i + 1}]"
+        if isinstance(p, str):
+            p = {"role": p}
+        if not isinstance(p, dict):
+            c.err(pf, "Людину треба описати полями (role, attitude...).",
+                  "Запишіть, наприклад: - role: корчмар")
+            continue
+        c.unknown(pf, p, PERSON_KEYS)
+        person = {k: c.text(f"{pf}.{k}", p.get(k))
+                  for k in ("name", "role", "appearance", "attitude", "goal")}
+        person = {k: x for k, x in person.items() if x}
+        kp = c.flag(f"{pf}.knows_player", p.get("knows_player"))
+        person["knows_player"] = bool(kp)
+        if not (person.get("role") or person.get("name") or person.get("appearance")):
+            c.err(pf, "Невідомо, хто це: немає ні ролі, ні імені, ні зовнішності.",
+                  "Додайте хоча б role (наприклад, «корчмар»).")
+            continue
+        out.append(person)
+    return out
+
+
+def parse(text: str) -> Package:
+    """Validate a package. Raises PackageError with every problem found (Ukrainian)."""
+    c = _Checker()
+    try:
+        raw = yaml.safe_load(_strip_chat(text or ""))
+    except yaml.YAMLError as e:
+        mark = getattr(e, "problem_mark", None)
+        where = f" (рядок {mark.line + 1}, позиція {mark.column + 1})" if mark else ""
+        raise PackageError([Issue(
+            "файл", f"Це не читається як YAML{where}: {getattr(e, 'problem', '') or e}.",
+            "Перевірте відступи (лише пробіли, однакові для одного рівня), двокрапки після "
+            "назв полів і лапки навколо тексту, що містить двокрапку або #.")]) from None
+    if not isinstance(raw, dict):
+        raise PackageError([Issue(
+            "файл", "Файл порожній або це не набір полів «назва: значення».",
+            "Вставте весь YAML-блок, що починається з «version: 1».")])
+    raw = {str(k): v for k, v in raw.items()}
+    c.unknown("", raw, TOP)
+    d: dict[str, Any] = {}
+
+    v = raw.get("version")
+    if v is None:
+        c.err("version", "Немає версії формату.", "Додайте першим рядком: version: 1")
+    elif v != 1 and str(v).strip() != "1":
+        c.err("version", f"Невідома версія «{_show(v)}»: застосунок знає лише версію 1.",
+              "Напишіть version: 1 і перевірте поля за інструкцією.")
+    d["version"] = 1
+    w = raw.get("world")
+    if w is None:
+        c.err("world", "Не вказано світ.", "Додайте: world: witcher")
+    elif str(w).strip().lower() not in WORLDS:
+        c.err("world", f"Світ «{_show(w)}» поки недоступний.",
+              "Зараз є лише світ Відьмака: world: witcher")
+    d["world"] = "witcher"
+
+    pl = raw.get("player")
+    player: dict[str, Any] = {}
+    if not isinstance(pl, dict):
+        c.err("player", "Немає опису персонажа гравця." if pl is None else
+              "player має бути набором полів (name, description...).",
+              "Додайте розділ player: з полем description: — хто ваш персонаж, вільним текстом.")
+    else:
+        c.unknown("player", {str(k): x for k, x in pl.items()}, PLAYER_KEYS)
+        player["description"] = c.text("player.description", pl.get("description"),
+                                        required=True)
+        if player["description"] and len(player["description"]) > MAX_FILE:
+            c.warnings.append(Issue("player.description",
+                                    f"Опис дуже довгий; прочитано перші {MAX_FILE} знаків.",
+                                    "Скоротіть опис або винесіть найважливіше на початок."))
+        for k in ("name", "appearance"):
+            player[k] = c.text(f"player.{k}", pl.get(k))
+        for k in ("traits", "knows", "hidden"):
+            player[k] = c.texts(f"player.{k}", pl.get(k))
+        player["unbounded"] = c.flag("player.unbounded", pl.get("unbounded"))
+    d["player"] = {k: x for k, x in player.items() if x is not None}
+
+    st = raw.get("start")
+    start: dict[str, Any] = {}
+    if st is not None and not isinstance(st, dict):
+        c.err("start", "start має бути набором полів.",
+              "Або start: {canon: <id>}, або поля place, day, time, situation (див. інструкцію).")
+    elif isinstance(st, dict):
+        st = {str(k): x for k, x in st.items()}
+        c.unknown("start", st, START_KEYS)
+        free = [k for k in ("place", "day", "time", "situation") if st.get(k) is not None]
+        if st.get("canon") is not None:
+            cid = str(st["canon"]).strip()
+            points = start_points()
+            if cid not in points:
+                c.err("start.canon", f"Невідомий канонічний момент «{cid}».",
+                      "Оберіть один із: " + ", ".join(points) + "; або опишіть старт вільно "
+                      "(place, day, time, situation).")
+            else:
+                start["canon"] = cid
+            if free:
+                c.err("start", "Вказано і канонічний момент, і вільний старт ("
+                      + ", ".join(free) + ").",
+                      "Залиште щось одне: або canon, або place/day/time/situation.")
+        start["place"] = c.text("start.place", st.get("place"))
+        start["situation"] = c.text("start.situation", st.get("situation"))
+        day = st.get("day")
+        if day is not None:
+            try:
+                if isinstance(day, bool):
+                    raise ValueError
+                start["day"] = int(str(day).strip())
+                if start["day"] < 1:
+                    raise ValueError
+            except ValueError:
+                start.pop("day", None)
+                c.err("start.day", f"Незрозумілий день «{_show(day)}».",
+                      "Напишіть номер дня гри цифрою, від 1 (наприклад, day: 3).")
+        start["time"] = _time_of_day(c, "start.time", st.get("time"))
+        start["who_is_here"] = _people(c, st.get("who_is_here"))
+    d["start"] = {k: x for k, x in start.items() if x is not None}
+
+    for k in ("canon", "pace", "outcomes", "dialogue", "assistant"):
+        got = c.choice(k, raw.get(k))
+        if got is not None:
+            d[k] = got
+    tone = c.text("tone", raw.get("tone"))
+    if tone:
+        d["tone"] = tone
+
+    lim = raw.get("limits")
+    if lim is not None:
+        if not isinstance(lim, dict):
+            c.err("limits", "limits має містити два списки: avoid і veil.",
+                  "Запишіть: limits: {avoid: [чого не має бути], veil: [що лише за кадром]}")
+        else:
+            lim = {str(k): x for k, x in lim.items()}
+            c.unknown("limits", lim, ("avoid", "veil"))
+            got = {k: c.texts(f"limits.{k}", lim.get(k)) for k in ("avoid", "veil")}
+            got = {k: x for k, x in got.items() if x}
+            if got:
+                d["limits"] = got
+
+    inks = raw.get("inks")
+    if inks is not None:
+        if not isinstance(inks, dict):
+            c.err("inks", "inks має бути набором «хто: колір».",
+                  "Запишіть, наприклад: inks: {корчмар: \"#e8a87c\"}")
+        else:
+            ok: dict[str, str] = {}
+            for who, col in inks.items():
+                if not isinstance(col, str) or not INK_RE.match(col.strip()):
+                    c.err(f"inks.{who}", f"Колір «{_show(col)}» не у форматі #rrggbb.",
+                          "Запишіть колір шістьма шістнадцятковими цифрами в лапках, "
+                          "наприклад \"#8fb8e8\".")
+                    continue
+                ok[str(who).strip()] = col.strip().lower()
+            if ok:
+                d["inks"] = ok
+
+    notes = c.text("notes", raw.get("notes"))
+    if c.extra:
+        notes = "\n".join(([notes] if notes else []) + ["Інші побажання з файлу:"] + c.extra)
+    if notes:
+        d["notes"] = notes
+
+    if d.get("outcomes") == "real" and d["player"].get("unbounded"):
+        c.warnings.append(Issue(
+            "player.unbounded", "outcomes: real скасовує player.unbounded: true.",
+            "Якщо персонаж має бути без меж, напишіть outcomes: unbounded."))
+    if c.errors:
+        raise PackageError(c.errors)
+    return Package(d, c.warnings)
+
+
+def unbounded(pkg: Package) -> bool:
+    """`outcomes` overrides `player.unbounded`; the default is real outcomes."""
+    o = pkg.data.get("outcomes")
+    if o is not None:
+        return o == "unbounded"
+    return bool(pkg.data["player"].get("unbounded"))
+
+
+# -- the summary card -------------------------------------------------------------------------
+
+def _short(s: str, n: int = 180) -> str:
+    s = " ".join(s.split())
+    return s if len(s) <= n else s[:n].rsplit(" ", 1)[0] + "…"
+
+
+def day_phrase(day: int, minute: int) -> str:
+    """«Вечір третього дня»."""
+    part = next(p for limit, p in PART_OF if minute < limit)
+    nth = ORDINAL_GEN[day - 1] if 1 <= day <= len(ORDINAL_GEN) else f"{day}-го"
+    return f"{part} {nth} дня"
+
+
+def _clock(minute: int) -> str:
+    return f"{minute // 60:02d}:{minute % 60:02d}"
+
+
+def title(pkg: Package, place: str | None = None) -> str:
+    """The line above the page: the canon moment's title, or the start place."""
+    st = pkg.data["start"]
+    if "canon" in st:
+        return str(start_points()[st["canon"]].get("title", st["canon"]))
+    place = place or st.get("place")
+    if place and vizima().resolve(place):
+        return f"Визім · {place}"
+    name = pkg.data["player"].get("name")
+    return " · ".join(x for x in (place, name) if x) or "Нова гра"
+
+
+def summary(pkg: Package) -> dict[str, Any]:
+    """What is set and what the world decides, for the card before the start (Ukrainian)."""
+    d, p, st = pkg.data, pkg.data["player"], pkg.data["start"]
+    out: list[dict[str, str]] = []
+    world: list[str] = []
+
+    def put(label: str, value: Any, missing: str | None = None) -> None:
+        if value:
+            out.append({"label": label, "value": value if isinstance(value, str) else
+                        "; ".join(value)})
+        elif missing:
+            world.append(missing)
+
+    put("Персонаж", _short(p.get("description", "")))
+    put("Ім'я", p.get("name"), "Ім'я персонажа")
+    put("Зовнішність", p.get("appearance") and _short(p["appearance"], 140),
+        "Зовнішність (з опису персонажа)")
+    put("Риси", p.get("traits"))
+    put("Що знає на старті", p.get("knows"))
+    if p.get("hidden"):
+        put("Приховане", f"{len(p['hidden'])} — бачите лише ви")
+    if "canon" in st:
+        sp = start_points()[st["canon"]]
+        put("Старт", f"канонічний момент: {sp.get('title', st['canon'])} "
+            f"({sp.get('book', '')}), {day_phrase(int(sp.get('day', 1)), _minute(sp))}")
+    else:
+        put("Старт", " · ".join(x for x in (
+            st.get("place"), st.get("day") and f"день {st['day']}",
+            st.get("time") is not None and _clock(st["time"])) if x) or None)
+        if not st.get("place"):
+            world.append("Місце старту")
+        if st.get("day") is None or st.get("time") is None:
+            world.append("День і час")
+        put("Ситуація", st.get("situation") and _short(st["situation"], 220),
+            "Ситуація на старті")
+    people = st.get("who_is_here") or []
+    put("Хто поруч", [", ".join(x for x in (q.get("name"), q.get("role")) if x)
+                      or q.get("appearance", "") for q in people],
+        "Люди поруч" if "canon" not in st else None)
+    put("Канон", CHOICE_UK[d["canon"]] if "canon" in d else None)
+    put("Тон", d.get("tone"), "Тон (як у Сапковського)")
+    put("Темп", CHOICE_UK[d["pace"]] if "pace" in d else None)
+    lim = d.get("limits", {})
+    lim_parts = ([f"не буде: {', '.join(lim['avoid'])}"] if lim.get("avoid") else []) + \
+        ([f"лише за кадром: {', '.join(lim['veil'])}"] if lim.get("veil") else [])
+    put("Межі", "; ".join(lim_parts) or None, "Межі вмісту (жодних обмежень не задано)")
+    put("Наслідки", CHOICE_UK["unbounded" if unbounded(pkg) else "real"])
+    put("Діалоги", CHOICE_UK[d["dialogue"]] if "dialogue" in d else None)
+    put("Підказки дій", CHOICE_UK[d["assistant"]] if "assistant" in d else None)
+    put("Кольори", [f"{k} {v}" for k, v in d.get("inks", {}).items()] or None)
+    put("Нотатки", d.get("notes") and _short(d["notes"], 220))
+    return {"title": title(pkg), "set": out, "world": world,
+            "warnings": [w.to_json() for w in pkg.warnings]}
+
+
+def _minute(sp: dict[str, Any]) -> int:
+    t = sp.get("time", "00:00")
+    if isinstance(t, int):
+        return t
+    h, m = str(t).split(":")
+    return int(h) * 60 + int(m)
+
+
+# -- campaign intent (the narrator) -----------------------------------------------------------
+
+def intent_text(pkg: Package) -> str:
+    """The package's wishes as the narrator reads them: English frame, the player's words."""
+    d, lines = pkg.data, []
+    if d.get("tone"):
+        lines.append(f"- Tone: {d['tone']}")
+    if d.get("pace") in PACE_EN:
+        lines.append(f"- Pace: {PACE_EN[d['pace']]}.")
+    lim = d.get("limits", {})
+    if lim.get("avoid"):
+        lines.append("- Content the player does not want in this game at all (never show it, "
+                     "never let it happen on the page; the world steers elsewhere): "
+                     + "; ".join(lim["avoid"]))
+    if lim.get("veil"):
+        lines.append("- Content that may happen only off-screen: say in one plain sentence that "
+                     "it happened, never show it in detail: " + "; ".join(lim["veil"]))
+    if d.get("canon") == "loose":
+        lines.append("- Canon: the books are only background here; do not pull events toward "
+                     "the saga's plot.")
+    sit = d["start"].get("situation")
+    if sit:
+        lines.append(f"- The opening situation the player chose (the start of the story): {sit}")
+    if d.get("notes"):
+        lines.append(f"- The player's notes: {d['notes']}")
+    return "\n".join(lines)
+
+
+# -- building the campaign --------------------------------------------------------------------
+
+def _sheet(pkg: Package, name: str) -> str:
+    """The player sheet as a character file for `derive_traits` (like data/Ragnar.md)."""
+    p = pkg.data["player"]
+    parts = [f"# {name}", p.get("description", "")]
+    if p.get("appearance"):
+        parts.append("## Зовнішність (видно з першого погляду)\n" + p["appearance"])
+    if p.get("traits"):
+        parts.append("## Риси\n" + "\n".join(f"- {t}" for t in p["traits"]))
+    if p.get("hidden"):
+        parts.append("## Приховане (ніхто не бачить на перший погляд)\n"
+                     + "\n".join(f"- {t}" for t in p["hidden"]))
+    return "\n\n".join(parts) + "\n"
+
+
+def _player_name(pkg: Package, seed: str) -> str:
+    """The package's name, or one from the npcgen tables (never a canon name)."""
+    p = pkg.data["player"]
+    if p.get("name"):
+        return p["name"]
+    sex = infer_sex(p.get("description", ""), p.get("appearance", "")) or "m"
+    canon = [e.canonical for e in Glossary.for_world("witcher").entries if e.kind == "person"]
+    return pick_name(NORTHERN, sex, seed, "player", canon)
+
+
+def _player_profile(pkg: Package, name: str, label: str) -> CharacterProfile:
+    p = pkg.data["player"]
+    desc = _short(p.get("description", ""), 600)
+    if p.get("traits"):
+        desc += " Риси: " + "; ".join(p["traits"]) + "."
+    return CharacterProfile(PLAYER, name, desc, appearance=label or "незнайомець")
+
+
+def _free_map(place: str) -> tuple[WorldMap, str]:
+    """The world map with the start place on it (a place not on the map is added, unlinked)."""
+    wmap = vizima()
+    got = wmap.resolve(place)
+    if got is None:
+        got = wmap.add_place(Place("start", place, "the start place of this campaign"))
+    return wmap, got.id
+
+
+def _build_people(eng: Engine, people: list[dict[str, Any]]) -> tuple[list[str], dict[str, str]]:
+    """The package's people (or two passers-by when none are given), made whole by npcgen."""
+    ids, goals = [], {}
+    for i, q in enumerate(people, 1):
+        role = q.get("role")
+        look = q.get("appearance") or role or q.get("name", "")
+        spec = eng.fresh_npc(f"here{i}", NORTHERN, occupation=role, appearance=look,
+                             description=q.get("attitude", ""))
+        if q.get("name"):
+            from dataclasses import replace
+            spec = replace(spec, name=q["name"])
+        desc = " ".join(x for x in (
+            f"{spec.name.split()[0]}, {spec.occupation}, {spec.vitals.age(eng.scene.time)} "
+            "років.", q.get("attitude") and f"Toward the newcomer: {q['attitude']}.",
+            q.get("goal") and f"Wants: {q['goal']}.") if x)
+        eng.add_npc(spec, description=desc, appearance=look)
+        ids.append(spec.id)
+        goals[spec.id] = q.get("goal") or q.get("attitude") or f"go about the day as a {spec.occupation}"
+        if q.get("knows_player"):
+            eng.acquaint(spec.id, PLAYER)
+    return ids, goals
+
+
+def _passers_by(eng: Engine, place_id: str) -> list[dict[str, Any]]:
+    """Nobody given: two people of the place (the world decides): a tavern has its keeper and a
+    guest; elsewhere two different trades from the npcgen tables, seeded."""
+    if place_id == "tavern":
+        return [{"role": "корчмар"}, {"role": "візник"}]
+    roles: list[str] = []
+    for i in range(1, 12):
+        occ = eng.fresh_npc(f"probe{i}", NORTHERN).occupation
+        if occ not in roles:
+            roles.append(occ)
+        if len(roles) == 2:
+            break
+    return [{"role": r} for r in roles]
+
+
+def _apply_inks(camp: Campaign, inks: dict[str, str]) -> None:
+    eng = camp.engine
+    for key, ink in inks.items():
+        k = key.lower()
+        for cid, prof in eng.profiles.items():
+            if cid == PLAYER:
+                continue
+            names = {prof.name.lower(), prof.name.split()[0].lower(),
+                     (prof.appearance or "").lower()}
+            occ = prof.description.lower()
+            if k in names or (k and k in occ):
+                camp.inks.set(camp.tok(cid), ink)
+                break
+        else:
+            eng._note("package_ink_unmatched", key=key)
+    camp.inks.flush()
+
+
+def _store(eng: Engine, key: str, value: Any) -> None:
+    with eng.conn:
+        eng.conn.execute("INSERT OR REPLACE INTO campaign_meta (key, value) VALUES (?,?)",
+                         (key, json.dumps(value, ensure_ascii=False)))
+
+
+def _meta(eng: Engine, key: str) -> Any:
+    row = eng.conn.execute("SELECT value FROM campaign_meta WHERE key=?", (key,)).fetchone()
+    return json.loads(row[0]) if row else None
+
+
+def open_package(stack: Stack, pkg: Package, *, root: Path | str = CAMPAIGNS,
+                 canon_db: Any = None, name: str | None = None) -> Campaign:
+    """A NEW campaign from a validated package; it becomes the current campaign."""
+    root = Path(root)
+    root.mkdir(parents=True, exist_ok=True)
+    rec = Recorder(stack.provider, stack.models, stack.spend)
+    name = name or time.strftime("game-%Y%m%d-%H%M%S")
+    while Engine.campaign_exists(name, root):
+        name += "x"
+    d, st = pkg.data, pkg.data["start"]
+    pname = _player_name(pkg, name)
+    folder = root / name
+    folder.mkdir(parents=True, exist_ok=True)
+    sheet = folder / "player.md"
+    sheet.write_text(_sheet(pkg, pname), encoding="utf-8")
+    # the one cheap call of the start: how the character looks, from the sheet (cached by text)
+    traits = derive_traits(rec, stack.models.extractor, sheet, root)
+    label = (traits.label if traits and traits.label else "") or _short(
+        d["player"].get("appearance", ""), 60)
+    player = _player_profile(pkg, pname, label)
+    kw = viz.engine_kw(stack, d.get("dialogue"))
+    free = "canon" not in st
+
+    def setup(eng: Engine) -> None:
+        """Before anyone enters: the player's live state and what the character knows."""
+        for fact in d["player"].get("knows", []):
+            eng.facts.add_canon(fact, game_time=eng.scene.time,
+                                knowers=[(PLAYER, "told", "own life")])
+        seed_player_state(eng, traits, base=())
+
+    filled = {"name": pname} if not d["player"].get("name") else {}
+    if not free:
+        canon = viz.load_canon(stack, canon_db)
+        eng, play = viz.create_situation_a(rec, root, name, canon, kw, player=player,
+                                           unbounded=unbounded(pkg), kind=KIND, setup=setup)
+        if d.get("canon") == "loose":
+            canon_used = None  # the books only as background: no canon gravity or guard
+        else:
+            canon_used = canon
+        world = viz.situation_a_world(eng, canon_used, stack.judge, play if canon_used else None)
+        if canon_used is None:
+            eng.canon_guard = None
+        sp = start_points()[st["canon"]]
+        intro, ttl = viz.INTRO, str(sp.get("title", viz.TITLE))
+        people = st.get("who_is_here") or []
+        extra_ids, _goals = _build_people(eng, people) if people else ([], {})
+        for c in extra_ids:
+            eng.enter_scene(c)
+            world.cast[c] = world.here() or "tavern"
+            world.goals[c] = _goals[c]
+        meta_world = {"kind": "situation_a", "canon": canon_used is not None,
+                      "cast": {c: world.cast[c] for c in extra_ids}, "goals": _goals}
+    else:
+        place = st.get("place") or "корчма «Під Лисом»"
+        day = st.get("day") or 1
+        minute = st["time"] if st.get("time") is not None else 19 * 60
+        if not st.get("place"):
+            filled["place"] = place
+        if st.get("day") is None or st.get("time") is None:
+            filled["time"] = f"день {day}, {_clock(minute)}"
+        wmap, here = _free_map(place)
+        eng = Engine.create_campaign(
+            name, rec, [player], Scene(wmap.name(here), (), (day - 1) * 1440 + minute),
+            root=root, player_unlimited=unbounded(pkg), outcomes=True, seed=name, **kw)
+        _store(eng, "app_kind", KIND)
+        setup(eng)
+        people = st.get("who_is_here") or _passers_by(eng, here)
+        if not st.get("who_is_here"):
+            filled["people"] = [q["role"] for q in people]
+        ids, goals = _build_people(eng, people)
+        for c in ids:
+            eng.enter_scene(c)
+        eng.enter_scene(PLAYER)
+        sit = st.get("situation")  # reaches the narrator as intent (above), the player as the intro
+        meta_world = {"kind": "free", "place": place, "cast": {c: here for c in ids},
+                      "goals": goals}
+        world = _free_world(eng, meta_world)
+        intro = sit or f"{day_phrase(day, minute)}. {place[:1].upper() + place[1:]}."
+        ttl = title(pkg, place)
+    eng.ctx.intent = intent_text(pkg)
+    _store(eng, "package", {"data": d, "title": ttl, "intro": intro, "world": meta_world,
+                            "filled": filled})
+    eng._note("package_start", filled=filled, calls=len(rec.calls))
+    _pointer(root).write_text(name)
+    tr = Translator(rec, stack.models.extractor, folder / "translations.json")
+    camp = Campaign(eng, rec, stack.spend, stack.live, name, tr, title=ttl, intro=intro,
+                    world=world, assistant=d.get("assistant", "on") == "on")
+    if d.get("inks"):
+        _apply_inks(camp, d["inks"])
+    return camp
+
+
+def _free_world(eng: Engine, meta: dict[str, Any]) -> World:
+    wmap, here = _free_map(meta["place"])
+    on_map = here != "start"
+    cols = pilot.canon_collectives(wmap, viz._NoNames()) if on_map else []
+    from harness.scene_cast import SceneCast
+    world = World(eng, wmap, collectives=cols, cast=meta["cast"], goals=meta["goals"])
+    # people the narration brings in: passers-by from npcgen (no canon cast on a free start)
+    eng.scene_cast = SceneCast(None, culture=NORTHERN, where=world.where, here=world.here)
+    return world
+
+
+def reopen(stack: Stack, name: str, *, root: Path | str = CAMPAIGNS, canon_db: Any = None
+           ) -> Campaign:
+    """Continue a saved package campaign: the engine from its log, the intent and the world
+    from the stored package."""
+    root = Path(root)
+    rec = Recorder(stack.provider, stack.models, stack.spend)
+    eng = Engine.open_campaign(name, rec, root=root, **viz.engine_kw(stack))
+    saved = _meta(eng, "package") or {}
+    pkg = Package(saved.get("data") or {"player": {}, "start": {}})
+    pkg.data.setdefault("start", {})
+    eng.ctx.intent = intent_text(pkg)
+    mw = saved.get("world") or {}
+    if mw.get("kind") == "situation_a":
+        canon = viz.load_canon(stack, canon_db) if mw.get("canon") else None
+        world = viz.situation_a_world(eng, canon, stack.judge)
+        if canon is None:
+            eng.canon_guard = None
+        world.cast.update(mw.get("cast", {}))
+        world.goals.update(mw.get("goals", {}))
+    else:
+        world = _free_world(eng, mw)
+    _pointer(root).write_text(name)
+    tr = Translator(rec, stack.models.extractor, root / name / "translations.json")
+    return Campaign(eng, rec, stack.spend, stack.live, name, tr, title=saved.get("title", name),
+                    intro=saved.get("intro", ""), world=world,
+                    assistant=pkg.data.get("assistant", "on") == "on")
+
+
+def kind_of(name: str, root: Path | str) -> str | None:
+    """The `app_kind` a saved campaign was made as (None: unknown or no campaign)."""
+    path = Engine.campaign_path(name, root) / "campaign.db"
+    if not path.exists():
+        return None
+    import sqlite3
+    try:
+        with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as conn:
+            row = conn.execute("SELECT value FROM campaign_meta WHERE key='app_kind'").fetchone()
+    except sqlite3.Error:
+        return None
+    return json.loads(row[0]) if row else None
+
+
+def opener(stack: Stack, *, root: Path | str = CAMPAIGNS,
+           fallback: Callable[[bool], Campaign], canon_db: Any = None
+           ) -> Callable[[bool], Campaign]:
+    """The app's `open_campaign(new)`: continue the current campaign when it was made from a
+    package, else whatever `fallback` opens (the Vizima or the inn campaign)."""
+    def open_(new: bool) -> Campaign:
+        cur = _pointer(Path(root))
+        if not new and cur.exists():
+            name = cur.read_text().strip()
+            if name and kind_of(name, root) == KIND:
+                return reopen(stack, name, root=root, canon_db=canon_db)
+        return fallback(new)
+    return open_

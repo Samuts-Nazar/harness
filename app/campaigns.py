@@ -165,6 +165,7 @@ class Campaign:
     intro: str = INTRO
     world: Any = None  # harness.world.World when the campaign has a world beyond the scene (task 17)
     inks: InkBook | None = None
+    assistant: bool = True  # the turn assistant's suggestions (a game package may switch them off)
 
     def __post_init__(self) -> None:
         if self.inks is None:
@@ -224,13 +225,18 @@ class Campaign:
         return out
 
 
-def seed_player_state(eng: Engine, traits: Traits | None) -> list[tuple[str, str, bool]]:
-    """The player character's live state at the start: the sword and the scar of the scene, plus
-    what the character file says (observable and hidden). Observable items are perceived by the
-    NPCs present when the character enters the scene (`enter_scene`); whether one reacts is the
-    salience judgment's call. Returns what was applied."""
-    wanted: list[tuple[str, str, bool]] = [(EQUIPMENT, "steel sword", True),
-                                           (INJURY, "old scar under the shirt", False)]
+INN_STATE = ((EQUIPMENT, "steel sword", True), (INJURY, "old scar under the shirt", False))
+
+
+def seed_player_state(eng: Engine, traits: Traits | None,
+                      base: tuple[tuple[str, str, bool], ...] = INN_STATE
+                      ) -> list[tuple[str, str, bool]]:
+    """The player character's live state at the start: `base` (the inn scene's sword and scar;
+    a game package gives none), plus what the character file says (observable and hidden).
+    Observable items are perceived by the NPCs present when the character enters the scene
+    (`enter_scene`); whether one reacts is the salience judgment's call. Returns what was
+    applied."""
+    wanted: list[tuple[str, str, bool]] = list(base)
     if traits:
         wanted += [(c, i, c != INTERNAL) for c, i in traits.observable]
         wanted += [(c, i, False) for c, i in traits.hidden]

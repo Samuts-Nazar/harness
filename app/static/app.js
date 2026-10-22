@@ -20,6 +20,7 @@ let sugg = { turn: null, items: [] };
 // events are skipped (only events of that turn id), and its rendered paragraphs are tracked under
 // that id so a late retract still removes them
 let replay = null, lastTurnNodes = [];
+let assistantOn = true;   // a game package may switch the turn assistant (💡) off
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -437,7 +438,7 @@ function setBusy(on, ph) {
   feed.setAttribute("aria-busy", String(talk));
   $("btnInterrupt").hidden = !talk;
   $("btnInterrupt").style.setProperty("--c", phase === "speaking" && speakingTok ? inkVar(speakingTok) : "var(--pen)");
-  $("btnIdea").hidden = on;
+  $("btnIdea").hidden = on || !assistantOn;
   $("btnSkip").hidden = !talk;
   $("btnDrawerSkip").hidden = !talk;
   $("busyText").hidden = phase !== "thinking";
@@ -465,6 +466,8 @@ function render(state) {
   tag = state.live ? "" : " · офлайн";
   $("clock").textContent = state.clock + tag;
   actions = Array.isArray(state.actions) ? state.actions : [];
+  assistantOn = state.assistant !== false;
+  $("btnIdea").hidden = busy || !assistantOn;
   lastTurnNodes = [];   // the paragraphs since the last player paragraph (the last turn)
   for (const t of state.transcript) {
     let n = null;
@@ -720,6 +723,93 @@ $("btnNew").addEventListener("click", async () => {
   if (!confirm("Почати гру спочатку? Поточна пригода буде втрачена.")) return;
   const r = await fetch("/api/campaign/new", { method: "POST" });
   if (r.ok) { $("drawer").close(); cast = {}; load(); }
+});
+// -- "Нова гра з файлу": paste or upload a game package, see what is set, then start --------
+function openNewGame() {
+  if ($("drawer").open) $("drawer").close();
+  $("newGame").hidden = false;
+  $("newGameHead").focus();
+}
+function closeNewGame() { $("newGame").hidden = true; $("btnMenu").focus(); }
+function pkgErrors(list) {
+  const box = el("div");
+  box.appendChild(el("p", "note", "У файлі є помилки. Виправте їх (або попросіть про це ШІ-помічника) і перевірте ще раз."));
+  for (const i of list) {
+    const p = el("p", "ng-err");
+    p.append(el("b", "", i.field), document.createTextNode(" — " + i.problem));
+    p.appendChild(el("span", "fix", "Як виправити: " + i.fix));
+    box.appendChild(p);
+  }
+  return box;
+}
+function pkgCard(s) {
+  const card = el("div", "ng-card");
+  card.appendChild(el("h3", "", s.title));
+  card.appendChild(el("h4", "", "Задано у файлі"));
+  const dl = el("dl");
+  for (const it of s.set) { dl.append(el("dt", "", it.label), el("dd", "", it.value)); }
+  card.appendChild(dl);
+  card.appendChild(el("h4", "", "Вирішить світ"));
+  if (s.world.length) {
+    const ul = el("ul");
+    for (const w of s.world) ul.appendChild(el("li", "", w));
+    card.appendChild(ul);
+  } else card.appendChild(el("p", "note", "Нічого: усе важливе задано у файлі."));
+  if (s.warnings.length) {
+    card.appendChild(el("h4", "", "Зауваження"));
+    for (const w of s.warnings) {
+      const p = el("p", "ng-warn");
+      p.append(el("b", "", w.field), document.createTextNode(" — " + w.problem + " " + w.fix));
+      card.appendChild(p);
+    }
+  }
+  const go = el("button", "btn primary wide", "Почати гру");
+  go.type = "button"; go.id = "pkgStart";
+  go.addEventListener("click", () => startPackage(go));
+  card.appendChild(go);
+  card.appendChild(el("p", "note", "Поточна пригода збережеться на диску, але гра перейде на нову."));
+  return card;
+}
+async function checkPackage() {
+  const out = $("pkgResult");
+  const text = $("pkgText").value;
+  if (!text.trim()) { out.replaceChildren(el("p", "note", "Спершу вставте або завантажте файл гри.")); return; }
+  out.replaceChildren(el("p", "note", "Перевіряю…"));
+  try {
+    const r = await fetch("/api/package/check", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+    const d = await r.json();
+    out.replaceChildren(d.ok ? pkgCard(d.summary) : pkgErrors(d.errors || []));
+    out.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  } catch (e) { out.replaceChildren(el("p", "ng-err", "Не вдалося перевірити файл: немає зв'язку із застосунком.")); }
+}
+async function startPackage(btn) {
+  btn.disabled = true; btn.textContent = "Світ готується…";
+  let r, d = {};
+  try {
+    r = await fetch("/api/package/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: $("pkgText").value }) });
+    d = await r.json();
+  } catch (e) { r = null; }
+  if (r && r.ok) {
+    $("newGame").hidden = true; $("pkgResult").textContent = "";
+    $("finale").hidden = true; $("composer").hidden = false;
+    cast = {}; load();
+    return;
+  }
+  btn.disabled = false; btn.textContent = "Почати гру";
+  if (d.errors) $("pkgResult").replaceChildren(pkgErrors(d.errors));
+  else $("pkgResult").appendChild(el("p", "ng-err", d.error || "Не вдалося почати гру."));
+}
+$("btnNewGame").addEventListener("click", openNewGame);
+$("newGameClose").addEventListener("click", closeNewGame);
+$("newGame").addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeNewGame(); });
+$("pkgCheck").addEventListener("click", checkPackage);
+$("pkgText").addEventListener("input", () => { $("pkgResult").textContent = ""; });
+$("pkgFile").addEventListener("change", async () => {
+  const f = $("pkgFile").files[0];
+  if (!f) return;
+  $("pkgText").value = await f.text();
+  $("pkgFile").value = "";
+  checkPackage();
 });
 function showDebug(on) {
   $("debugPanel").hidden = !on;

@@ -97,6 +97,8 @@ class FakeUk:
                 _, acts = NARRATIONS[self.n["actions"] % len(NARRATIONS)]
                 self.n["actions"] += 1
                 return "\n".join(acts)
+            if "List every OTHER person" in sys:  # the scene cast review: nobody walks in
+                return "none"
             if "You help write characters" in sys:  # manner notes (task 15)
                 return "Говорить повільно, зважуючи слова.\nЧасто озирається на двері."
             if "translate" in sys:

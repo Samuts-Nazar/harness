@@ -108,6 +108,9 @@ class ContextBuilder:
         self.style = style
         self.player_unlimited = player_unlimited
         self.outcomes = False  # set by the engine (harness/outcome.py)
+        # the player's wishes for the campaign, set at its start (a game package: tone, pace,
+        # content limits, notes); shown to the narrator, never above the rules
+        self.intent = ""
         self.language, self.record_language = language, record_language
         self.glossary, self.narration = glossary, narration
         self.names = names
@@ -395,7 +398,8 @@ class ContextBuilder:
                    "narrate only the attempt and stop there: the world decides separately whether "
                    "it succeeds." if self.outcomes else "")
                 + (f" Write in {self.language}." if self.language else "")
-                + (f"\n{UNLIMITED_NARRATOR}" if self.player_unlimited else ""))
+                + (f"\n{UNLIMITED_NARRATOR}" if self.player_unlimited else "")
+                + self._intent_section())
             system = "You are the narrator of a role-playing game. Write vivid prose."
             if self.style is not None:
                 system = self.style.narrator_system()
@@ -420,9 +424,16 @@ class ContextBuilder:
         )
         system = "You are the narrator of a role-playing game. Write vivid prose."
         return self.finish([
-            {"role": "system", "content": system},
+            {"role": "system", "content": system + self._intent_section()},
             {"role": "user", "content": "\n\n".join([*parts, tail])},
         ], PLAYER)
+
+    def _intent_section(self) -> str:
+        if not self.intent.strip():
+            return ""
+        return ("\n\nThe player's wishes for this campaign, set at its start. Follow them; they "
+                "never override the rules above (they never let you write the player character's "
+                "words, feelings or decisions):\n" + self.intent.strip())
 
     @staticmethod
     def player_can_know(f: Fact) -> bool:

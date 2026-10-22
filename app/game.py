@@ -58,9 +58,12 @@ def explain(e: BaseException) -> str:
 
 class Game:
     def __init__(self, open_campaign: Callable[[bool], Campaign], pace: float = 0.25,
-                 suggestions: bool = True) -> None:
-        """`open_campaign(new)`: the saved current campaign (new=False) or a fresh one."""
+                 suggestions: bool = True,
+                 open_package: Callable[[Any], Campaign] | None = None) -> None:
+        """`open_campaign(new)`: the saved current campaign (new=False) or a fresh one.
+        `open_package(pkg)`: a new campaign from a game package (app/newgame.py)."""
         self._open = open_campaign
+        self.open_package = open_package
         self.suggest_on = suggestions  # off for replays: the assistant's calls are not recorded
         self.base_pace = pace
         self.pace = pace  # `skip()` sets it to 0 for the rest of the turn
@@ -78,13 +81,15 @@ class Game:
         self.reset(new=False)
 
     # -- campaign ---------------------------------------------------------------------------
-    def reset(self, new: bool = True) -> None:
+    def reset(self, new: bool = True,
+              opener: Callable[[bool], Campaign] | None = None) -> None:
         """Start a new campaign (the saved one stays on disk), or with new=False continue the
-        current one. Refused while a turn runs."""
+        current one. `opener`: how to make it instead of the default (a game package). Refused
+        while a turn runs."""
         with self.lock:
             if self.running or self.challenging:
                 raise Busy("a turn is running")
-            self.camp = self._open(new)
+            self.camp = (opener or self._open)(new)
             self._ended = self.eng.ended  # read again whenever no turn's thread uses the database
             self.transcript: list[dict[str, Any]] = self.camp.transcript()
             self.phase = "idle"  # idle | thinking | narrating | speaking
@@ -106,6 +111,12 @@ class Game:
             self.turn_start_seq = self.seq
             self._emit("reset")
             self.turn_start_seq = self.seq
+
+    def start_package(self, pkg: Any) -> None:
+        """A new campaign from a validated game package (Busy while a turn runs)."""
+        if self.open_package is None:
+            raise RuntimeError("no game package support in this app")
+        self.reset(True, opener=lambda _new: self.open_package(pkg))  # type: ignore[misc]
 
     @property
     def running(self) -> bool:
@@ -251,7 +262,7 @@ class Game:
                 "title": self.camp.title, "live": self.camp.live, "clock": self.clock(),
                 "transcript": list(self.transcript), "panel": self.panel(),
                 "running": self.running, "phase": self.phase, "turn": self.turn_no,
-                "ended": self._is_ended(),
+                "ended": self._is_ended(), "assistant": self.camp.assistant,
                 "actions": ([] if self.running or self.challenging or self._is_ended()
                             else ["model_error", "cut"]),
                 "chronicle": self.chronicle() if self._is_ended() and not self.running else [],
@@ -623,7 +634,8 @@ class Game:
         """Called on the turn's thread once the slow lane is done (it is the database's only user
         now): render the player character's view here, then ask the model on a thread of its own.
         The next turn does not wait for it. Call with `self.lock` held."""
-        if not self.suggest_on or turn is None or turn != self.turn_no:
+        if (not self.suggest_on or not self.camp.assistant or turn is None
+                or turn != self.turn_no):
             return
         try:
             ctx = assistant.context(self.eng)

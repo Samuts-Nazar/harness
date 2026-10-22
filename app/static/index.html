@@ -47,6 +47,21 @@
     <button class="btn wide" id="btnNewFinale" type="button">Почати нову гру</button>
   </section>
 
+  <section id="newGame" class="overlay newgame" hidden aria-labelledby="newGameHead">
+    <header><h2 id="newGameHead" tabindex="-1">Нова гра з файлу</h2><button id="newGameClose" class="ic" type="button" aria-label="Закрити">✕</button></header>
+    <div class="ng-col">
+      <p class="note">Вставте файл гри, який склав для вас ШІ-помічник за інструкцією, або завантажте його. Чого у файлі немає, те вирішить світ.</p>
+      <label class="ng-label" for="pkgText">Файл гри (YAML)</label>
+      <textarea id="pkgText" rows="9" spellcheck="false" placeholder="version: 1&#10;world: witcher&#10;player:&#10;  description: …"></textarea>
+      <div class="ng-row">
+        <label class="btn ghost" for="pkgFile">📂 Завантажити файл</label>
+        <input id="pkgFile" class="vh" type="file" accept=".yaml,.yml,.txt,text/yaml,text/plain">
+        <button id="pkgCheck" class="btn primary" type="button">Перевірити</button>
+      </div>
+      <div id="pkgResult" aria-live="polite"></div>
+    </div>
+  </section>
+
   <section id="debugPanel" class="overlay debug" hidden aria-label="Налагодження (debug)">
     <header><b>Налагодження</b><button id="debugClose" class="ic" type="button" aria-label="Закрити налагодження">✕</button></header>
     <div id="debugBody">Ходу ще не було.</div>
@@ -78,6 +93,7 @@
   <section class="dsec acts">
     <button id="btnDrawerSkip" class="opt" type="button" hidden>⏩ Показати текст одразу</button>
     <button id="btnDebug" class="opt" type="button" aria-pressed="false">⚙ Налагодження</button>
+    <button id="btnNewGame" class="opt" type="button">📜 Нова гра з файлу</button>
     <button id="btnNew" class="opt danger" type="button">Почати гру спочатку</button>
   </section>
 </dialog>

@@ -38,7 +38,11 @@ def main(argv: list[str] | None = None) -> None:
         opener = lambda new: open_vizima(stack, root=root, new=new, canon_db=a.canon)  # noqa: E731
     else:
         opener = lambda new: open_campaign(stack, root=root, new=new)  # noqa: E731
-    game = Game(opener, pace=a.pace)
+    from . import newgame
+    # a campaign started from a game package ("Нова гра з файлу") continues as such after a restart
+    game = Game(newgame.opener(stack, root=root, fallback=opener, canon_db=a.canon), pace=a.pace,
+                open_package=lambda pkg: newgame.open_package(stack, pkg, root=root,
+                                                              canon_db=a.canon))
     print(f"[mode: {'LIVE (spends money, cap $%.2f)' % a.budget if a.live else 'offline fake'}]")
     print(f"open http://{'<IP-ноутбука>' if a.host == '0.0.0.0' else a.host}:{a.port}/")
     uvicorn.run(create_app(game), host=a.host, port=a.port, log_level="warning")

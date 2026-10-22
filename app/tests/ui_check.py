@@ -21,6 +21,7 @@ import uvicorn
 from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
+from app import newgame  # noqa: E402
 from app.campaigns import open_campaign  # noqa: E402
 from app.game import Game  # noqa: E402
 from app.inks import PALETTE  # noqa: E402
@@ -32,6 +33,8 @@ SHOTS.mkdir(exist_ok=True)
 errors: list[str] = []
 
 SAY = "p[data-line=say]"
+EXAMPLE = (pathlib.Path(__file__).resolve().parents[2] / "docs" / "game_package_example.yaml"
+           ).read_text(encoding="utf-8")
 ACT = "p[data-line=act]"
 
 
@@ -120,7 +123,11 @@ def long_press(page, sel, i=0):
 
 def main() -> None:
     stack = fake_stack()
-    game = Game(lambda new: open_campaign(stack, root=tempfile.mkdtemp(), new=new), pace=0.08)
+    root = tempfile.mkdtemp()
+    game = Game(newgame.opener(stack, root=root,
+                               fallback=lambda new: open_campaign(stack, root=root, new=new)),
+                pace=0.08, open_package=lambda pkg: newgame.open_package(
+                    stack, pkg, root=root, canon_db=False))
     port = free_port()
     server = uvicorn.Server(uvicorn.Config(create_app(game), host="127.0.0.1", port=port,
                                            log_level="warning"))
@@ -374,6 +381,44 @@ def main() -> None:
         outline = page.evaluate("getComputedStyle(document.activeElement).outlineStyle")
         assert outline not in ("none", ""), outline
 
+        # "Нова гра з файлу": a bad file gives field + fix; the example gives the summary card;
+        # start; the first narration of the new game
+        page.click("#btnMenu")
+        page.click("#btnNewGame")
+        page.wait_for_selector("#newGame:not([hidden])")
+        assert not page.locator("#drawer").evaluate("d => d.open")
+        page.fill("#pkgText", "version: 2\nworld: witcher\n")
+        page.click("#pkgCheck")
+        page.wait_for_selector(".ng-err")
+        errs = page.inner_text("#pkgResult")
+        assert "version" in errs and "Як виправити" in errs and "player" in errs, errs
+        no_hscroll(page, "package errors")
+        shot(page, "10-newgame-errors")
+        page.fill("#pkgText", EXAMPLE)
+        page.click("#pkgCheck")
+        page.wait_for_selector(".ng-card h3")
+        card = page.inner_text("#pkgResult")
+        for needle in ("Задано у файлі", "Вереска", "Вирішить світ", "Межі", "ринок"):
+            assert needle in card, needle
+        no_hscroll(page, "package summary")
+        shot(page, "11-newgame-summary")
+        page.click("#pkgStart")
+        page.wait_for_selector("#newGame", state="hidden")
+        page.wait_for_function("() => { const i = document.querySelector('.intro'); "
+                               "return i && i.textContent.startsWith('Ранок третього дня') }")
+        wait_idle(page)
+        assert page.locator(".me").count() == 0
+        assert "ринок" in page.inner_text("#sceneTitle")
+        npc_before = page.locator(SAY).count()
+        page.fill("#input", "*показую торговці гребінець* Ви знаєте цього хлопця?")
+        page.click("#btnSend")
+        page.wait_for_function("() => document.querySelectorAll('.narr, p[data-line=say]')"
+                               ".length > 0", timeout=30000)
+        wait_idle(page)
+        assert page.locator(".narr").count() + page.locator(SAY).count() > npc_before
+        no_hscroll(page, "package game")
+        shot(page, "12-newgame-first-turn")
+
         # laptop: the same page, a wider column
         desk = browser.new_page(viewport={"width": 1280, "height": 800})
         desk.on("pageerror", lambda e: errors.append(str(e)))
@@ -386,7 +431,8 @@ def main() -> None:
     server.should_exit = True
     assert not errors, errors
     print("OK: 5 turns (exchange + gesture, skip, cut in by typing, ✋), legend, ink recolour, "
-          "suggestions, line menu rules, drawer, debug, reload signature; no console errors")
+          "suggestions, line menu rules, drawer, debug, reload signature, new game from a file "
+          "(errors, summary, start, first turn); no console errors")
 
 
 if __name__ == "__main__":

@@ -61,6 +61,39 @@ def create_app(game: Game) -> Starlette:
             return JSONResponse({"error": "Хід триває."}, status_code=409)
         return JSONResponse(game.state())
 
+    async def package_text(request: Request) -> str:
+        try:
+            body = await request.json()
+        except ValueError:
+            return ""
+        return str(body.get("text", "")) if isinstance(body, dict) else ""
+
+    async def package_check(request: Request) -> JSONResponse:
+        """A game package (app/newgame.py): its summary card, or the problems to fix."""
+        from .newgame import PackageError, parse, summary
+        try:
+            pkg = parse(await package_text(request))
+        except PackageError as e:
+            return JSONResponse({"ok": False, "errors": [i.to_json() for i in e.issues]})
+        return JSONResponse({"ok": True, "summary": summary(pkg)})
+
+    async def package_start(request: Request) -> JSONResponse:
+        from .newgame import PackageError, parse
+        try:
+            pkg = parse(await package_text(request))
+        except PackageError as e:
+            return JSONResponse({"ok": False, "errors": [i.to_json() for i in e.issues]},
+                                status_code=400)
+        if game.open_package is None:
+            return JSONResponse({"error": "Нова гра з файлу тут недоступна."}, status_code=501)
+        try:
+            await run_in_threadpool(game.start_package, pkg)
+        except Busy:
+            return JSONResponse({"error": "Хід триває. Дочекайтеся кінця ходу."}, status_code=409)
+        except Exception as e:  # noqa: BLE001 - shown to the player; the old campaign stays
+            return JSONResponse({"error": explain(e)}, status_code=502)
+        return JSONResponse(game.state())
+
     async def panel(_: Request) -> JSONResponse:
         return JSONResponse(game.panel())
 
@@ -191,6 +224,8 @@ def create_app(game: Game) -> Starlette:
         Route("/api/skip", skip, methods=["POST"]),
         Route("/api/presence", presence, methods=["POST"]),
         Route("/api/campaign/new", new_campaign, methods=["POST"]),
+        Route("/api/package/check", package_check, methods=["POST"]),
+        Route("/api/package/start", package_start, methods=["POST"]),
         Route("/api/panel", panel),
         Route("/api/debug", debug),
         Route("/api/challenge", challenge, methods=["POST"]),

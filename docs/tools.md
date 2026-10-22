@@ -133,6 +133,12 @@ Method notes:
 ### Prototype frontend
 - Role: static HTML/CSS/JS, no build step, no framework (`prototype/ui/`). Prototype only; the production frontend is **open**, see below.
 
+### PyYAML (game packages)
+- Role: parse the game package a player brings from an external AI chat ("Нова гра з файлу", `app/newgame.py`, task 5 of the book UI). Chosen: **PyYAML 6.0.3** (nixpkgs `ps.pyyaml` in the dev shell, built with libyaml), `yaml.safe_load` only.
+- Alternatives: JSON (no comments, and chat AIs often break it with trailing commas; the instruction document wants a commented file a person can read and edit), TOML (stdlib `tomllib` reads it, but nested lists of people are awkward to write and chat AIs produce it less reliably), ruamel.yaml (round-trip editing, not needed).
+- Reason: YAML is what any chat AI writes well, with comments for the player; it was not in the dev shell before, so it is added to `flake.nix`. Note: YAML 1.1 reads `on`/`off`/`yes`/`no` as booleans; the importer accepts both forms.
+- Checked: 2026-10-22 (version measured in the dev shell).
+
 ## Open roles (not chosen)
 
 ### Web framework for the phone app / API server
