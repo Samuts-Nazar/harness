@@ -61,6 +61,12 @@ def next_asks(judge):
     return [(st, qs) for st, qs in judge.asked if "next" in qs and "narration" not in qs]
 
 
+def seed(eng):
+    """Something already happened at this place: the next turn is not the first of the scene."""
+    eng._utterance("horst", "Раніше.")
+    return eng
+
+
 def speakers(res):
     return [u.payload["speaker"] for u in res.utterances]
 
@@ -329,6 +335,7 @@ def narrator_calls(prov):
 def test_quick_exchange_skips_narrator():
     eng, prov, judge = make(["Чого тобі?"], ["horst", PLAYER_FLOOR], ["short"],
                             rules={"director_narration": False})
+    seed(eng)
     words, narrated = [], []
     res = eng.turn("Так.", on_word=lambda n, w: words.append(w), on_narration=narrated.append)
     assert narrator_calls(prov) == [] and res.narration == "" and narrated == []
@@ -368,6 +375,7 @@ def test_outcome_forces_narration():
 
 def test_interrupt_before_first_step_without_narration_writes_nothing():
     eng, prov, judge = make(["Не буде."], ["horst"], ["short"], rules={"director_narration": False})
+    seed(eng)
     h = InterruptHandle()
     h.request()
     res = eng.turn("Так.", handle=h)
@@ -679,12 +687,14 @@ def test_skipped_narration_first_step_never_draws_silence_or_gesture():
     step 0 draws only speech shapes."""
     eng, prov, _ = make(["— Ну?"], ["horst", NOBODY], ["silence"], present=(PLAYER, "horst"),
                         rules={"director_narration": False})
+    seed(eng)
     res = eng.turn("Добрий вечір.")
     assert any(n["kind"] == "narration_skipped" for n in eng.devlog)
     assert [u.payload["text"] for u in res.utterances] == ["— Ну?"]
     # with a profile too: the sampled shape of step 0 is a speech shape
     eng, prov, _ = make(["— Ну?"], ["horst", NOBODY], ["gesture"], present=(PLAYER, "horst"),
                         rules={"director_narration": False}, world_profile=_witcher())
+    seed(eng)
     res = eng.turn("Добрий вечір.")
     note = next(n for n in eng.devlog if n["kind"] == "shape_sampled")
     assert note["shape"] not in ("silence", "gesture") and res.utterances
@@ -696,6 +706,7 @@ def test_skipped_narration_with_nothing_delivered_is_narrated():
     eng, prov, _ = make([], ["horst", NOBODY], ["short"], present=(PLAYER, "horst"),
                         rules={"director_narration": False})
     eng._shaped_line = lambda *a, **k: ""  # the NPC call gives nothing usable
+    seed(eng)
     res = eng.turn("Добрий вечір.")
     assert res.narration == NARRATION
     assert any(n["kind"] == "empty_exchange_narrated" for n in eng.devlog)
@@ -713,3 +724,81 @@ def test_speech_tag_naming_an_unlearned_character_is_masked_on_the_page():
     text = eng._npc_line(eng._prep_npc("elza"))
     assert "відказала жінка в темній хустці" in text
     assert "Ельза" not in text and "жінка в темній хустці глянула на двері" in text
+
+
+# -- a direct question gets an answer in speech (smoke item 6) -----------------------------------
+def test_direct_question_to_present_npc_is_answered_in_speech():
+    """The decider picks a gesture for Horst, or another speaker: when the player's words are a
+    question to Horst he still answers aloud."""
+    eng, prov, judge = make(["Три мідяки за ніч, панове."], ["elza", PLAYER_FLOOR], ["gesture"],
+                            rules={"director_addressee": "horst"})
+    res = eng.turn("Горст, скільки коштує ніч?")
+    assert speakers(res) == ["horst"]
+    assert res.utterances[0].payload["text"] == "Три мідяки за ніч, панове."
+    assert not any(k == "gesture" for k, _, _ in res.exchange)
+    assert any(n["kind"] == "addressee_answers" for n in eng.devlog)
+
+
+def test_direct_question_not_answered_by_silence_either():
+    eng, prov, judge = make(["Дві."], ["horst", PLAYER_FLOOR], ["silence"],
+                            rules={"director_addressee": "horst"})
+    res = eng.turn("Горст, скільки?")
+    assert speakers(res) == ["horst"]
+
+
+def test_no_direct_question_keeps_the_directors_pick():
+    eng, prov, judge = make(["Елза знизує плечима."], ["elza", NOBODY], ["gesture"],
+                            rules={"director_addressee": NOBODY})
+    res = eng.turn("Сідаю біля вогню.")
+    assert speakers(res) == [] and any(k == "gesture" for k, _, _ in res.exchange)
+    assert not any(n["kind"] == "addressee_answers" for n in eng.devlog)
+
+
+def test_addressee_question_is_in_the_first_batch_only():
+    eng, prov, judge = make(["Дві."], ["horst", PLAYER_FLOOR], ["short"],
+                            rules={"director_addressee": "horst"})
+    eng.turn("Горст, скільки?")
+    first = [qs for _, qs in next_asks(judge)]
+    assert "addressee" in first[0] and all("addressee" not in qs for qs in first[1:])
+
+
+# -- narration is kept on the first turn of a scene and on physical actions (smoke item 10) ------
+def _skipped(eng):
+    return [n for n in eng.devlog if n["kind"] == "narration_skipped"]
+
+
+def _two_turn_engine(rules):
+    eng, prov, judge = make(["— Ну?", "— Гм."], ["horst", NOBODY, "horst", NOBODY], ["short"],
+                            present=(PLAYER, "horst"), rules=rules,
+                            extractor=["none", diff(), "none", diff()])
+    prov.script["narrator"].append(NARRATION)
+    return eng, prov, judge
+
+
+def test_first_turn_of_a_scene_keeps_its_narration_even_if_the_director_says_talk():
+    eng, prov, _ = make(["— Ну?"], ["horst", NOBODY], ["short"], present=(PLAYER, "horst"),
+                        rules={"director_narration": False})
+    res = eng.turn("Добрий вечір.")
+    assert res.narration == NARRATION and not _skipped(eng)
+
+
+def test_later_talk_turn_may_still_skip_narration():
+    eng, prov, _ = _two_turn_engine({"director_narration": False})
+    eng.turn("Добрий вечір.")
+    res = eng.turn("Як справи?")
+    assert len(_skipped(eng)) == 1 and res.narration == ""
+
+
+def test_starred_action_keeps_narration():
+    eng, prov, _ = _two_turn_engine({"director_narration": False})
+    eng.turn("Добрий вечір.")
+    res = eng.turn("*Беру кухоль зі столу.* Дякую.")
+    assert res.narration and not _skipped(eng)
+
+
+def test_plain_text_physical_action_keeps_narration():
+    eng, prov, judge = _two_turn_engine({"director_narration": False, "director_physical": True})
+    eng.turn("Добрий вечір.")
+    res = eng.turn("Беру гребінець зі столу.")
+    assert res.narration and not _skipped(eng)
+    assert any("physical" in qs for _, qs in judge.asked)

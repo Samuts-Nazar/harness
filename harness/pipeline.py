@@ -36,7 +36,7 @@ from .memory import CharacterMemory, MemoryDeriver, MemoryWriter
 from .names import INTRODUCED, OVERHEARD, PLAYER_SAID, TOLD as NAME_TOLD, Names
 from .player_guard import PLAYER_ACT_Q, flag_player_acts, split_sentences, strip_player_quotes
 from .player_input import (
-    ACTION as PART_ACTION, SPEECH as SPEECH_PART, Part, render_for_model, split_input,
+    ACTION as PART_ACTION, SPEECH as SPEECH_PART, Part, has_action, render_for_model, split_input,
 )
 from .models import (
     ACTION as ACTION_EVENT,
@@ -1359,7 +1359,7 @@ class Engine:
         would stall the scene), later the floor goes back to the player."""
         try:
             return decide_next(self.judge, state, npcs, self.shape_prior,  # type: ignore[return-value]
-                               with_dist=True)
+                               with_dist=True, first=first)
         except JudgeError as e:
             kept = self._fallback_speakers(narration)[:1] if first else []
             self._note("director_unavailable", error=str(e), fallback=kept)
@@ -1395,11 +1395,24 @@ class Engine:
                    beat=beat, weights={s.value: round(w, 3) for s, w in weights.items()})
         return chosen, beat
 
-    def _without_narration(self, player_text: str
+    def _scene_starts(self, turn_events: Sequence[Event]) -> bool:
+        """The first turn of a scene: nothing was said or done at this place before this turn
+        (the events of this turn are left out)."""
+        mine = {e.id for e in turn_events}
+        before = [e for e in self.log.active([UTTERANCE, ACTION_EVENT, NARRATION])
+                  if e.id not in mine]
+        return not before or before[-1].location != self.scene.location
+
+    def _without_narration(self, player_text: str, *, keep: bool = False
                            ) -> tuple[str, Shape, dict[Shape, float]] | None:
         """Living mode: is the moment just talk? One batched call (the need for narration and the
         first exchange step, read without any narration). None: narrate as usual (the director
-        says so, or is unavailable). Otherwise the first step, and the narrator is not called."""
+        says so, or is unavailable). Otherwise the first step, and the narrator is not called.
+        `keep`: the turn always keeps its narration (the first turn of a scene, or an action the
+        player marked): no question is asked, the narrator is called."""
+        if keep:
+            self._note("narration_kept", why="scene_start_or_action")
+            return None
         npcs = {c: self.ctx.describe(c) for c in self.scene.present if c != PLAYER}
         state = self.ctx.director_state(self.scene, player_text, "")
         try:
@@ -1510,8 +1523,12 @@ class Engine:
                 self._note("same_speaker_stopped", npc=nxt, step=step + 1)
                 return
             last = nxt
-            shape, beat = self._choose_shape(nxt, shape, dist, step + 1,
-                                             speak=step == 0 and launch.first_step is not None)
+            answers = step == 0 and getattr(dist, "addressee", "") == nxt
+            if answers:
+                self._note("addressee_answers", npc=nxt, decider=shape.value)
+            shape, beat = self._choose_shape(
+                nxt, shape, dist, step + 1,
+                speak=answers or (step == 0 and launch.first_step is not None))
             name = self.names.real(nxt)
             if shape is Shape.SILENCE:
                 self._note("silence", npc=nxt, step=step + 1)
@@ -1786,7 +1803,8 @@ class Engine:
                         turn_events.append(record_death(self, outcome, player_ev))
             outcomes = [outcome] if outcome else []
 
-            first_step = (self._without_narration(model_text)
+            first_step = (self._without_narration(
+                              model_text, keep=has_action(parts) or self._scene_starts(turn_events))
                           if outcome is None and self._living(speakers) else None)
             if first_step is not None:
                 out = NarratorOutput("")

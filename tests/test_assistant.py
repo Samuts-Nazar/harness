@@ -135,3 +135,30 @@ def test_suggestions_drop_a_character_name_the_context_never_gave():
     eng.facts.add_canon("The player was told that Велерад keeps the city order.",
                         knowers=[(PLAYER, "told")])
     assert any("Велерада" in s for s in assistant.ask(eng, assistant.context(eng), 3))
+
+
+class FixedSpy:
+    def __init__(self, inner, raw):
+        self.inner, self.raw = inner, raw
+
+    def complete(self, model, messages):
+        return self.raw
+
+
+def test_suggestions_drop_a_verbatim_copy_of_what_was_just_said():
+    """Smoke 2026-10-22 item 9: the only suggestion repeated the NPC's line word for word."""
+    said = "А, того? — рука замерла на скатерті, а очі втекли до дверей."
+    eng, _ = make({})
+    eng._utterance("horst", said)
+    eng.provider = FixedSpy(eng.provider, "А, того? — рука замерла на скатерті.\n"
+                                          "*оглядається*\nСкільки з мене за ніч?")
+    out = assistant.ask(eng, assistant.context(eng), 3)
+    assert out == ["*оглядається*", "Скільки з мене за ніч?"]
+
+
+def test_suggestions_with_foreign_or_odd_words_are_dropped():
+    eng, _ = make({})
+    eng.provider = FixedSpy(eng.provider, "Take це, friend, і не питай.\nТы что, глухой?\n"
+                                          "*киваю*\nСкільки з мене за ніч?")
+    out = assistant.ask(eng, assistant.context(eng), 3)
+    assert out == ["*киваю*", "Скільки з мене за ніч?"]

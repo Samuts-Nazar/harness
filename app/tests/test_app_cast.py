@@ -147,6 +147,7 @@ def test_ink_assignment_does_not_write_during_streaming(monkeypatch):
 
 def test_people_are_masked_and_carry_known_facts():
     g = make()
+    g.eng._utterance("horst", "Раніше.")  # not the first turn of the scene (that one is narrated)
     play(g)
     c = TestClient(create_app(g))
     r = c.get("/api/people")

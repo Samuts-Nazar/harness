@@ -67,7 +67,8 @@ def test_engine_logs_style_hits_and_counts_them():
     eng = Engine(prov, profs, Scene("Корчма", (PLAYER, "horst"), time=0), models=ModelConfig(),
                  judge=FakeJudge({"director_first": "horst", "director_also": False}))
     res = eng.turn("привіт")
-    assert res.style["count"] == 2 and res.style["by_kind"] == {"metonymy": 1, "aphorism": 1}
+    # the first turn at a place keeps its narration, so the narrator's line is counted too
+    assert res.style["count"] == 3 and res.style["by_kind"] == {"metonymy": 2, "aphorism": 1}
     notes = [n for n in eng.devlog if n["kind"] == "style_hit"]
     assert {n["hit"] for n in notes} == {"metonymy", "aphorism"}
     assert eng.reports[-1]["style"] is res.style

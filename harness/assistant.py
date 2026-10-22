@@ -94,6 +94,39 @@ def parse(raw: str, n: int, avoid: Sequence[str] = ()) -> list[str]:
     return out
 
 
+OVERLAP_WORDS = 4  # this many words in a row copied from the recent text make a suggestion a copy
+
+
+def _words(text: str) -> list[str]:
+    return re.findall(r"[^\W\d_]+(?:['’ʼ-][^\W\d_]+)*", text.lower())
+
+
+def odd_suggestion(text: str) -> str | None:
+    """Why a suggestion is not usable as the player's line: letters of another script (Russian
+    only letters included), a run of Latin words (the model slipping into English), markup."""
+    if re.search(r"[ыэъёЫЭЪЁ]", text):
+        return "russian letters"
+    if re.search(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\u0590-\u06ff\u0900-\u097f]", text):
+        return "foreign script"
+    if len(re.findall(r"(?<![\w'])[A-Za-z]{4,}(?![\w'])", text)) >= 1:
+        return "latin words"
+    if re.search(r"</?think|<\|", text) or "\ufffd" in text:
+        return "markup"
+    return None
+
+
+def copies_recent(text: str, recent: str, n: int = OVERLAP_WORDS) -> bool:
+    """The suggestion repeats `n` or more consecutive words of the recent world text (or, if it is
+    shorter than that, all of its words in a row)."""
+    mine, theirs = _words(text), _words(recent)
+    if not mine or not theirs:
+        return False
+    k = min(n, len(mine))
+    grams = {tuple(theirs[i:i + k]) for i in range(len(theirs) - k + 1)}
+    return any(tuple(mine[i:i + k]) in grams for i in range(len(mine) - k + 1)) \
+        and (len(mine) >= n or len(mine) >= 3)
+
+
 def ask(engine: "Engine", ctx: Context, n: int = 3, avoid: Sequence[str] = ()) -> list[str]:
     """The model call on an already rendered context (no database access)."""
     user = ctx.user
@@ -123,7 +156,9 @@ def ask(engine: "Engine", ctx: Context, n: int = 3, avoid: Sequence[str] = ()) -
         raw = call()
         if foreign_runs(raw, lang):
             raw = "\n".join(cut_foreign(line, lang) for line in raw.splitlines())
-    out = parse(raw, n, avoid)
+    recent = ctx.user.split("What just happened", 1)[-1] if "What just happened" in ctx.user else ""
+    out = [s for s in parse(raw, n + 3, avoid)
+           if odd_suggestion(s) is None and not copies_recent(s, recent)][:n]
     if ctx.known is not None:  # a name the character has not learned stays an appearance
         masked = [engine.ctx.mask(PLAYER, s, ctx.known) for s in out]
         out = []
