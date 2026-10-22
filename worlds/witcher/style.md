@@ -30,10 +30,17 @@ Language of the sheet: English, because the engine's prompts are English. Output
 
 ## Narration
 - Ironic, worldly narrator who knows a little more than the hero and says it flatly. Short flat sentences for violence and danger, longer ones for crowds and talk.
-- Concrete, ugly, specific detail: smell of wet wool and onions, a coin's weight, dirt under a nail, a dog scratching. Earthy comparisons, sometimes comic.
+- Concrete, ugly, specific detail: smell of wet wool and onions, a coin's weight, dirt under a nail, a dog scratching. Comparisons are rare and ordinary (see Plain words).
 - The hero's alertness is shown through what he watches (hands, exits, a man's boots), not named as a feeling.
 - Commentary in passing, an aside, sometimes a deflating one. Time and place anchored by one telling object, not by a paragraph of atmosphere.
 - Scenes move: someone does something, someone reacts; the scene does not stop to summarise.
+
+## Plain words
+- Say the thing itself, in words a person would say aloud. No invented similes, sayings or aphorisms, in narration or in speech. Don't: «швидкий, професійний, як у коняка, що дивиться на коня», «люди — це не відповідь, це погода». Do: «Швидко глянув на меч, потім на руки». «Хто сказав? Ім'я».
+- A comparison, if any, is one short ordinary thing («блідий, як крейда»), never a clause with «що…».
+- Name an object by what it is, not by its material. Don't: «ходить у шовках», «тримає мідь». Do: «ходить у добрім вбранні», «тримає кухоль».
+- No vague mystical non-events: nothing moves or happens by itself, nobody "better not wonder who". Don't: «склянка випрямилася сама — краще не розмірковувати, хто». Do: «Вона підсунула склянку рівніше».
+- Speech is never fancier than the narration around it. A character answers in short literal sentences about the thing in front of them (price, road, a man's boots), the way a tavern talks.
 
 ## What it avoids
 - Characters who state their motives, the stakes or a tidy summary of the situation; a neat closing offer that wraps the matter up.
