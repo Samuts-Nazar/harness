@@ -147,9 +147,9 @@ def test_suggestions_of_the_current_turn_only_and_cleared_by_a_new_turn():
 
 
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
-def test_speaker_named_only_where_the_speaker_changes_and_never_on_gestures():
-    """Mockup B, pure prose (lead's ruling): a quiet name only when the speaker changed from the
-    previous speech paragraph and no beat of the line names them; gestures carry no tag."""
+def test_every_npc_line_and_gesture_carries_the_masked_label():
+    """Speaker names are a CSS switch (body.names): the label is in every NPC speech and gesture
+    paragraph, in the masked form the page was given; player and narration have none."""
     t = "a1b2c3d4"
     state = {"title": "t", "live": False, "clock": "x", "panel": PANEL, "transcript": [
         {"kind": "npc", "tok": t, "label": "сивий чоловік", "text": "Сто п'ятдесят?"},
@@ -157,14 +157,12 @@ def test_speaker_named_only_where_the_speaker_changes_and_never_on_gestures():
         {"kind": "npc", "tok": t, "label": "сивий чоловік", "text": "Ну?"},
         {"kind": "npc", "tok": "e5f6", "label": "жінка в хустці",
          "text": "*жінка в хустці хитає головою* Ні."},
-        {"kind": "npc", "tok": t, "label": "сивий чоловік", "text": "*він хмикає* Гм."},
     ]}
     texts = [p["text"] for p in run({"state": state})["feed"]]
     assert texts[0].startswith("сивий чоловік: — Сто")
-    assert texts[1] == "Сивий чоловік кашляє.", "no tag on a gesture"
-    assert texts[2] == "— Ну?", "same speaker as the previous speech: no tag"
-    assert "жінка в хустці:" not in texts[3], "a beat already names her"
-    assert texts[4].startswith("сивий чоловік: він хмикає."), "a beat that does not name him"
+    assert texts[1] == "сивий чоловік: Сивий чоловік кашляє.", "a gesture is labelled too"
+    assert texts[2] == "сивий чоловік: — Ну?", "the same speaker twice: labelled both times"
+    assert texts[3].startswith("жінка в хустці: жінка в хустці хитає головою"), texts[3]
 
 
 def _reload_state(last_player, pending):
@@ -189,7 +187,7 @@ def test_reload_in_the_slow_lane_skips_only_that_turn_and_a_retract_removes_it()
         {"type": "turn_done", "turn": 2, "clock": "x", "panel": PANEL, "lines": [2], "cut_lines": []},
     ]
     got = run({"load": _reload_state("Друга.", "Друга."), "events": replayed})
-    assert [p["text"] for p in got["feed"]] == ["Перша.", "він: — Раз.", "Друга.", "— Два."], "no duplicate"
+    assert [p["text"] for p in got["feed"]] == ["Перша.", "він: — Раз.", "Друга.", "він: — Два."], "no duplicate"
     retracted = run({"load": _reload_state("Друга.", "Друга."), "events": replayed + [
         {"type": "retract", "turn": 2, "text": "Друга.", "message": "збій"}]})
     assert [p["text"] for p in retracted["feed"]] == ["Перша.", "він: — Раз."]
@@ -198,7 +196,7 @@ def test_reload_in_the_slow_lane_skips_only_that_turn_and_a_retract_removes_it()
         {"type": "turn_start", "turn": 3, "text": "Третя."},
         {"type": "speaker", "turn": 3, "tok": "aa", "label": "він"},
         {"type": "word", "turn": 3, "tok": "aa", "w": "Три."}]})
-    assert [p["text"] for p in nxt["feed"]][-2:] == ["Третя.", "— Три."], "the next turn is shown"
+    assert [p["text"] for p in nxt["feed"]][-2:] == ["Третя.", "він: — Три."], "the next turn is shown"
 
 
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
@@ -219,7 +217,7 @@ def test_reload_after_an_error_does_not_swallow_the_next_turn():
     ]
     got = run({"load": state, "events": evs})
     texts = [p["text"] for p in got["feed"]]
-    assert texts == ["Перша.", "він: — Раз.", "Перша-б.", "— Два.", "Третя.", "— Три."], texts
+    assert texts == ["Перша.", "він: — Раз.", "Перша-б.", "він: — Два.", "Третя.", "він: — Три."], texts
 
 
 # -- final whole-branch review -------------------------------------------------------------------

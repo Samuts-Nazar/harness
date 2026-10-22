@@ -173,7 +173,8 @@ def main() -> None:
         assert ink_h.lower() in PALETTE, ink_h
         assert color(page, f"{hsel} .q") == rgb(ink_h), "speech is in the character's ink"
         assert color(page, "#btnInterrupt") == rgb(ink_h), "✋ is tinted with the speaker's ink"
-        assert page.text_content(f"{hsel} .who").strip().rstrip(":"), "a new speaker is named once"
+        assert page.locator(f"{hsel} .who").first.is_visible(), "speaker names are on by default"
+        assert page.text_content(f"{hsel} .who").strip().rstrip(":"), "the label has a name"
         shot(page, "03-npc-speaking")
         wait_idle(page)
         assert not page.is_visible("#btnInterrupt") and page.is_visible("#btnIdea"), "💡 when idle"
@@ -260,11 +261,11 @@ def main() -> None:
         assert page.locator(esel).count() >= 2, "the same speaker twice is two paragraphs"
         assert page.locator(".cut").count() == 0, "a skip is not an interrupt"
         assert color(page, f"{ACT} .act-text") != rgb(ink_h), "a gesture stays in the base ink"
-        # mockup B, pure prose: a quiet name only where the speaker changes; none on gestures
-        assert page.locator(f"{ACT} .who").count() == 0, "a gesture names its actor in its text"
-        assert page.locator(f"{esel} .who").count() == 1, "Ельза named on her first line only"
-        assert page.locator(esel).first.locator(".who").count() == 1
-        assert page.locator(f"{hsel} .who").count() == 1
+        # speaker names (default on): a label on every NPC speech paragraph and every gesture
+        for kind in (SAY, ACT):
+            n = page.locator(kind).count()
+            assert n and page.locator(f"{kind} .who:visible").count() == n, f"every {kind} line is named"
+        assert page.locator(".me .who, .narr .who, .intro .who").count() == 0, "player and narration unnamed"
         no_hscroll(page, "after the exchange")
         shot(page, "05b-exchange-with-gesture")
 
@@ -347,6 +348,16 @@ def main() -> None:
         page.wait_for_timeout(300)  # the drawer's slide-in
         shot(page, "06-drawer")
 
+        # speaker names switch: off hides every label (past lines too), the choice survives a reload
+        assert page.get_attribute("#btnNames", "aria-pressed") == "true"
+        page.click("#btnNames")
+        assert page.get_attribute("#btnNames", "aria-pressed") == "false"
+        assert page.locator(".who").count() > 0 and page.locator(".who:visible").count() == 0, "all labels hidden"
+        no_hscroll(page, "names off")
+        page.click("#btnNames")
+        assert page.locator(".who:visible").count() == page.locator(".who").count(), "back on: all shown"
+        page.click("#btnNames")  # off again for the reload check below
+
         # debug view (from the drawer)
         page.click("#btnDebug")
         page.wait_for_selector("#debugPanel:not([hidden]) h4")
@@ -361,7 +372,7 @@ def main() -> None:
         page.click("#debugClose")
         assert page.is_hidden("#debugPanel")
 
-        # reload: the same paragraphs, in the same inks
+        # reload: the same paragraphs, in the same inks, names still off
         before = page_signature(page)
         page.reload()
         page.wait_for_selector(".intro")
@@ -372,6 +383,13 @@ def main() -> None:
         assert page.locator(".me").count() == 5
         assert before == after, json.dumps([b for b, a in zip(before, after) if b != a] or
                                            [len(before), len(after)], ensure_ascii=False)[:2000]
+        assert page.locator(".who").count() > 0 and page.locator(".who:visible").count() == 0, "names stay off"
+        page.click("#btnMenu")
+        page.wait_for_selector("#drawer[open]")
+        assert page.get_attribute("#btnNames", "aria-pressed") == "false"
+        page.click("#btnNames")  # on again
+        assert page.locator(".who:visible").count() == page.locator(".who").count()
+        page.keyboard.press("Escape")
         no_hscroll(page, "after reload")
         shot(page, "08-after-reload")
 

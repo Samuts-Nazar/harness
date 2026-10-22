@@ -67,7 +67,8 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 #feed [data-line] { -webkit-touch-callout: none; }   /* a long press opens the line menu, not the callout */
 .npc .q { color: var(--c); }
 .npc .beat { color: var(--tag); font-style: italic; }
-.who { font-style: italic; color: var(--muted); }   /* a quiet name, only where the speaker changes */
+.who { display: none; font-style: italic; color: var(--c, var(--muted)); }   /* the speaker's name: shown by body.names */
+body.names .who { display: inline; }
 .act { color: var(--ink); }
 .act .act-text { font-style: italic; }
 .cut::after { content: " ✋ перебито"; font-size: 0.75em; font-style: italic; color: var(--danger); white-space: nowrap; }

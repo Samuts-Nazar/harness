@@ -48,6 +48,12 @@ async function loadCast() {
   catch (e) { return; }
   cast = {};
   for (const c of list) { cast[c.tok] = c; setInk(c.tok, c.ink); }
+  for (const p of feed.querySelectorAll(".npc[data-tok]")) {   // a learned name changes the label of past lines too
+    const c = cast[p.dataset.tok];
+    if (!c || !c.label || c.label === p.dataset.label) continue;
+    p.dataset.label = c.label;
+    p.querySelectorAll(".who").forEach((w) => { w.textContent = c.label + ":"; });
+  }
   renderLegend();
 }
 
@@ -76,18 +82,18 @@ function segments(text) {
   });
   return out;
 }
-// a speech paragraph names its speaker (subtly) only when the speaker changed from the previous
-// speech paragraph and no beat of the line names them; otherwise colour, dash and legend carry it
-function needsTag(p, segs) {
-  if (p._prevTok === p.dataset.tok) return false;
-  const label = String(p.dataset.label || "").toLowerCase();
-  return !segs.some((s) => s.beat && label && s.text.toLowerCase().includes(label));
+// the speaker's masked label; shown or hidden by the body class `names` (the ☰ switch), never rebuilt
+function whoTag(p) { return el("span", "who", (p.dataset.label || "") + ":"); }
+function setNames(on) {
+  document.body.classList.toggle("names", on);
+  $("btnNames").setAttribute("aria-pressed", String(on));
+  $("btnNames").textContent = "🏷 Імена мовців: " + (on ? "так" : "ні");
 }
 function fillBody(p, text) {
   p._raw = text;
   const body = el("span", "body");
   const segs = segments(text);
-  if (p.dataset.line === "say" && needsTag(p, segs)) body.append(el("span", "who", p.dataset.label + ":"), document.createTextNode(" "));
+  if (p.dataset.line === "say") body.append(whoTag(p), document.createTextNode(" "));
   segs.forEach((s, i) => {
     if (i) body.appendChild(document.createTextNode(" "));
     if (!s.beat) { body.appendChild(el("span", "q", "— " + s.text)); return; }
@@ -99,20 +105,14 @@ function fillBody(p, text) {
   p._body = body;
   if (old) old.replaceWith(body); else p.appendChild(body);   // keeps an open ask box after it
 }
-function who(p, tok, label) {   // no visible tag: gesture text names the actor itself
+function who(p, tok, label) {
   p.dataset.tok = tok;
   p.dataset.label = label || "";
   p.style.setProperty("--c", inkVar(tok));
 }
-function prevSpeaker() {   // the speaker of the last speech paragraph on the page so far
-  const ls = lines();
-  for (let i = ls.length - 1; i >= 0; i--) if (ls[i].dataset.line === "say") return ls[i].dataset.tok;
-  return null;
-}
 function sayBlock(tok, label, text, cut, event) {
   const p = el("p", "npc"); p.dataset.line = "say"; p.tabIndex = 0;
   who(p, tok, label);
-  p._prevTok = prevSpeaker();
   fillBody(p, text || "");
   if (cut) p.classList.add("cut");
   if (event != null) p.dataset.event = event;
@@ -121,7 +121,7 @@ function sayBlock(tok, label, text, cut, event) {
 function actBlock(tok, label, text) {
   const p = el("p", "npc act"); p.dataset.line = "act"; p.tabIndex = 0;
   who(p, tok, label);
-  p.appendChild(el("span", "act-text", text));
+  p.append(whoTag(p), document.createTextNode(" "), el("span", "act-text", text));
   return p;
 }
 function narrBlock(text, cls = "narr") {
@@ -844,6 +844,11 @@ $("pkgFile").addEventListener("change", async () => {
   $("pkgFile").value = "";
   checkPackage();
 });
+$("btnNames").addEventListener("click", () => {
+  const on = !document.body.classList.contains("names");
+  setNames(on); store("names", on ? "1" : "0");
+});
+setNames(store("names") !== "0");   // default on; the choice is per device
 function showDebug(on) {
   $("debugPanel").hidden = !on;
   $("btnDebug").setAttribute("aria-pressed", String(on));
