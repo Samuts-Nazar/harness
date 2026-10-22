@@ -125,6 +125,7 @@ def test_correction_gives_up_after_the_wait():
 # -- finding 5: no model call under the game lock; the stream never waits for it -------------
 def test_stream_and_state_answer_while_slow_translations_run():
     g = make()
+    g.eng._utterance("horst", "Раніше.")  # not the first turn of the scene (that one is narrated)
     started, gate = threading.Event(), threading.Event()
     calls: list[int] = []
 

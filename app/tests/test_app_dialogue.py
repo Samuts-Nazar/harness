@@ -65,12 +65,14 @@ def test_app_defaults_to_living_dialogue():
 
 def test_app_turn_without_narration():
     g = make()
-    g.start_turn("Добрий вечір.")
+    g.start_turn("Добрий вечір.")  # the first turn of a scene is always narrated
+    g.wait_idle(20)
+    assert any(t["kind"] == "narr" for t in g.transcript)
+    g.start_turn("Як справи?")
     g.wait_idle(20)
     types = [e["type"] for e in g.events_after(0)]
     assert "speaker" in types and "word" in types and "turn_done" in types
-    assert "narr_start" not in types and "narr_word" not in types
-    assert not any(t["kind"] == "narr" for t in g.transcript)
+    assert len([t for t in g.transcript if t["kind"] == "narr"]) == 1
 
 
 def test_empty_exchange_turn_renders():

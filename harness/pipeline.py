@@ -35,7 +35,7 @@ from . import knowledge
 from .memory import CharacterMemory, MemoryDeriver, MemoryWriter
 from .names import INTRODUCED, OVERHEARD, PLAYER_SAID, TOLD as NAME_TOLD, Names
 from .player_input import (
-    ACTION as PART_ACTION, SPEECH as SPEECH_PART, Part, render_for_model, split_input,
+    ACTION as PART_ACTION, SPEECH as SPEECH_PART, Part, has_action, render_for_model, split_input,
 )
 from .models import (
     ACTION as ACTION_EVENT,
@@ -1332,11 +1332,24 @@ class Engine:
                    beat=beat, weights={s.value: round(w, 3) for s, w in weights.items()})
         return chosen, beat
 
-    def _without_narration(self, player_text: str
+    def _scene_starts(self, turn_events: Sequence[Event]) -> bool:
+        """The first turn of a scene: nothing was said or done at this place before this turn
+        (the events of this turn are left out)."""
+        mine = {e.id for e in turn_events}
+        before = [e for e in self.log.active([UTTERANCE, ACTION_EVENT, NARRATION])
+                  if e.id not in mine]
+        return not before or before[-1].location != self.scene.location
+
+    def _without_narration(self, player_text: str, *, keep: bool = False
                            ) -> tuple[str, Shape, dict[Shape, float]] | None:
         """Living mode: is the moment just talk? One batched call (the need for narration and the
         first exchange step, read without any narration). None: narrate as usual (the director
-        says so, or is unavailable). Otherwise the first step, and the narrator is not called."""
+        says so, or is unavailable). Otherwise the first step, and the narrator is not called.
+        `keep`: the turn always keeps its narration (the first turn of a scene, or an action the
+        player marked): no question is asked, the narrator is called."""
+        if keep:
+            self._note("narration_kept", why="scene_start_or_action")
+            return None
         npcs = {c: self.ctx.describe(c) for c in self.scene.present if c != PLAYER}
         state = self.ctx.director_state(self.scene, player_text, "")
         try:
@@ -1720,7 +1733,8 @@ class Engine:
                         turn_events.append(record_death(self, outcome, player_ev))
             outcomes = [outcome] if outcome else []
 
-            first_step = (self._without_narration(model_text)
+            first_step = (self._without_narration(
+                              model_text, keep=has_action(parts) or self._scene_starts(turn_events))
                           if outcome is None and self._living(speakers) else None)
             if first_step is not None:
                 out = NarratorOutput("")

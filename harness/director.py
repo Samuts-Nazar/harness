@@ -31,6 +31,7 @@ FIRST_TAG, ALSO_TAG = "director_first", "director_also"
 NEXT_TAG, SHAPE_TAG = "director_next", "director_shape"
 NARRATION_TAG = "director_narration"
 ADDRESSEE_TAG = "director_addressee"
+PHYSICAL_TAG = "director_physical"
 # heads the lines of the exchange so far in the director's state (absent on the first step)
 EXCHANGE_HEADER = "This exchange so far, in order (the last line was just said):"
 
@@ -144,6 +145,15 @@ def needs_narration_question() -> Question:
         "a question and its answer, needs none.", tag=NARRATION_TAG)
 
 
+def physical_action_question() -> Question:
+    """Yes/no: is the player's input something they physically DO (not only say)?"""
+    return yes_no_q(
+        "Look at the player character's latest input. Does the character physically do "
+        "something in it (take, give, put, open, hit, touch, walk, leave, sit, hide, drink, "
+        "steal), as opposed to only speaking or asking? Answer yes if there is any physical "
+        "action, even a small one next to speech.", tag=PHYSICAL_TAG)
+
+
 def _step(got: Mapping[str, Any], npcs: Mapping[str, str]) -> tuple[str, Shape, dict[Shape, float]]:
     nxt = str(got["next"].answer)
     if nxt not in npcs and nxt != PLAYER_FLOOR:
@@ -172,10 +182,11 @@ def decide_first_step(judge: Judge, state: Sequence[str], npcs: Mapping[str, str
     first exchange step as `decide_next` answers it). The state has no narration yet; when the
     answer is yes the caller narrates and asks the first step again with the narration.
     `with_dist`: also the decider's distribution over the shapes (`shape.decider_dist`)."""
-    qs = {"narration": needs_narration_question(),
+    qs = {"narration": needs_narration_question(), "physical": physical_action_question(),
           **(next_floor_questions(npcs, prior, first=True) if npcs else {})}
     got = judge.ask(state, qs)
-    need = bool(got["narration"].answer)
+    # a physical action in the input always gets its narrated result
+    need = bool(got["narration"].answer) or bool(got["physical"].answer)
     if not npcs:
         nxt, shape, dist = NOBODY, Shape.NORMAL, {}
     else:
