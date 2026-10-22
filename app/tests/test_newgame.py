@@ -373,7 +373,8 @@ def test_player_knowledge_is_a_belief_not_world_truth(tmp_path):
     rumour = [t for t in texts if "старого палацу" in t]
     assert rumour and all(t != "У місті кажуть, що біля старого палацу щось неладне і люди "
                           "туди не ходять уночі." for t in rumour)
-    assert all("believes" in t for t in rumour)
+    assert all("вважає (з власного життя" in t for t in rumour)
+    assert not any("believes" in t for t in texts)
 
 
 def test_pointer_is_written_only_after_a_successful_build(tmp_path, monkeypatch):

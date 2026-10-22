@@ -225,3 +225,22 @@ def test_drawer_says_vy_in_the_case_of_the_replaced_word():
     assert _as_the_character("Гравець бачив.") == "Ви бачив."   # no name: «ви»
     assert f("") == ""
     assert f("Ігровий гравецький стіл.") == "Ігровий гравецький стіл."
+
+
+def test_translated_panel_and_known_facts_never_show_an_unlearned_name():
+    """Smoke 2026-10-22: a record in English wrote the name in Latin ("Horst"), the mask (which
+    knows the Ukrainian spelling) let it through, and the translator turned it into «Горст».
+    The mask runs again on the translated text, in every case form the translator may produce."""
+    g = make()
+    g.start_turn("Що кажете?")
+    g.wait_idle(20)
+    assert not g.eng.names.knows("player", "horst")
+    g.camp.translate = lambda texts: [t.replace("Horst", "Горста").replace("asks", "питає")
+                                      for t in texts]
+    g.eng.facts.add_canon("The player asks Horst (a stout man) about the mill.",
+                          knowers=[("player", "witnessed")])
+    panel = g._compute_panel()
+    assert panel["prose"] and not any("Горст" in p for p in panel["prose"])
+    cast = [{"tok": g.camp.tok("horst"), "label": "x", "ink": "#000000", "present": True}]
+    known = g._compute_known(cast)
+    assert not any("Горст" in f for facts in known.values() for f in facts)

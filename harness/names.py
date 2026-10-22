@@ -78,6 +78,10 @@ class Names:
                 hits.append((m.start(), c))
         return [c for _, c in sorted(hits)]
 
+    def named_in(self, text: str) -> list[str]:
+        """Ids of every character (hidden or not) whose name occurs in `text`."""
+        return [c for c in self.profiles if self._pattern(c).search(text)]
+
     # -- the registry -----------------------------------------------------------------------
     def events(self, viewer: str | None = None) -> list[Event]:
         return [e for e in self.log.active([NAME_LEARNED])

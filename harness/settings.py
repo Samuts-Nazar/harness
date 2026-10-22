@@ -11,3 +11,5 @@ MAX_SPEAKERS = 2  # the scene director names at most this many speakers per turn
 NPC_REJECT_P = 0.7  # an NPC line is rejected when the check's suspicion reaches this
 DEFAULT_DIALOGUE = "living"  # "living": the director picks each next line (task LD-4); "classic": MAX_SPEAKERS
 MAX_EXCHANGE_LINES = 6  # living mode: at most this many director steps (NPC lines) per player turn
+FAST_TIMEOUT_S = 20.0  # a narrator or NPC call that has not answered by now is retried on its fallback route
+FAST_ROLES = frozenset({"narrator", "npc"})  # the calls the player waits for with an open page

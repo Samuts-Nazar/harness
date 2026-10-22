@@ -111,3 +111,27 @@ def test_suggestions_mask_names_the_player_character_does_not_know():
     out = assistant.ask(eng, ctx, 3)
     assert out and not any("Горст" in s for s in out), out
     assert any(HORST.lower() in s.lower() for s in out), out
+
+
+class VeleradSpy:
+    def __init__(self, inner):
+        self.inner = inner
+
+    def complete(self, model, messages):
+        return "Скажи, а що ти знаєш про Велерада?\n*оглядається*\nЩо скажете?"
+
+
+def test_suggestions_drop_a_character_name_the_context_never_gave():
+    """Smoke 2026-10-22: the model knows the books and offered «що ти знаєш про Велерада?». That
+    character has no appearance, so the name mask does not hide him; but his name was nowhere in
+    what the player character knows, so a line that says it is dropped."""
+    from harness.models import CharacterProfile
+    eng, _ = make({})
+    eng.profiles["velerad"] = CharacterProfile("velerad", "Велерад", "Радник короля.")
+    eng.provider = VeleradSpy(eng.provider)
+    out = assistant.ask(eng, assistant.context(eng), 3)
+    assert out == ["*оглядається*", "Що скажете?"]
+    # a name the context did give stays
+    eng.facts.add_canon("The player was told that Велерад keeps the city order.",
+                        knowers=[(PLAYER, "told")])
+    assert any("Велерада" in s for s in assistant.ask(eng, assistant.context(eng), 3))

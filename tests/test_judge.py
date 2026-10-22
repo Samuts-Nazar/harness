@@ -161,6 +161,21 @@ def test_llm_judge_rejects_garbage_after_one_stricter_retry():
     assert LLMJudge(ok, "llm").yes_no("q?").answer is False
 
 
+def test_llm_judge_yes_no_number_is_p_yes_even_when_the_model_gives_confidence():
+    """Smoke 2026-10-22: the model answered "no" with p_yes 0.98 (its confidence in "no"). The
+    NPC check read that as suspicion 0.98 and rejected nearly every line. The answer wins; a
+    number on the other side of 0.5 is taken as confidence in that answer."""
+    for reply, yes, p_yes in (
+            ({"answer": "no", "p_yes": 0.98}, False, 0.02),
+            ({"answer": "yes", "p_yes": 0.03}, True, 0.97),
+            ({"answer": "no", "p_yes": 0.1}, False, 0.1),
+            ({"answer": "yes", "p_yes": 0.9}, True, 0.9)):
+        j = LLMJudge(FakeProvider(script={"llm": [json.dumps({"q": reply})]}), "llm").yes_no("q?")
+        assert j.answer is yes
+        assert j.probabilities["yes"] == pytest.approx(p_yes)
+        assert j.probability > 0.5
+
+
 def test_llm_judge_accepts_bracketed_question_names():
     prov = FakeProvider(script={"llm": ['```json\n{"[a:mag]": {"answer": 2}}\n```']})
     out = LLMJudge(prov, "llm").ask([], {"a:mag": score_q("how much?", legend=("x", "y", "z"))})

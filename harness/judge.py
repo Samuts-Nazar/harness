@@ -200,7 +200,8 @@ class LLMJudge(Judge):
     @staticmethod
     def _spec(q: Question) -> str:
         if q.kind == YES_NO:
-            return f'{q.text}\n  answer: {{"answer": "yes"|"no", "p_yes": 0..1}}'
+            return (f'{q.text}\n  answer: {{"answer": "yes"|"no", "p_yes": 0..1}} '
+                    '(p_yes is the probability that the answer is YES: above 0.5 only if "yes")')
         if q.kind == CHOICE:
             opts = "; ".join(f"{k}: {v}" for k, v in q.options.items())
             return (f'{q.text}\n  options: {opts}\n  answer: {{"answer": <option>, '
@@ -236,6 +237,8 @@ class LLMJudge(Judge):
             yes = str(a["answer"]).lower().startswith("y")
             p = a.get("p_yes")
             p = float(p) if isinstance(p, (int, float)) else (1.0 if yes else 0.0)
+            if (p >= 0.5) != yes:  # the model gave its confidence in the answer, not P(yes)
+                p = 1 - p
             return Judgment(yes, {"yes": p, "no": 1 - p}, p if yes else 1 - p, backend="llm")
         if q.kind == CHOICE:
             ch = a["answer"]

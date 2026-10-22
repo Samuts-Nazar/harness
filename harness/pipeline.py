@@ -70,7 +70,7 @@ from .repetition import WINDOW as REPETITION_WINDOW, measure_turn, sentences
 from .profile import WorldProfile, distance, profile_of_lines
 from .settings import (
     DEFAULT_DIALOGUE, DEFAULT_NARRATION, DEFAULT_OUTPUT_LANGUAGE, DEFAULT_RECORD_LANGUAGE,
-    MAX_EXCHANGE_LINES, MAX_SPEAKERS, NPC_REJECT_P,
+    FAST_ROLES, FAST_TIMEOUT_S, MAX_EXCHANGE_LINES, MAX_SPEAKERS, NPC_REJECT_P,
 )
 from .shape import (SPEECH_SHAPES, Shape, beat_wanted, fit_to_shape, sample_shape, shape_prior,
                     shape_weights, word_bounds)
@@ -142,6 +142,10 @@ class ModelConfig:
                    FALLBACKS["narrator"], FALLBACKS["npc"], FALLBACKS["extractor"],
                    FALLBACKS["judge_llm"], assistant=DEFAULT_NPC,
                    assistant_fallback=FALLBACKS["npc"])
+
+
+class _Timeout(RuntimeError):
+    """A fast-lane call did not answer within `Engine.fast_timeout`."""
 
 
 @dataclass
@@ -252,6 +256,7 @@ class Engine:
         pace: float = 0.0,
         parallel: bool | None = None,
         npc_reject_p: float = NPC_REJECT_P,
+        fast_timeout: float | None = FAST_TIMEOUT_S,
         output_language: str | None = DEFAULT_OUTPUT_LANGUAGE,
         record_language: str | None = DEFAULT_RECORD_LANGUAGE,
         narration: str = DEFAULT_NARRATION,
@@ -272,6 +277,8 @@ class Engine:
         works before the narrator writes (harness/outcome.py); `player_unlimited` is the campaign
         flag `player_unbounded` (the player's own acts always happen, only reactions are judged).
         `npc_reject_p`: an NPC line is rejected at suspicion >= this.
+        `fast_timeout`: seconds a narrator or NPC call may take before it is retried once on the
+        role's fallback model (the same model when there is none); None: no limit.
         `output_language`: language of narration and NPC speech (player-facing).
         `record_language`: language the extractor writes records in (None: the model's choice).
         `narration`: "prose" (narrator returns free text; speakers and observable actions come
@@ -314,6 +321,7 @@ class Engine:
         self.narrate_retries, self.check_retries = narrate_retries, check_retries
         self.parallel = bool(getattr(provider, "parallel_ok", False)) if parallel is None else parallel
         self.npc_reject_p = npc_reject_p
+        self.fast_timeout = fast_timeout
         self.output_language, self.record_language = output_language, record_language
         self.narration, self.glossary, self.max_speakers = narration, glossary, max_speakers
         self.hear_each_other = hear_each_other
@@ -376,19 +384,54 @@ class Engine:
         (self.devlog if buf is None else buf).append({"kind": kind, **info})
 
     # -- model calls, workers -------------------------------------------
+    def _call(self, role: str, model: str, messages: list[dict[str, str]]) -> str:
+        """`provider.complete`; for a fast-lane role (narrator, NPC) not longer than
+        `fast_timeout`. A call that is out of time is abandoned (its late answer is dropped) and
+        raises `_Timeout`."""
+        if self.fast_timeout is None or role not in FAST_ROLES:
+            return self.provider.complete(model, messages)
+        box: dict[str, Any] = {}
+        done = threading.Event()
+
+        def run() -> None:
+            try:
+                box["out"] = self.provider.complete(model, messages)
+            except BaseException as e:  # noqa: BLE001 - re-raised in the caller's thread
+                box["err"] = e
+            finally:
+                done.set()
+
+        threading.Thread(target=run, daemon=True).start()
+        if not done.wait(self.fast_timeout):
+            raise _Timeout(f"{model}: no answer in {self.fast_timeout:g} s")
+        if "err" in box:
+            raise box["err"]
+        return box["out"]
+
     def _complete(self, role: str, messages: list[dict[str, str]]) -> str:
-        """One model call for `role`; if it fails after retries, the role's fallback model."""
+        """One model call for `role`; if it fails after retries, or a fast-lane call is out of
+        time (note `model_timeout`), the role's fallback model (the same model once more when
+        there is none)."""
         model = getattr(self.models, role)
         fallback = getattr(self.models, role + "_fallback", None)
         self.llm_calls.append(role)  # counted here, so any provider is counted
         try:
-            return self.provider.complete(model, messages)
+            return self._call(role, model, messages)
+        except _Timeout as e:
+            retry = fallback or model
+            self._note("model_timeout", role=role, model=model, seconds=self.fast_timeout,
+                       retry_on=retry, error=str(e))
+            self.llm_calls.append(role)
+            try:
+                return self._call(role, retry, messages)
+            except _Timeout as e2:
+                raise ProviderError(f"{retry}: timed out twice ({e2})") from e2
         except ProviderError as e:
             if not fallback:
                 raise
             self._note("model_fallback", role=role, model=model, fallback=fallback, error=str(e))
             self.llm_calls.append(role)
-            return self.provider.complete(fallback, messages)
+            return self._call(role, fallback, messages)
 
     def _complete_text(self, role: str, messages: list[dict[str, str]]) -> str:
         """A creative call (narrator, NPC) whose output must stay in the output language's
@@ -920,7 +963,7 @@ class Engine:
         parsed = split_npc_output(text, self._name_words)
         if not parsed.has_dash:
             return text
-        for beat in parsed.beats:
+        for beat in [*parsed.beats, *parsed.tags]:  # a bare tag ("відказала Ванда") names too
             masked = self.names.mask(PLAYER, beat, known=prep.player_known)
             if masked != beat:
                 text = text.replace(beat, masked)

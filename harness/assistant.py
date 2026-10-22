@@ -127,7 +127,15 @@ def ask(engine: "Engine", ctx: Context, n: int = 3, avoid: Sequence[str] = ()) -
     if ctx.known is not None:  # a name the character has not learned stays an appearance
         masked = [engine.ctx.mask(PLAYER, s, ctx.known) for s in out]
         out = []
+        given = ctx.system + "\n" + ctx.user
+        # the model also knows the books: a character it names whom the context never gave (and
+        # whom the player character has not met by name) cannot be masked if he has no
+        # appearance, so the line is dropped
+        invented = {c for c in engine.names.named_in("\n".join(masked)) if c != PLAYER
+                    and c not in ctx.known and not engine.names._pattern(c).search(given)}
         for s in masked:
+            if invented and any(c in invented for c in engine.names.named_in(s)):
+                continue
             if s not in out and s.strip().lower() not in {a.strip().lower() for a in avoid}:
                 out.append(s)
     return out

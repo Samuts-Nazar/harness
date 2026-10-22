@@ -700,3 +700,16 @@ def test_skipped_narration_with_nothing_delivered_is_narrated():
     assert res.narration == NARRATION
     assert any(n["kind"] == "empty_exchange_narrated" for n in eng.devlog)
     assert "empty_exchange_narrated" in CODE_CHOICE_KINDS
+
+
+def test_speech_tag_naming_an_unlearned_character_is_masked_on_the_page():
+    """Smoke 2026-10-22: «— Знати знаю, — відказала Ванда, — але…» reached the player while the
+    speaker was still «жінка в темній хустці»: a bare speech tag is not a beat, so it was never
+    masked. Spoken words stay literal; the tag shows what the player sees."""
+    line = "— Знати знаю, — відказала Ельза, — але щоб я їх усіх рахувала? — Ельза глянула на двері."
+    from harness.style import Style
+    eng, *_ = make([line], ["elza", NOBODY], ["normal"], present=(PLAYER, "elza"), style=Style(),
+                   extractor=["none", "говорить тихо", diff()], world_profile=_witcher())
+    text = eng._npc_line(eng._prep_npc("elza"))
+    assert "відказала жінка в темній хустці" in text
+    assert "Ельза" not in text and "жінка в темній хустці глянула на двері" in text
