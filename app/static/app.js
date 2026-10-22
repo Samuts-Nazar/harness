@@ -726,8 +726,8 @@ async function loadPeople() {
   }
 }
 async function loadPlaces() {   // "where can I go" (Task 4); nothing when the endpoint is missing
-  let list = [];
-  try { const r = await fetch("/api/places"); if (r.ok) list = await r.json(); } catch (e) { list = []; }
+  let list = [], ok = false;
+  try { const r = await fetch("/api/places"); if (r.ok) { list = await r.json(); ok = true; } } catch (e) { list = []; }
   if (list && !Array.isArray(list)) list = list.places || [];
   const ul = $("places"); ul.textContent = "";
   for (const pl of list || []) {
@@ -744,7 +744,9 @@ async function loadPlaces() {   // "where can I go" (Task 4); nothing when the e
     if (mins >= 0) li.appendChild(el("small", "", " · ~" + mins + " хв"));
     ul.appendChild(li);
   }
-  $("placesSec").hidden = !ul.children.length;
+  // an answering endpoint with no places (a start off the map): say so instead of an empty list
+  $("placesNone").hidden = !ok || ul.children.length > 0;
+  $("placesSec").hidden = !ok;
 }
 $("btnMenu").addEventListener("click", () => {
   $("drawer").showModal();

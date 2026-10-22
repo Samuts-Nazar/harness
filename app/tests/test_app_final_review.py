@@ -245,3 +245,19 @@ def test_translated_panel_and_known_facts_never_show_an_unlearned_name():
     cast = [{"tok": g.camp.tok("horst"), "label": "x", "ink": "#000000", "present": True}]
     known = g._compute_known(cast)
     assert not any("Горст" in f for facts in known.values() for f in facts)
+
+
+def test_model_error_without_event_on_an_npc_line_says_what_to_send():
+    """Smoke 2026-10-22 item 14: `event: null` on a turn that ends with an NPC line answered
+    «Це вже не воно»; the message now says to send the event number."""
+    g = make()
+    g.start_turn("Що кажете?")
+    g.wait_idle(20)
+    assert g.transcript[-1]["kind"] == "npc"
+    c = TestClient(create_app(g))
+    r = c.post("/api/model_error", json={"event": None, "explanation": "не так"})
+    assert r.status_code == 400
+    assert "event" in r.json()["error"] and "номер" in r.json()["error"]
+    assert "Це вже не воно" not in r.json()["error"]
+    ok = c.post("/api/model_error", json={"event": last(g, "npc")["event"], "explanation": "не так"})
+    assert ok.status_code == 200

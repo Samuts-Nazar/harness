@@ -346,7 +346,8 @@ def main() -> None:
         page.wait_for_selector(f"#people [data-tok='{horst}']")
         people = page.inner_text("#people")
         assert "Горст" not in people and "horst" not in people, "people are masked"
-        assert page.is_hidden("#placesSec"), "no places endpoint yet: no section"
+        assert page.is_visible("#placesNone"), "no places on this map: the drawer says so"
+        assert "немає позначених" in page.inner_text("#placesNone")
         no_hscroll(page, "drawer")
         page.wait_for_timeout(300)  # the drawer's slide-in
         shot(page, "06-drawer")
