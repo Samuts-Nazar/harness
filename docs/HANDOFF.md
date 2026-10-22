@@ -61,7 +61,7 @@ You are the lead ("brain") for the harness project. The user talks to you; Sonne
   - Spec: `docs/superpowers/specs/2026-10-22-interactive-book-ui-design.md` (approved). Plan: `docs/superpowers/plans/2026-10-22-interactive-book-ui.md`. Mockups: `docs/design/ui-mockups/`.
   - Branch `book-ui`, worktree `.claude/worktrees/book-ui`, ledger `.claude/worktrees/book-ui/.superpowers/sdd/2026-10-22-interactive-book-ui/progress.md`.
   - Task 1 is complete (tokens, inks, `/api/cast`, `/api/people`).
-  - Task 2, the turn assistant, was dispatched at the session switch. Check `git -C .claude/worktrees/book-ui log --oneline 625cb29..` and the worktree status; if the agent is lost, re-dispatch Task 2 from its brief in the ledger folder.
+  - Task 2, the turn assistant, is implemented (f96f3f2) but NOT yet reviewed. Next step: its task review (package 625cb29..f96f3f2, built with the skill's `review-package` script), then Task 3.
   - Tasks 3 (client page) and 4 (places and a live check) remain, then the final review and the merge.
 - **Next, after the UI:** active play tests by the user on the Vizima pilot (`docs/pilot_vizima_test_plan.md`, `app/static/checklist.html`). Start: `nix develop --command python -m app --live --host 0.0.0.0 --budget 0.5`; phone at `http://192.168.1.109:8765/`.
 - **Later projects agreed with the user:**
