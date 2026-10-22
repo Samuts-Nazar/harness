@@ -499,7 +499,7 @@ class Game:
             world = [en for en in self.transcript[last_player + 1:]
                      if en["kind"] in ("narr", "npc", "npc_act")]
             tail = world[-1] if world else None
-            if (tail is None or tail["kind"] == "npc_act" or tail.get("event") is None
+            if (tail is None or tail.get("event") is None
                     or (event is not None and tail.get("event") != event)
                     or (event is None and tail["kind"] != "narr")):  # null: the narration
                 raise Refused("Помилку моделі можна позначити лише на останньому, що сказав чи "
@@ -510,6 +510,8 @@ class Game:
             except ValueError as e:
                 raise Refused("Це вже не останнє, що сказав чи описав світ.") from e
             out = asdict(res)
+            if kind == "npc_act":  # the transcript shows the gesture as the player sees it
+                res.text = self.eng.ctx.mask(PLAYER, res.text).strip()
             self._apply_regen(res, event, kind)
             self.debug = {**self.debug, "model_error": out,
                           "notes": self.debug.get("notes", []) + self.eng.devlog[-3:]}
@@ -644,8 +646,9 @@ class Game:
                 act = eng.ctx.mask(PLAYER, str(ev.payload.get("text", ""))).strip()
                 if act:
                     tok = self._note_speaker(who)
-                    entries.append({"kind": "npc_act", "tok": tok, "label": label, "text": act})
-                    self._emit("npc_act", tok=tok, label=label, text=act)
+                    entries.append({"kind": "npc_act", "tok": tok, "label": label, "text": act,
+                                    "event": ev.id})
+                    self._emit("npc_act", tok=tok, label=label, text=act, event=ev.id)
                 cur["who"] = None
 
         def on_narration(narration: str) -> None:

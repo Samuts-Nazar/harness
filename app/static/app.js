@@ -118,9 +118,10 @@ function sayBlock(tok, label, text, cut, event) {
   if (event != null) p.dataset.event = event;
   return p;
 }
-function actBlock(tok, label, text) {
+function actBlock(tok, label, text, event) {
   const p = el("p", "npc act"); p.dataset.line = "act"; p.tabIndex = 0;
   who(p, tok, label);
+  if (event != null) p.dataset.event = event;
   p.append(whoTag(p), document.createTextNode(" "), el("span", "act-text", text));
   return p;
 }
@@ -154,7 +155,7 @@ function lineInfo(p) {
 function sheetItems(x, offered) {
   const out = [];
   if (x.kind === "say" && x.event) out.push("challenge");
-  if (offered.includes("model_error") && x.lastWorld && x.kind !== "act" && !x.busy) out.push("model_error");
+  if (offered.includes("model_error") && x.lastWorld && (x.kind !== "act" || x.event) && !x.busy) out.push("model_error");
   if (offered.includes("cut") && x.kind === "say" && x.lastWorld && x.lastLine && !x.busy && !x.cut)
     out.push("cut");
   if (x.tok && (x.kind === "say" || x.kind === "act")) out.push("ink");
@@ -506,7 +507,7 @@ function render(state) {
     if (t.kind === "intro") n = narrBlock(t.text, "intro");
     else if (t.kind === "player") { n = meBlock(t.text); lastTurnNodes = []; }
     else if (t.kind === "narr") { if (t.text && t.text.trim()) n = narrBlock(t.text); }
-    else if (t.kind === "npc_act") n = actBlock(t.tok, t.label, t.text);
+    else if (t.kind === "npc_act") n = actBlock(t.tok, t.label, t.text, t.event);
     else n = sayBlock(t.tok, t.label, t.text, t.cut, t.event);
     if (!n) continue;
     add(n, false);
@@ -551,7 +552,7 @@ const handlers = {
     cur = add(sayBlock(e.tok, e.label, "")); turnNpc.push(cur); streaming(cur);
     setBusy(true, "speaking");
   },
-  npc_act(e) { newSpeaker(e.tok); cur = add(actBlock(e.tok, e.label, e.text)); streaming(null); },
+  npc_act(e) { newSpeaker(e.tok); cur = add(actBlock(e.tok, e.label, e.text, e.event)); streaming(null); },
   word(e) {
     if (!cur || cur.dataset.line !== "say") return;
     const p = cur;

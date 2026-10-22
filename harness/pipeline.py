@@ -2019,6 +2019,14 @@ class Engine:
             res = Challenge("model_error", npc=npc, event=event_id)
             self._regenerate(ev, res, explanation)
             return res
+        if ev.type == ACTION_EVENT:  # an NPC gesture
+            npc, text = ev.payload["by"], ev.payload["text"]
+            self._event(CORRECTION, [npc], {"npc": npc, "line": text, "explanation": explanation,
+                                            "line_event": event_id, "reason": "model error",
+                                            "gesture": True}, witnesses=[], notability=0.1)
+            res = Challenge("model_error", npc=npc, event=event_id)
+            self._regenerate_gesture(ev, res)
+            return res
         if ev.type != NARRATION:
             raise ValueError("only a line or a narration passage can be a model error")
         text = ev.payload["text"]
@@ -2195,6 +2203,32 @@ class Engine:
             self._note("regenerated_line_not_extracted", event=new.id)
         self.refresh_memory()
         res.regenerated, res.text, res.new_event = True, text, new.id
+
+    def _regenerate_gesture(self, old: Event, res: "Challenge") -> None:
+        """Replace the NPC gesture `old` by a new one made the way the exchange makes a gesture
+        step (same context, gesture shape and name fixing), with the correction in the NPC's
+        context. Failing (or no action coming back) puts the old gesture back."""
+        npc = old.payload["by"]
+        self.log.rollback(old.id, "model error: gesture")
+        try:
+            prep = self._prep_npc(npc)
+            text = self._shaped_line(prep, Shape.GESTURE,
+                                     word_bounds(Shape.GESTURE, self.world_profile))
+            if not text:
+                raise RuntimeError("the gesture could not be written again")
+            act = self._fix_names(beat_as_action(text, self.names.real(npc),
+                                                 [self.names.label(npc)]), "npc_beat")
+        except Exception:
+            self._event(ACTION_EVENT, [npc], {"text": old.payload["text"], "by": npc,
+                                              "gesture": True, "replaces": old.id,
+                                              "restored": True}, notability=0.3)
+            self.refresh_memory()
+            raise
+        new = self._event(ACTION_EVENT, [npc], {"text": act, "by": npc, "gesture": True,
+                                                "replaces": old.id, "regenerated": True},
+                          notability=0.3)
+        self.refresh_memory()
+        res.regenerated, res.text, res.new_event = True, act, new.id
 
     # -- long-run NPCs (task 19) -----------------------------------------------------------
     def add_npc(self, spec: NpcSpec, *, description: str = "", appearance: str = "") -> CharacterProfile:
