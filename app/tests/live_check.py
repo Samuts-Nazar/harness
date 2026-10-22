@@ -36,7 +36,7 @@ def main() -> None:
             print(f"    {c['role']:<18} {c['model']:<36} {c['seconds']:>5} s  ${c['cost']:.5f}")
         print(f"    judgments: {len(d['judgments'])}  notes: {[n['kind'] for n in d['notes']]}")
         for t in game.transcript[-3:]:
-            print(f"    [{t['kind']}{':' + t['name'] if 'name' in t else ''}] {t['text'][:220]}")
+            print(f"    [{t['kind']}{':' + t['label'] if 'label' in t else ''}] {t['text'][:220]}")
     print(f"\ntotal spend ${stack.spend.total:.4f} over {stack.spend.calls} paid calls")  # type: ignore[union-attr]
     print("panel:", game.panel())
 

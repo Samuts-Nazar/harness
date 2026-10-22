@@ -118,3 +118,47 @@ def test_events_and_transcript_carry_tokens_not_ids():
     rebuilt = [t for t in g.camp.transcript() if t["kind"] == "npc"]
     assert [(t["tok"], t["label"]) for t in rebuilt] == [(t["tok"], t["label"]) for t in npc]
     assert "horst" not in str(g.state()["transcript"])
+    c = TestClient(create_app(g))
+    stream = "".join(line for line in _raw_sse(c))
+    assert "horst" not in stream and "elza" not in stream and "Горст" not in stream
+
+
+def _raw_sse(c):
+    with c.stream("GET", "/api/events?after=0&until_idle=1") as r:
+        yield from r.iter_lines()
+
+
+def test_token_salt_is_random_per_campaign_and_stable_on_reopen():
+    root = tempfile.mkdtemp(prefix="harness-app-")
+    g1, g2 = make(root), make()
+    assert g1.camp.tok("horst") != g2.camp.tok("horst")
+    assert g1.camp.tok("horst") != token_for(g1.camp.name, "horst")
+    assert make(root).camp.tok("horst") == g1.camp.tok("horst")
+
+
+def test_ink_assignment_does_not_write_during_streaming(monkeypatch):
+    g = make()
+    writes = []
+    orig = g.camp.inks.flush
+    monkeypatch.setattr(type(g.camp.inks), "flush", lambda self: (writes.append(1), orig())[1])
+    play(g)
+    assert g.cast() and writes  # flushed at the turn's end, not per speaker
+
+
+def test_people_are_masked_and_carry_known_facts():
+    g = make()
+    play(g)
+    c = TestClient(create_app(g))
+    r = c.get("/api/people")
+    assert r.status_code == 200
+    people = r.json()
+    assert people and all(set(x) == {"tok", "label", "ink", "present", "known"} for x in people)
+    assert "horst" not in r.text and "Горст" not in r.text  # not introduced
+    assert all(isinstance(f, str) for x in people for f in x["known"])
+
+
+def test_ink_rejects_malformed_json():
+    c = TestClient(create_app(make()))
+    assert c.post("/api/ink", content=b"{nope", headers={"content-type": "application/json"}
+                  ).status_code == 400
+    assert c.post("/api/ink", json=[1]).status_code == 400

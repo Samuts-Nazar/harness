@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import secrets
 from pathlib import Path
 from typing import Mapping, Sequence
 
@@ -24,7 +25,8 @@ INK_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
 def token_for(campaign_seed: str, character_id: str) -> str:
-    """A stable 8-character opaque token for a character in one campaign."""
+    """A stable 8-character opaque token for a character in one campaign. `campaign_seed` is the
+    campaign's random salt (see `InkBook.salt`), so a token cannot be guessed back to an id."""
     h = hashlib.sha256(f"{campaign_seed}|{character_id}".encode()).hexdigest()
     return h[:8]
 
@@ -48,20 +50,36 @@ def assign_ink(present_tokens: Sequence[str], inks: Mapping[str, str],
 
 
 class InkBook:
-    """token -> ink, persisted in a small json file (None path: in memory only)."""
+    """token -> ink, persisted in a small json file, plus the campaign's random token salt in a
+    file beside it (None path: in memory only). `set` only marks the book dirty; `flush` writes,
+    so the streaming path never does file I/O under a lock."""
 
     def __init__(self, path: Path | None) -> None:
         self.path = path
         self.inks: dict[str, str] = {}
+        self.dirty = False
+        self.salt = ""
+        salt_file = path.with_name("token_salt.txt") if path is not None else None
         if path is not None and path.exists():
             try:
                 self.inks = {str(k): str(v) for k, v in json.loads(path.read_text()).items()}
             except (OSError, ValueError):
                 self.inks = {}
+        if salt_file is not None and salt_file.exists():
+            self.salt = salt_file.read_text().strip()
+        if not self.salt:
+            self.salt = secrets.token_hex(16)
+            if salt_file is not None:
+                salt_file.write_text(self.salt)
 
     def set(self, tok: str, ink: str) -> None:
         self.inks[tok] = ink
-        if self.path is not None:
-            tmp = self.path.with_suffix(".tmp")
-            tmp.write_text(json.dumps(self.inks, ensure_ascii=False))
-            tmp.replace(self.path)
+        self.dirty = True
+
+    def flush(self) -> None:
+        if not self.dirty or self.path is None:
+            return
+        self.dirty = False
+        tmp = self.path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(dict(self.inks), ensure_ascii=False))
+        tmp.replace(self.path)

@@ -92,6 +92,8 @@ class Game:
                 if t.get("tok"):
                     self._touch(t["tok"])
             self._cast = self._compute_cast()
+            self._known: dict[str, list[str]] = self._compute_known()
+            self.camp.inks.flush()
             self.turn_start_seq = self.seq
             self._emit("reset")
             self.turn_start_seq = self.seq
@@ -176,6 +178,41 @@ class Game:
                 if c["tok"] == tok:
                     c["ink"] = ink.lower()
             self._emit("ink", tok=tok, ink=ink.lower())
+        self.camp.inks.flush()
+
+    def _compute_known(self) -> dict[str, list[str]]:
+        """Per cast token, a few short things the player character knows about that person,
+        from the character's own derived memory and masked like everything the player sees.
+        A fact counts as about a person when it mentions their name or appearance."""
+        eng = self.eng
+        mem = eng.deriver.derive(PLAYER, eng.scene.time)
+        raw = [it.fact.content for it in mem.knows]
+        out: dict[str, list[str]] = {}
+        for c in self._cast:
+            cid = next((i for i in eng.profiles if self.camp.tok(i) == c["tok"]), None)
+            if cid is None:
+                continue
+            p = eng.profiles[cid]
+            keys = [k.lower() for k in (p.name, p.appearance) if k]
+            hidden = not eng.names.knows(PLAYER, cid)
+            facts = []
+            for text in raw:
+                if not any(k in text.lower() for k in keys):
+                    continue
+                shown = eng.ctx.mask(PLAYER, text).rstrip(".") + "."
+                if hidden and p.name.lower() in shown.lower():
+                    continue  # the mask missed a form of the name: better nothing than a leak
+                if shown not in facts:
+                    facts.append(shown)
+            tr = self.camp.translate
+            if tr is not None and facts:
+                facts = tr(facts[-4:])
+            out[c["tok"]] = facts[-4:]
+        return out
+
+    def people(self) -> list[dict[str, Any]]:
+        with self.lock:
+            return [{**c, "known": list(self._known.get(c["tok"], []))} for c in self._cast]
 
     # -- views ------------------------------------------------------------------------------
     def panel(self) -> dict[str, Any]:
@@ -349,6 +386,7 @@ class Game:
             self._turn(text, handle, eng, rec, spend, t0)
         finally:
             self._ended = eng.ended  # this thread is the database's only user here
+            self.camp.inks.flush()  # inks given to new characters this turn (no lock held)
 
     def _turn(self, text: str, handle: InterruptHandle, eng: Any, rec: Any, spend: Any,
               t0: float) -> None:
@@ -456,6 +494,7 @@ class Game:
                 self.debug = {**self.debug, "world": world.report(since)}
             self._panel = self._compute_panel()
             self._cast = self._compute_cast()  # labels may have changed: a name was learned
+            self._known = self._compute_known()
             self._emit("settled", panel=self._panel, clock=self.clock())
             if eng.ended:
                 self._emit("ended", chronicle=self.chronicle())

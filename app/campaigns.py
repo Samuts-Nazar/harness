@@ -173,7 +173,7 @@ class Campaign:
 
     def tok(self, cid: str) -> str:
         """The opaque client key of a character in this campaign."""
-        return token_for(self.name or "campaign", cid)
+        return token_for(self.inks.salt, cid)
 
     def speaker_ids(self) -> list[str]:
         """Everyone the player has seen speak or act, in order of first appearance."""

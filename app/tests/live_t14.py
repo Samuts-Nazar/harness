@@ -76,7 +76,7 @@ def main() -> None:
                 ov = len(s & seen) / len(s) if s else 0.0
                 overlaps.append(ov)
                 seen |= s
-                print(f"  [{t['name']}] overlap={ov:.2f}  {t['text']}")
+                print(f"  [{t['label']}] overlap={ov:.2f}  {t['text']}")
             elif t["kind"] == "narr":
                 print(f"  (narration) {t['text'][:160]}")
     print(f"\nMODE {mode}: mean overlap with own earlier lines {sum(overlaps) / max(len(overlaps), 1):.3f} "

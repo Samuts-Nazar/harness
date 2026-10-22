@@ -92,8 +92,16 @@ def create_app(game: Game) -> Starlette:
     async def cast(_: Request) -> JSONResponse:
         return JSONResponse(game.cast())
 
+    async def people(_: Request) -> JSONResponse:
+        return JSONResponse(game.people())
+
     async def ink(request: Request) -> JSONResponse:
-        body = await request.json()
+        try:
+            body = await request.json()
+            if not isinstance(body, dict):
+                raise ValueError
+        except ValueError:
+            return JSONResponse({"error": "Недійсний запит."}, status_code=400)
         try:
             game.set_ink(str(body.get("tok", "")), body.get("ink"))
         except KeyError:
@@ -142,6 +150,7 @@ def create_app(game: Game) -> Starlette:
         Route("/api/challenge", challenge, methods=["POST"]),
         Route("/api/knowledge", knowledge),
         Route("/api/cast", cast),
+        Route("/api/people", people),
         Route("/api/ink", ink, methods=["POST"]),
         Route("/api/events", events),
         Mount("/static", StaticFiles(directory=STATIC), name="static"),

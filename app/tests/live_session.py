@@ -66,7 +66,7 @@ def main() -> None:
               f"sh {r.get('shape')}) fixed={len(nm.get('fixed', []))} near={nm.get('near_misses')} "
               f"err={row['error']}")
         for t in game.transcript[-3:]:
-            print(f"      [{t['kind']}{':' + t['name'] if 'name' in t else ''}] {t['text'][:200]}")
+            print(f"      [{t['kind']}{':' + t['label'] if 'label' in t else ''}] {t['text'][:200]}")
     # name consistency over everything stored and shown
     g = Glossary.for_world("witcher")
     eng = game.eng
