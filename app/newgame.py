@@ -51,6 +51,7 @@ KIND = "package"
 WORLDS = ("witcher",)
 MAX_PEOPLE = 6
 MAX_TEXT = 200_000   # characters of a package, checked before the YAML parser runs
+MAX_TONE = 1_000     # characters of `tone`; it reaches every narrator prompt
 MAX_NOTES = 4_000    # characters of `notes` (with the unknown fields) that reach the narrator
 MAX_SHOW = 300       # characters of one unknown field's value kept in the notes
 LONG_LOOK = 8  # words: a longer appearance makes a clumsy label
@@ -418,6 +419,10 @@ def parse(text: str) -> Package:
         if got is not None:
             d[k] = got
     tone = c.text("tone", _joined(raw.get("tone")))
+    if tone and len(tone) > MAX_TONE:
+        tone = tone[:MAX_TONE].rsplit(" ", 1)[0] + "…"
+        c.warnings.append(Issue("tone", f"Опис тону задовгий; оповідач побачить перші {MAX_TONE} знаків.",
+                                "Опишіть тон кількома реченнями."))
     if tone:
         d["tone"] = tone
 

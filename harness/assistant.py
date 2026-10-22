@@ -77,8 +77,7 @@ def context(engine: "Engine") -> Context:
     known = engine.names.known_set(PLAYER) if engine.names else None
     msgs = ctx.finish([{"role": "system", "content": SYSTEM + ctx.limits_section()},
                        {"role": "user", "content": "\n\n".join(parts)}], PLAYER, known)
-    return Context(msgs[0]["content"], msgs[1]["content"],
-                   known if known is not None else frozenset())
+    return Context(msgs[0]["content"], msgs[1]["content"], known)   # None = no name tracking, no masking
 
 
 def parse(raw: str, n: int, avoid: Sequence[str] = ()) -> list[str]:

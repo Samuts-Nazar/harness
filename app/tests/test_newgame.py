@@ -444,3 +444,8 @@ def test_instruction_says_follow_needs_a_canon_start_and_unknown_names_stay_hidd
     doc = (ROOT / "docs" / "new_game_instruction.md").read_text(encoding="utf-8")
     assert "лише для канонічного старту" in doc
     assert "knows_player: false" in doc and "доки не представиться" in doc
+
+
+def test_long_tone_is_capped_with_a_warning():
+    pkg = parse(MINIMAL + "tone: \"" + "похмуро й повільно " * 200 + "\"\n")
+    assert len(pkg.data["tone"]) <= 1_001 and any(w.field == "tone" for w in pkg.warnings)
