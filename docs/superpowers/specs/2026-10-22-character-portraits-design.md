@@ -1,6 +1,6 @@
 # Character portraits — design
 
-Date: 2026-10-22. Status: draft for the user's approval.
+Date: 2026-10-22. Status: approved by the user on 2026-10-22.
 
 ## Intent and the why
 
@@ -73,6 +73,8 @@ Research behind this design:
 - **Canon extraction is agent work, not a pipeline.** Claude Code agents read the local book (free, as the project rules say) with throwaway helper scripts in `experiments/portraits/`, and write the YAML portraits once. There are no paid API calls, so no extraction budget. "60–70% automatic" is an estimate, not an acceptance bar. The bar is the lead's review plus the user's play.
 - **Judges see the relationship too.** The outcome judge (agree, refuse, help) and the scene director get the NPC's current relationship to the player and its stance as one line, so a warm stance cannot get a cold outcome. Trust feeding belief (what an NPC believes from whom) is noted for later, not built now.
 - **Name form:** «Єніфер» joins the glossary's wrong forms of Йеннефер. Our round-2 test files are corrected.
+
+- **Relationship ladder and romance.** Every portrait has stances for every rung of the ladder (stranger → petitioner/client → ally → close → lover), not just for strangers. A phase decides who the character is now (wants, wounds, knowledge). The ladder decides how they treat this person. Behaviour with close people is drawn from wherever the books show it, then fitted to the phase (Rinde Yennefer is not used to closeness). The player moves up or down only through the character's own switches (for Yennefer: warmth from unpaid attention, sincerity for sincerity, courage without flattery; setbacks from pity, flattery, pathos, pressure, touching her wound). Romance is possible but never guaranteed. Hidden layers leak more as trust grows but are never named. Intimate scenes follow the package's content limits (shown or veiled). Canon is gravity, so a romance with the player is a butterfly effect and canon is not forced back.
 
 ## Left to the builder
 
