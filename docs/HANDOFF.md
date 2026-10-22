@@ -68,3 +68,4 @@ You are the lead ("brain") for the harness project. The user talks to you; Sonne
   - models above the price ceiling: first show the user which models they are (names, prices, why), no spend before their OK;
   - speaker names on the page: a setting (on = names visible, off = colours only).
 - **Known test-data defects:** `experiments/bakeoff/testset/npc.json` c07 lists Marta as Roche's rumour source, and the old tests predate names-as-knowledge. Fix them when touching these sets.
+- **2026-10-22 afternoon:** speaker-names switch in the ☰ drawer (merged). Blind writing test round 2 (`reports/human_ab/README2.md`, page `/static/human_ab2.html`; Єніфер first meeting + 6 Визім moments; glm-5.3, glm-5.3-flash, mistral-large-4-0, mimo-flash, mimo-pro) is waiting for the user's grades. GLM needs `reasoning: {effort: low, exclude: true}` (it refuses reasoning off; that caused round 1's glitches). Next: read the grades, decide narrator/NPC models with the user.
