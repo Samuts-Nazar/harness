@@ -67,6 +67,7 @@ from .policy import (
     DEFAULT_EXTRACTOR, DEFAULT_JUDGE_LLM, DEFAULT_NARRATOR, DEFAULT_NPC, FALLBACKS,
 )
 from .providers import Provider, ProviderError
+from .stylehits import count_by_kind, style_hits
 from .repetition import WINDOW as REPETITION_WINDOW, measure_turn, sentences
 from .profile import WorldProfile, distance, profile_of_lines
 from .settings import (
@@ -228,6 +229,7 @@ class TurnResult:
     actions: list[str] = field(default_factory=list)
     repetition: dict[str, Any] = field(default_factory=dict)  # see harness/repetition.py
     names: dict[str, Any] = field(default_factory=dict)  # glossary report of the turn
+    style: dict[str, Any] = field(default_factory=dict)  # prose-quality hits (harness/stylehits.py)
     decisions: DecisionCount | None = None  # set when the slow lane settles (harness/decisions.py)
     # why the NPCs stopped talking: "player_addressed", "nobody", "cap" or "interrupted" (living
     # mode); classic mode sets only "interrupted"
@@ -1638,7 +1640,14 @@ class Engine:
         near = [m for _, t in outs for m in g.near_misses(t)] if g else []
         result.names = {"fixed": fixes, "near_misses": near,
                         "canonical": sum(g.canonical_count(t) for _, t in outs) if g else 0}
-        self.reports.append({"repetition": result.repetition, "names": result.names})
+        hits = []
+        for who, t in outs:
+            for h in style_hits(t):
+                hits.append((who, h))
+                self._note("style_hit", source=who, hit=h.kind, text=h.text[:160])
+        result.style = {"count": len(hits), "by_kind": count_by_kind([h for _, h in hits])}
+        self.reports.append({"repetition": result.repetition, "names": result.names,
+                             "style": result.style})
 
     # -- the player's input, names learned from speech ---------------------------------------
     def _player_events(self, parts: list[Part], raw: str) -> list[tuple[str, Event]]:

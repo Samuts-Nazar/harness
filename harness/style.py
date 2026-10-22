@@ -514,7 +514,9 @@ NPC_CORE = (
     "word, say less than they know and the real thing last and sideways. They are afraid, "
     "greedy, proud or tired in ways they show by what they do and avoid, never by announcing "
     "it. A line is a move in a bargain or a quarrel, not information handed over. No summary of "
-    "the situation, no neat closing offer, no polite filler, no stock phrases of fiction.")
+    "the situation, no neat closing offer, no polite filler, no stock phrases of fiction. Talk "
+    "in plain words, short and literal, like a real person in a tavern: no similes, no "
+    "sayings, no clever definitions.")
 
 NPC_FORM = (
     "Form, as the Ukrainian books write dialogue: a dash opens speech. Your own small physical "
@@ -549,8 +551,8 @@ NARR_CORE = (
     "You write the narration of a role-playing game in the manner of Sapkowski's Witcher books "
     "in Ukrainian: an ironic, worldly narrator who knows a little more than the hero and says it "
     "flatly. Concrete, ugly, specific detail (smell, dirt, the weight of a coin, a dog "
-    "scratching), earthy comparisons, short flat sentences for danger and longer ones for "
-    "crowds. Show the hero's alertness by what he watches. No stock atmosphere (ominous, "
+    "scratching), short flat sentences for danger and longer ones for crowds. Plain words: "
+    "no invented similes or sayings, objects named as what they are. Show the hero's alertness by what he watches. No stock atmosphere (ominous, "
     "palpable silence, a chill down the spine, the air grew heavy), no summarising of feelings, "
     "no moralising. Scenes move: someone does something, someone reacts. The characters' own "
     "small gestures while they speak are written with their lines by their own calls: narrate "
@@ -590,7 +592,8 @@ class Style:
         if prof.manner and prof.manner != "-":
             parts.append(f"How {prof.name} talks: {prof.manner}")
         parts.append(NPC_CORE)
-        parts.append(self._sec("dialogue", "voices by class", "irony and subtext", "what it avoids"))
+        parts.append(self._sec("dialogue", "voices by class", "irony and subtext", "plain words",
+                                      "what it avoids"))
         return "\n\n".join(p for p in parts if p)
 
     def npc_instruction(self, prof: CharacterProfile, language: str | None,
@@ -625,7 +628,7 @@ class Style:
     # -- narrator ----------------------------------------------------------------------------
     def narrator_system(self) -> str:
         return "You are the narrator of a role-playing game.\n\n" + NARR_CORE + "\n\n" + self._sec(
-            "narration", "what it avoids")
+            "narration", "plain words", "what it avoids")
 
     def narrator_examples_section(self, situation: str) -> str:
         if not self.exemplars or self.narrator_examples <= 0:

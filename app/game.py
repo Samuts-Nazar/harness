@@ -859,6 +859,8 @@ class Game:
             "repetition": (report or {}).get("repetition"),
             "dialogue": eng.dialogue_report(),
             "names": (report or {}).get("names"),
+            "style_hits": ((report or {}).get("style") or {}).get("count", 0),
+            "style_hits_by_kind": ((report or {}).get("style") or {}).get("by_kind", {}),
             "parallel": eng.parallel,
             "assistant_calls": len(eng.assistant_calls),  # session total, apart from decisions
             "decisions": self._decisions(
