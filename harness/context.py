@@ -108,6 +108,11 @@ class ContextBuilder:
         self.style = style
         self.player_unlimited = player_unlimited
         self.outcomes = False  # set by the engine (harness/outcome.py)
+        # the player's wishes for the campaign, set at its start (a game package: tone, pace,
+        # content limits, notes); shown to the narrator, never above the rules
+        self.intent = ""
+        # only the content limits of that intent: also for NPC lines and resolution prose
+        self.limits = ""
         self.language, self.record_language = language, record_language
         self.glossary, self.narration = glossary, narration
         self.names = names
@@ -208,11 +213,14 @@ class ContextBuilder:
                   ) -> Messages:
         return self.character_view(character, scene, mem).messages()
 
-    def corrections(self, character: str | None = None) -> list[str]:
+    def corrections(self, character: str | None = None, *, narration: bool = False) -> list[str]:
         """The player's notes on model errors (stored per campaign), newest last: a line by
-        `character` that the player marked as impossible, with the player's reason."""
+        `character` that the player marked as impossible, with the player's reason.
+        `narration`: the notes on the narrator's passages instead (they never reach the NPCs)."""
         out = []
         for e in self.log.active([CORRECTION]):
+            if bool(e.payload.get("narration")) != narration:
+                continue
             if character is not None and e.payload.get("npc") not in (None, character):
                 continue
             out.append(f"- \"{e.payload.get('line', '')[:200]}\" was wrong: "
@@ -289,6 +297,7 @@ class ContextBuilder:
                 *(it.fact.content for it in mem.knows[-4:])]))
             if examples:
                 parts.append(examples)
+        system += self.limits_section()
         known = (self.knowledge_lines(mem) + [self._seen(e, character) for e in seen]
                  + [f"- (own condition) {e.category}: {e.item}" for e in mem.state]
                  + [f"- (just noticed) {self.mask(character, f.content)}"
@@ -367,6 +376,10 @@ class ContextBuilder:
             parts.append("Recent events:\n" + "\n".join(fmt(e) for e in recent))
         npcs = ", ".join(f"{c} ({self.ref(PLAYER, c)})" for c in scene.present if c != PLAYER)
         tail = f"The player does/says: {player_input}\n"
+        notes = self.corrections(narration=True)
+        if notes:
+            tail += ("The player has pointed out mistakes in earlier narration; do not repeat "
+                     "them:\n" + "\n".join(notes) + "\n")
         if outcome:
             tail += outcome + "\n"
         tail += "Narrate what happens next."
@@ -388,7 +401,8 @@ class ContextBuilder:
                    "narrate only the attempt and stop there: the world decides separately whether "
                    "it succeeds." if self.outcomes else "")
                 + (f" Write in {self.language}." if self.language else "")
-                + (f"\n{UNLIMITED_NARRATOR}" if self.player_unlimited else ""))
+                + (f"\n{UNLIMITED_NARRATOR}" if self.player_unlimited else "")
+                + self._intent_section())
             system = "You are the narrator of a role-playing game. Write vivid prose."
             if self.style is not None:
                 system = self.style.narrator_system()
@@ -413,9 +427,23 @@ class ContextBuilder:
         )
         system = "You are the narrator of a role-playing game. Write vivid prose."
         return self.finish([
-            {"role": "system", "content": system},
+            {"role": "system", "content": system + self._intent_section()},
             {"role": "user", "content": "\n\n".join([*parts, tail])},
         ], PLAYER)
+
+    def limits_section(self) -> str:
+        """The campaign's content limits, for the NPCs and any other prose the player reads."""
+        if not self.limits.strip():
+            return ""
+        return ("\n\nContent limits the player set for this campaign (never break them in what "
+                "you write):\n" + self.limits.strip())
+
+    def _intent_section(self) -> str:
+        if not self.intent.strip():
+            return ""
+        return ("\n\nThe player's wishes for this campaign, set at its start. Follow them; they "
+                "never override the rules above (they never let you write the player character's "
+                "words, feelings or decisions):\n" + self.intent.strip())
 
     @staticmethod
     def player_can_know(f: Fact) -> bool:

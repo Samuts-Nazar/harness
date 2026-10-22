@@ -242,3 +242,24 @@ def test_workers_never_touch_the_database():
     assert [u.payload["speaker"] for u in res.utterances] == ["innkeeper", "bard"]
     second = [m for mod, m in prov.calls if mod == "npc"][-1][-1]["content"]
     assert "товстий корчмар: Ласкаво просимо." in second.split("Recent conversation:")[-1]
+
+
+# -- «Помилка моделі» on a narration keeps the judged outcome (final review, finding 1) -----
+def test_model_error_renarration_keeps_the_failure_and_the_model_text():
+    script = {**BASE, "narrator": ["The rope snaps and Geralt falls."] * 3,
+              "extractor": BASE["extractor"] + ["none"] * 3}
+    eng, prov = engine(script, outcomes=True, present=(PLAYER,), rules={
+        "outcome_attempt": True, "outcome_verdict": "fails", "outcome_reason": "lacks_means"})
+    eng.turn("*лізу по линві на дах* Тримайся!")
+    eng.settle()
+    narr = eng.last_world_output()
+    assert narr is not None and narr.type == "narration"
+    before = len(narrator_msgs(prov))
+    res = eng.model_error(narr.id, "линва не рвалась так")
+    assert res.regenerated
+    msgs = narrator_msgs(prov)[before:]
+    assert msgs
+    text = "\n".join(m["content"] for m in msgs[-1])
+    assert "judged the player character's attempt BEFORE you write" in text
+    assert "it fails" in text and "lacked the means" in text
+    assert "does: лізу по линві на дах" in text   # the same model text as the turn

@@ -1,4 +1,5 @@
-"""Refresh the committed offline session (tests/fixtures/eval/fake_vizima.jsonl):
+"""Refresh the committed offline sessions (tests/fixtures/eval/fake_vizima.jsonl, classic
+dialogue, and fake_vizima_living.jsonl, the living dialogue with NPC lines):
 
     nix develop --command python -m harness.evalkit.record_fake
 
@@ -21,11 +22,16 @@ TURNS = [
     "Дякую. Іду до виходу.",
 ]
 OUT = Path(__file__).resolve().parents[2] / "tests/fixtures/eval/fake_vizima.jsonl"
+OUT_LIVING = OUT.with_name("fake_vizima_living.jsonl")
 
 
 def main() -> None:
-    game, rows = record(fake_stack(), TURNS, OUT)
-    print(f"recorded {len(rows)} turns to {OUT}")
+    for out, dialogue in ((OUT, "classic"), (OUT_LIVING, "living")):
+        if out.exists():
+            out.unlink()  # a cassette appends: start it afresh
+        game, rows = record(fake_stack(), TURNS, out, dialogue=dialogue)
+        npc = sum(1 for e in game.transcript if e["kind"] == "npc")
+        print(f"recorded {len(rows)} turns ({dialogue}, {npc} NPC lines) to {out}")
 
 
 if __name__ == "__main__":

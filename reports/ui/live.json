@@ -1,0 +1,155 @@
+{
+ "rows": [
+  {
+   "turn": 1,
+   "mode": "type",
+   "text": "Я струшую дощ із плаща, сідаю до столу й питаю корчмаря, що тут нового.",
+   "first_word_s": 14.96,
+   "first_word_wall_s": 14.99,
+   "prev_suggestions_in_flight_at_send": false,
+   "waited_s": 0.0,
+   "total_s": 18.32,
+   "slow_s": 4.9,
+   "turn_cost": 0.000931,
+   "error": null,
+   "sugg_latency_s": 6.7,
+   "sugg_items": [
+    "*закушую губу і чекаю, коли корчмар розкаже більше*",
+    "Питаю: чи не бачили тут останнім часом когось із клинком довшим за руку.",
+    "*киваю п'яному візнику в кутку* Ти, друже, бачив щось цікаве сьогодні?"
+   ],
+   "sugg_cost": 0.00013,
+   "sugg_arrived": true
+  },
+  {
+   "turn": 2,
+   "mode": "tap",
+   "text": "*закушую губу і чекаю, коли корчмар розкаже більше*",
+   "first_word_s": 16.84,
+   "first_word_wall_s": 16.88,
+   "prev_suggestions_in_flight_at_send": false,
+   "waited_s": 0.0,
+   "total_s": 22.44,
+   "slow_s": 2.22,
+   "turn_cost": 0.001598,
+   "error": null,
+   "sugg_latency_s": 3.18,
+   "sugg_items": [
+    "*дивлюся в очі корчмареві й чекаю*",
+    "Що ви хотіли сказати?",
+    "*повільно повертаю голову до візника*"
+   ],
+   "sugg_cost": 0.00014,
+   "sugg_arrived": true
+  },
+  {
+   "turn": 3,
+   "mode": "type",
+   "text": "Я питаю, чи не чули вони щось про чудовисько біля міста.",
+   "first_word_s": 20.62,
+   "first_word_wall_s": 20.65,
+   "prev_suggestions_in_flight_at_send": false,
+   "waited_s": 0.0,
+   "total_s": 34.16,
+   "slow_s": 3.48,
+   "turn_cost": 0.002547,
+   "error": null,
+   "sugg_latency_s": 9.25,
+   "sugg_items": [
+    "*дивлюсь на візника* Скільки платять — це залежить від того, що воно вміє.",
+    "Стільки, скільки воно варте. А воно варте більше, ніж ти думаєш.",
+    "*киваю візникові* Ти бачив його сам, чи тільки п'яний бовкаєш?"
+   ],
+   "sugg_cost": 0.00015,
+   "sugg_arrived": true
+  },
+  {
+   "turn": 4,
+   "mode": "nowait",
+   "text": "Я кажу, що можу допомогти за плату, і питаю, скільки пропонують.",
+   "first_word_s": 17.94,
+   "first_word_wall_s": 17.99,
+   "prev_suggestions_in_flight_at_send": false,
+   "waited_s": 0.0,
+   "total_s": 36.45,
+   "slow_s": 2.14,
+   "turn_cost": 0.003057,
+   "error": null,
+   "sugg_arrived": false
+  },
+  {
+   "turn": 5,
+   "mode": "type",
+   "text": "Я питаю, хто платитиме, і коли саме треба вирушати.",
+   "first_word_s": 10.57,
+   "first_word_wall_s": 10.61,
+   "prev_suggestions_in_flight_at_send": true,
+   "waited_s": 0.0,
+   "total_s": 79.86,
+   "slow_s": 3.34,
+   "turn_cost": 0.0035,
+   "error": null,
+   "sugg_latency_s": 7.1,
+   "sugg_items": [
+    "*киваю вартовому* Розкажіть більше про того коня, хто його знайшов.",
+    "А як винагороду ділитимуть — на всіх чи на того, хто вб'є чудовисько?",
+    "*повертаюся до візника* А ти бачив щось теї ночі, чи тільки ремінь крутиш?"
+   ],
+   "sugg_cost": 0.00031,
+   "sugg_arrived": true
+  },
+  {
+   "turn": 6,
+   "mode": "place",
+   "text": "Іду до брама",
+   "first_word_s": 22.63,
+   "first_word_wall_s": 22.67,
+   "prev_suggestions_in_flight_at_send": false,
+   "waited_s": 0.0,
+   "total_s": 28.01,
+   "slow_s": 2.74,
+   "turn_cost": 0.001195,
+   "error": null,
+   "sugg_latency_s": 4.79,
+   "sugg_items": [
+    "*дивлюся на течію з бочки*",
+    "Мені потрібен коней. Чи є вільний у місті?",
+    "*стукаю кулаком по брамі*"
+   ],
+   "sugg_cost": 9e-05,
+   "sugg_arrived": true
+  },
+  {
+   "turn": 7,
+   "mode": "type",
+   "text": "Я роздивляюсь навколо й питаю першого-ліпшого перехожого, що тут коїться.",
+   "first_word_s": 18.44,
+   "first_word_wall_s": 18.49,
+   "prev_suggestions_in_flight_at_send": false,
+   "waited_s": 0.0,
+   "total_s": 23.63,
+   "slow_s": 1.92,
+   "turn_cost": 0.001161,
+   "error": null,
+   "sugg_latency_s": 13.36,
+   "sugg_items": [
+    "*Підходжу до вартового зі списом* Я чув про коня на сході від Кречева. Хто його знайшов?",
+    "*дивлюся на діряву бочку* Чия бочка? Вона ж тече просто в землю.",
+    "*стаю ближче до другого вартового* Ви бачили сліди того, що роздерло коня?"
+   ],
+   "sugg_cost": 0.0001,
+   "sugg_arrived": true
+  }
+ ],
+ "total_cost": 0.01497,
+ "calls": 120,
+ "assistant_calls": 7,
+ "errors": [],
+ "places": [
+  "брама",
+  "ринок",
+  "кордегардія біля палацу",
+  "старий палац",
+  "берег озера"
+ ]
+}

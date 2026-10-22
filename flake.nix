@@ -9,6 +9,8 @@
         packages = [
           (pkgs.python3.withPackages (ps: [
             ps.python-dotenv ps.httpx ps.pytest
+            # game packages (app/newgame.py, task 5): YAML from an external AI chat
+            ps.pyyaml
             # phone app (app/): ASGI toolkit + server; playwright for the phone-size UI check
             ps.starlette ps.uvicorn ps.playwright
           ]))

@@ -11,10 +11,11 @@ import json
 import os
 import time
 from pathlib import Path
+from typing import Callable
 
 from harness.canon.retrieve import Canon
 from harness.glossary import Glossary
-from harness.models import Scene
+from harness.models import CharacterProfile, Scene
 from harness.pipeline import Engine
 from harness.profile import load_profile
 from harness.style import Style
@@ -48,6 +49,56 @@ def canon_path(explicit: str | os.PathLike[str] | None = None) -> Path | None:
     return None
 
 
+def load_canon(stack: Stack, canon_db: str | os.PathLike[str] | bool | None = None) -> Canon | None:
+    """The canon store of the Vizima arc, or None when it is not there."""
+    store = canon_path(canon_db)
+    if store is None:
+        return None
+    embedder = None
+    if stack.live:
+        from harness.canon.embed import OpenRouterEmbedder
+        embedder = OpenRouterEmbedder("qwen/qwen3-embedding-8b")
+    return Canon(store, embedder)
+
+
+def engine_kw(stack: Stack, dialogue: str | None = None) -> dict:
+    """What every Witcher campaign's engine gets (new or reopened)."""
+    return dict(models=stack.models, judge=stack.judge, glossary=Glossary.for_world("witcher"),
+                style=Style.load("witcher"), dialogue=dialogue or campaigns.DIALOGUE,
+                world_profile=load_profile("witcher"))
+
+
+def create_situation_a(rec: Recorder, root: Path, name: str, canon: Canon | None, kw: dict, *,
+                       player: CharacterProfile = CANON_PLAYER, unbounded: bool = True,
+                       seed: int | str | None = None, kind: str = KIND,
+                       setup: Callable[[Engine], None] | None = None) -> tuple[Engine, object]:
+    """A NEW campaign at situation A (the tavern «Під Лисом», day 3 evening): the canon people
+    when the store is there, the code-made extras always. Returns the engine and the CanonPlay
+    (None without canon). Also used by game packages (app/newgame.py) with their own player;
+    `setup(eng)` runs before anyone enters the scene (the player's live state, so the people
+    present perceive what is observable)."""
+    eng = Engine.create_campaign(
+        name, rec, [player], Scene("корчма «Під Лисом»", (), START_TIME), root=root,
+        player_unlimited=unbounded, outcomes=True, seed=seed if seed is not None else name, **kw)
+    with eng.conn:
+        eng.conn.execute("INSERT OR REPLACE INTO campaign_meta (key, value) VALUES (?,?)",
+                         ("app_kind", json.dumps(kind)))
+    if setup is not None:
+        setup(eng)
+    if canon is not None:
+        return eng, pilot.populate_canon_campaign(eng, canon)
+    _populate_without_canon(eng)
+    return eng, None
+
+
+def situation_a_world(eng: Engine, canon: Canon | None, judge: object, play: object = None
+                      ) -> World:
+    """The world around a situation A campaign (new or reopened)."""
+    if canon is not None:
+        return pilot.make_canon_world(eng, canon, judge, play=play)
+    return _world_without_canon(eng)
+
+
 def open_vizima(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = False,
                 name: str | None = None, canon_db: str | os.PathLike[str] | bool | None = None,
                 seed: int | str | None = None, dialogue: str | None = None) -> Campaign:
@@ -58,17 +109,8 @@ def open_vizima(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = False
     cur = _pointer(root)
     if name is None and not new and cur.exists():
         name = cur.read_text().strip()
-    store = canon_path(canon_db)
-    canon = None
-    if store is not None:
-        embedder = None
-        if stack.live:
-            from harness.canon.embed import OpenRouterEmbedder
-            embedder = OpenRouterEmbedder("qwen/qwen3-embedding-8b")
-        canon = Canon(store, embedder)
-    kw = dict(models=stack.models, judge=stack.judge, glossary=Glossary.for_world("witcher"),
-              style=Style.load("witcher"), dialogue=dialogue or campaigns.DIALOGUE,
-              world_profile=load_profile("witcher"))
+    canon = load_canon(stack, canon_db)
+    kw = engine_kw(stack, dialogue)
     reopened = bool(name) and not new and Engine.campaign_exists(name, root)
     if reopened:
         eng = Engine.open_campaign(name, rec, root=root, **kw)  # type: ignore[arg-type]
@@ -77,21 +119,8 @@ def open_vizima(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = False
         name = name if (new and name) else time.strftime("vizima-%Y%m%d-%H%M%S")
         while Engine.campaign_exists(name, root):
             name += "x"
-        eng = Engine.create_campaign(
-            name, rec, [CANON_PLAYER], Scene("корчма «Під Лисом»", (), START_TIME), root=root,
-            player_unlimited=True, outcomes=True, seed=seed if seed is not None else name, **kw)
-        with eng.conn:
-            eng.conn.execute("INSERT OR REPLACE INTO campaign_meta (key, value) VALUES (?,?)",
-                             ("app_kind", json.dumps(KIND)))
-        if canon is not None:
-            play = pilot.populate_canon_campaign(eng, canon)
-        else:
-            play = None
-            _populate_without_canon(eng)
-    if canon is not None:
-        world = pilot.make_canon_world(eng, canon, stack.judge, play=play)
-    else:
-        world = _world_without_canon(eng)
+        eng, play = create_situation_a(rec, root, name, canon, kw, seed=seed)
+    world = situation_a_world(eng, canon, stack.judge, play)
     cur.write_text(name)
     tr = Translator(rec, stack.models.extractor, root / name / "translations.json")
     return Campaign(eng, rec, stack.spend, stack.live, name, tr, title=TITLE, intro=INTRO,

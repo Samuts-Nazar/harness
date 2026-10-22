@@ -25,6 +25,7 @@ from harness.providers import Messages, Provider
 from harness.state import StateChange, StateError
 
 from .character import Traits, derive_traits
+from .inks import InkBook, token_for
 from harness.style import Style
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -163,13 +164,38 @@ class Campaign:
     title: str = TITLE
     intro: str = INTRO
     world: Any = None  # harness.world.World when the campaign has a world beyond the scene (task 17)
+    inks: InkBook | None = None
+    assistant: bool = True  # the turn assistant's suggestions (a game package may switch them off)
+
+    def __post_init__(self) -> None:
+        if self.inks is None:
+            d = self.engine.campaign_dir
+            self.inks = InkBook(d / "inks.json" if d else None)
+
+    def tok(self, cid: str) -> str:
+        """The opaque client key of a character in this campaign."""
+        return token_for(self.inks.salt, cid)
+
+    def speaker_ids(self) -> list[str]:
+        """Everyone the player has seen speak or act, in order of first appearance."""
+        out: list[str] = []
+        for e in self.engine.log.active([UTTERANCE, ACTION]):
+            if e.type == ACTION and e.payload.get("gesture"):
+                who = e.payload.get("by") or (e.participants[0] if e.participants else "")
+            elif e.type == UTTERANCE:
+                who = e.payload.get("speaker")
+            else:
+                continue
+            if who and who != PLAYER and who not in out:
+                out.append(who)
+        return out
 
     def transcript(self) -> list[dict[str, Any]]:
         """What the player has seen so far, rebuilt from the event log (a reopened campaign)."""
         out: list[dict[str, Any]] = [{"kind": "intro", "text": self.intro}]
         for e in self.engine.log.active([NARRATION, UTTERANCE, ACTION]):
             if e.type == NARRATION:
-                out.append({"kind": "narr", "text": e.payload["text"]})
+                out.append({"kind": "narr", "text": e.payload["text"], "event": e.id})
                 continue
             if e.type == ACTION and e.payload.get("gesture"):
                 # a gesture-only step of an NPC, shown as their action (as the live path does)
@@ -178,8 +204,8 @@ class Campaign:
                 text = (names.mask(PLAYER, str(e.payload.get("text", "")), before=e.id)
                         if names else str(e.payload.get("text", ""))).strip()
                 if text:
-                    out.append({"kind": "npc_act", "who": by, "text": text,
-                                "name": self.engine.ctx.label(PLAYER, by, e.id)})
+                    out.append({"kind": "npc_act", "tok": self.tok(by), "text": text,
+                                "label": self.engine.ctx.label(PLAYER, by, e.id)})
                 continue
             if e.type == ACTION and e.payload.get("actor") != PLAYER:
                 continue  # observable actions of narration are not shown as such
@@ -190,8 +216,8 @@ class Campaign:
                 out.append({"kind": "player", "text": e.payload.get("raw", e.payload["text"])})
             else:
                 # the label is what the player knew of this person when they spoke
-                item = {"kind": "npc", "who": who, "event": e.id,
-                        "name": self.engine.ctx.label(PLAYER, who, e.id),
+                item = {"kind": "npc", "tok": self.tok(who), "event": e.id,
+                        "label": self.engine.ctx.label(PLAYER, who, e.id),
                         "text": e.payload["text"]}
                 if e.payload.get("interrupted"):
                     item["cut"] = True
@@ -199,13 +225,18 @@ class Campaign:
         return out
 
 
-def seed_player_state(eng: Engine, traits: Traits | None) -> list[tuple[str, str, bool]]:
-    """The player character's live state at the start: the sword and the scar of the scene, plus
-    what the character file says (observable and hidden). Observable items are perceived by the
-    NPCs present when the character enters the scene (`enter_scene`); whether one reacts is the
-    salience judgment's call. Returns what was applied."""
-    wanted: list[tuple[str, str, bool]] = [(EQUIPMENT, "steel sword", True),
-                                           (INJURY, "old scar under the shirt", False)]
+INN_STATE = ((EQUIPMENT, "steel sword", True), (INJURY, "old scar under the shirt", False))
+
+
+def seed_player_state(eng: Engine, traits: Traits | None,
+                      base: tuple[tuple[str, str, bool], ...] = INN_STATE
+                      ) -> list[tuple[str, str, bool]]:
+    """The player character's live state at the start: `base` (the inn scene's sword and scar;
+    a game package gives none), plus what the character file says (observable and hidden).
+    Observable items are perceived by the NPCs present when the character enters the scene
+    (`enter_scene`); whether one reacts is the salience judgment's call. Returns what was
+    applied."""
+    wanted: list[tuple[str, str, bool]] = list(base)
     if traits:
         wanted += [(c, i, c != INTERNAL) for c, i in traits.observable]
         wanted += [(c, i, False) for c, i in traits.hidden]

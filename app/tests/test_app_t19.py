@@ -39,7 +39,7 @@ def test_vizima_turn_streams_and_the_slow_lane_settles(tmp_path):
     g = make(tmp_path)
     g.start_turn("Сідаю біля стійки й замовляю пива.")
     g.wait_idle(20)
-    types = [e["type"] for e in g.events_after(0)]
+    types = [e["type"] for e in g.events_after(0) if e["type"] != "suggestions"]
     assert "turn_done" in types and types[-1] == "settled"
     assert g.debug["timing"]["slow_s"] >= 0 and g.debug["lanes"]["fast_s"] >= 0
     assert "world" in g.debug

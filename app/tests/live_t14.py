@@ -65,18 +65,18 @@ def main() -> None:
         before = len(game.transcript)
         game.start_turn(text)
         game.wait_idle(240)
-        err = next((e for e in game.events_after(0) if e["type"] == "error"), None)
+        err = next((e for e in game.events_after(game.turn_start_seq) if e["type"] == "error"), None)
         r = (game.debug.get("repetition") or {}).get("score")
         reps.append(r if r is not None else 0.0)
         print(f"\n== turn {i}: {text}  (rep {r}, cost ${game.debug['cost']:.4f}, err {err and err['message']})")
         for t in game.transcript[before:]:  # this turn's lines only
             if t["kind"] == "npc":
                 s = stems(t["text"])
-                seen = prior.setdefault(t["who"], set())
+                seen = prior.setdefault(t["tok"], set())
                 ov = len(s & seen) / len(s) if s else 0.0
                 overlaps.append(ov)
                 seen |= s
-                print(f"  [{t['name']}] overlap={ov:.2f}  {t['text']}")
+                print(f"  [{t['label']}] overlap={ov:.2f}  {t['text']}")
             elif t["kind"] == "narr":
                 print(f"  (narration) {t['text'][:160]}")
     print(f"\nMODE {mode}: mean overlap with own earlier lines {sum(overlaps) / max(len(overlaps), 1):.3f} "

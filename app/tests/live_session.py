@@ -49,9 +49,9 @@ def main() -> None:
     for i, text in enumerate(TURNS[:n], 1):
         game.start_turn(text)
         game.wait_idle(240)
-        err = next((e for e in game.events_after(0) if e["type"] == "error"), None)
+        err = next((e for e in game.events_after(game.turn_start_seq) if e["type"] == "error"), None)
         d = game.debug
-        spk = [e["who"] for e in game.events_after(0) if e["type"] == "speaker"]
+        spk = [e["tok"] for e in game.events_after(game.turn_start_seq) if e["type"] == "speaker"]
         npc_s = [c["seconds"] for c in d["calls"] if c["role"].startswith("npc")]
         row = {"turn": i, "error": err and err["message"], "speakers": spk,
                "first_word_s": d["timing"]["first_word_s"], "total_s": d["timing"]["total_s"],
@@ -66,7 +66,7 @@ def main() -> None:
               f"sh {r.get('shape')}) fixed={len(nm.get('fixed', []))} near={nm.get('near_misses')} "
               f"err={row['error']}")
         for t in game.transcript[-3:]:
-            print(f"      [{t['kind']}{':' + t['name'] if 'name' in t else ''}] {t['text'][:200]}")
+            print(f"      [{t['kind']}{':' + t['label'] if 'label' in t else ''}] {t['text'][:200]}")
     # name consistency over everything stored and shown
     g = Glossary.for_world("witcher")
     eng = game.eng

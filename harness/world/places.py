@@ -14,6 +14,7 @@ class Place:
     id: str
     name: str
     note: str = ""
+    to: str = ""  # "where to" with its preposition and case: «до брами», «на ринок»; "" = not known
 
 
 @dataclass
@@ -69,12 +70,12 @@ class WorldMap:
 def vizima() -> WorldMap:
     """The pilot map (task 17). Distances are rough walking minutes inside the city."""
     m = WorldMap()
-    m.add_place(Place("tavern", "корчма «Під Лисом»", "evening crowd, merchants and soldiers"))
-    m.add_place(Place("market", "ринок", "the main square market"), {"tavern": 10})
-    m.add_place(Place("gate", "брама", "the city gate"), {"market": 12, "tavern": 8})
-    m.add_place(Place("guardhouse", "кордегардія біля палацу", "the guard barracks by the palace"),
+    m.add_place(Place("tavern", "корчма «Під Лисом»", "evening crowd, merchants and soldiers", to="до корчми «Під Лисом»"))
+    m.add_place(Place("market", "ринок", "the main square market", to="на ринок"), {"tavern": 10})
+    m.add_place(Place("gate", "брама", "the city gate", to="до брами"), {"market": 12, "tavern": 8})
+    m.add_place(Place("guardhouse", "кордегардія біля палацу", "the guard barracks by the palace", to="до кордегардії біля палацу"),
                 {"market": 15})
-    m.add_place(Place("palace", "старий палац", "the old palace"), {"guardhouse": 3})
-    m.add_place(Place("lake", "берег озера", "the lake shore outside the walls"),
+    m.add_place(Place("palace", "старий палац", "the old palace", to="до старого палацу"), {"guardhouse": 3})
+    m.add_place(Place("lake", "берег озера", "the lake shore outside the walls", to="до берега озера"),
                 {"gate": 25, "palace": 20})
     return m

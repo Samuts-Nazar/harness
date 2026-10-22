@@ -1,0 +1,16 @@
+# Named canon start moments of the Witcher world, for game packages (`start: {canon: <id>}`).
+# Each id is built by code (`builder`), so only moments the engine can set up are listed here.
+# The texts are our own short summaries, never book text. Names in the forms of the Ukrainian
+# translation (worlds/witcher/glossary.json).
+vidmak_A_tavern:
+  title: "Визім · корчма «Під Лисом»"
+  book: "Останнє бажання · «Відьмак»"
+  place: "корчма «Під Лисом»"
+  day: 3
+  time: "20:00"
+  builder: vizima_a
+  summary: >-
+    Вечір третього дня у Визімі, столиці Темерії. Корчма «Під Лисом» біля брами повна возіїв,
+    дрібних торговців і стражників. Місто переказує чутки про те, що сталося біля старого
+    палацу, і про білоголового чужинця, якого нібито тримають у кордегардії. Поруч живуть свої
+    люди: корчмар, вартовий, візник; далі в місті — ринок, варта, Велерад і король Фольтест.

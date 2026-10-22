@@ -59,7 +59,7 @@ from .narrator import (
 )
 from .npcgen import NpcSpec, VitalsBook, generate_npc, taken_names, with_core
 from .outcome import (
-    CHARACTER_DEATH, FAILS, CampaignEnded, Outcome, OutcomeJudge, record_death, record_outcome,
+    CHARACTER_DEATH, FAILS, OUTCOME, CampaignEnded, Outcome, OutcomeJudge, record_death, record_outcome,
 )
 from .perception import ACTION, DESCRIPTION, SPEECH, perceivers
 from .policy import (
@@ -132,13 +132,16 @@ class ModelConfig:
     npc_fallback: str | None = None
     extractor_fallback: str | None = None
     judge_fallback: str | None = None
+    assistant: str = "assistant"  # the turn assistant's suggestions (harness/assistant.py)
+    assistant_fallback: str | None = None
 
     @classmethod
     def live(cls) -> "ModelConfig":
         """The models chosen by the task 7 bake-off, each with a fallback from another vendor."""
         return cls(DEFAULT_NARRATOR, DEFAULT_NPC, DEFAULT_EXTRACTOR, DEFAULT_JUDGE_LLM,
                    FALLBACKS["narrator"], FALLBACKS["npc"], FALLBACKS["extractor"],
-                   FALLBACKS["judge_llm"])
+                   FALLBACKS["judge_llm"], assistant=DEFAULT_NPC,
+                   assistant_fallback=FALLBACKS["npc"])
 
 
 @dataclass
@@ -331,6 +334,7 @@ class Engine:
         self._slow_lock = threading.RLock()
         self.slow_failure: BaseException | None = None
         self.after_settle: list[Callable[[], None]] = []  # run after the slow lane (the world)
+        self.assistant_calls: list[str] = []  # turn assistant calls: never inside a turn's counts
         self.llm_calls: list[str] = []  # role of every model call attempt (harness/decisions.py)
         self.last_decisions: DecisionCount | None = None  # of the last settled turn, failed or not
         self.lane_stats: list[dict[str, Any]] = []  # per turn: fast, slow and wait seconds
@@ -1871,7 +1875,7 @@ class Engine:
             try:
                 text = self._prose_of(self._complete_text("narrator", self.ctx.finish([
                     {"role": "system", "content": "You are the narrator of a role-playing game. "
-                     "Write vivid prose."},
+                     "Write vivid prose." + self.ctx.limits_section()},
                     {"role": "user", "content": user}], PLAYER))).strip()
             except ProviderError as e:
                 self._note("resolution_unavailable", error=str(e))
@@ -1992,6 +1996,103 @@ class Engine:
             return res
         self._regenerate(ev, res, explanation)
         return res
+
+    def model_error(self, event_id: int, explanation: str) -> "Challenge":
+        """«Помилка моделі»: the player says what is wrong with the last world output. The note
+        is stored for the campaign and fed to later generations (NPC lines: to that NPC's lines;
+        narration: to the narrator). Only the last world output (`last_world_output`) can be
+        marked: it is regenerated and the player's turn stays. Anything older is refused."""
+        explanation = explanation.strip()
+        if not explanation:
+            raise ValueError("a model error needs the player's explanation")
+        ev = self.log.get(event_id)
+        if not self.log.is_active(event_id):
+            raise ValueError("this output is no longer part of the story")
+        last = self.last_world_output()
+        if last is None or last.id != event_id:
+            raise ValueError("only the last world output can be a model error")
+        if ev.type == UTTERANCE:
+            npc, text = ev.payload["speaker"], ev.payload["text"]
+            self._event(CORRECTION, [npc], {"npc": npc, "line": text, "explanation": explanation,
+                                            "line_event": event_id, "reason": "model error"},
+                        witnesses=[], notability=0.1)
+            res = Challenge("model_error", npc=npc, event=event_id)
+            self._regenerate(ev, res, explanation)
+            return res
+        if ev.type != NARRATION:
+            raise ValueError("only a line or a narration passage can be a model error")
+        text = ev.payload["text"]
+        self._event(CORRECTION, [], {"npc": None, "line": text, "explanation": explanation,
+                                     "line_event": event_id, "reason": "model error",
+                                     "narration": True}, witnesses=[], notability=0.1)
+        res = Challenge("model_error", event=event_id)
+        self._renarrate(ev, res)
+        return res
+
+    def last_world_output(self) -> Event | None:
+        """The last thing the world said or did that the player saw: a narration passage, an NPC
+        line or an NPC gesture."""
+        for e in reversed(self.log.active([NARRATION, UTTERANCE, ACTION_EVENT])):
+            if e.type == NARRATION or (e.type == UTTERANCE and e.payload.get("speaker") != PLAYER) \
+                    or (e.type == ACTION_EVENT and e.payload.get("gesture")):
+                return e
+            if e.type == UTTERANCE:  # the player's own line: nothing of the world after it
+                return None
+        return None
+
+    def _turn_input_before(self, old: Event) -> tuple[str, Outcome | None]:
+        """The turn's input as the narrator read it (`render_for_model` of the verbatim text) and
+        the world's judgment of the player's attempt in that turn, for a narration `old`."""
+        mine = [e for e in self.log.active([UTTERANCE, ACTION_EVENT])
+                if e.id < old.id and (e.payload.get("speaker") == PLAYER
+                                      or (e.type == ACTION_EVENT
+                                          and e.payload.get("actor") == PLAYER))]
+        if not mine:
+            return "", None
+        last = mine[-1]
+        if last.payload.get("part"):  # a split input: the first part carries the raw text
+            first = next((e for e in reversed(mine)
+                          if e.payload.get("part") == 1 and "raw" in e.payload), last)
+        else:
+            first = last
+        raw = str(first.payload.get("raw", first.payload["text"]))
+        model_text = render_for_model(split_input(raw), raw)
+        judged = [e for e in self.log.active([OUTCOME])
+                  if first.id < e.id < old.id and e.payload.get("actor", PLAYER) == PLAYER]
+        return model_text, (self._outcome_of(judged[-1]) if judged else None)
+
+    @staticmethod
+    def _outcome_of(ev: Event) -> Outcome:
+        p = ev.payload
+        return Outcome(p.get("verdict", FAILS), p.get("reason", "none"), bool(p.get("died")),
+                       p.get("actor", PLAYER), p.get("text", ""), bool(p.get("unbounded")), ev.id)
+
+    def _renarrate(self, old: Event, res: "Challenge") -> None:
+        """Replace the narration passage `old` by a new one written with the corrections in the
+        narrator's context. The player's input stays. Failing puts the old text back."""
+        model_text, outcome = self._turn_input_before(old)
+        cause = self.log.get(old.cause_id) if old.cause_id is not None else None
+        self.log.rollback(old.id, "model error: narration")
+        try:
+            if cause is not None and cause.type == OUTCOME:  # an NPC act's resolution paragraph
+                text = self._resolution_paragraph(self._outcome_of(cause))
+                if not text:
+                    raise RuntimeError("the resolution could not be narrated again")
+            else:
+                text = self._narrate(model_text, outcome=outcome).description
+        except Exception:
+            self._event(NARRATION, [], {"text": old.payload["text"], "replaces": old.id,
+                                        "restored": True}, witnesses=[], notability=0.4)
+            self.refresh_memory()
+            raise
+        new = self._event(NARRATION, [], {"text": text, "replaces": old.id, "regenerated": True},
+                          witnesses=[], notability=0.4)
+        try:
+            self._commit(self._extract([("narration", text)]), {"narration": new})
+        except ExtractionRejected:
+            self._note("regenerated_narration_not_extracted", event=new.id)
+        self.refresh_memory()
+        res.regenerated, res.text, res.new_event = True, text, new.id
 
     def _find_channel(self, npc: str, text: str, explanation: str,
                       items: list["knowledge.Item"]) -> "knowledge.Item | None":

@@ -212,3 +212,27 @@ def test_agreement_with_reference_answers():
              Labelled("c", "ctx", "q?", True)]
     r = agreement(FakeJudge({"eval_reference": True}), items)
     assert r["n"] == 3 and r["agree"] == 2 and r["agreement"] == 0.667
+
+
+def test_story_ignores_salted_tokens_and_maps_old_speaker_keys():
+    """Final review, finding 6: the speaker's token is salted per campaign, so a replay compares
+    the label; an older recording's `who`/`name` counts as that label."""
+    from harness.evalkit.session import _story
+    rec = [{"kind": "npc", "tok": "aaaa1111", "label": "Вартовий", "text": "Гм.", "event": 5,
+            "turn": 1}]
+    rep = [{"kind": "npc", "tok": "bbbb2222", "label": "Вартовий", "text": "Гм.", "event": 5,
+            "turn": 1}]
+    assert _story(rec) == _story(rep)
+    old = [{"kind": "npc", "name": "Вартовий", "text": "Гм.", "event": 5}]
+    assert _story(old) == _story(rep)
+    assert _story(rec) != _story([{**rep[0], "label": "Корчмар"}])
+
+
+def test_a_stored_living_session_has_npc_lines():
+    from harness.evalkit.__main__ import stored
+    from harness.evalkit.replay import load
+    living = [p for p in stored() if load(p)[0].get("dialogue") == "living"]
+    assert living, "a living-dialogue session is among the stored ones"
+    _, recs = load(living[0])
+    footer = next(r for r in recs if r["k"] == "f")
+    assert any(e["kind"] == "npc" for e in footer["transcript"])

@@ -25,6 +25,11 @@ def make(root=None, pace: float = 0.0) -> Game:
     return Game(lambda new: open_campaign(stack, root=root, new=new), pace=pace)
 
 
+def _bare(t):
+    """Without the turn ids: they belong to one run of the app."""
+    return [{k: v for k, v in e.items() if k != "turn"} for e in t]
+
+
 def test_restart_continues_the_saved_campaign_and_new_button_starts_another(tmp_path):
     g = make(tmp_path)
     g.start_turn("Привіт, Горсте.")
@@ -34,7 +39,7 @@ def test_restart_continues_the_saved_campaign_and_new_button_starts_another(tmp_
     assert (tmp_path / "current.txt").read_text() == name
     g.eng.close()
     g2 = make(tmp_path)  # a server restart
-    assert g2.camp.name == name and g2.transcript == before
+    assert g2.camp.name == name and _bare(g2.transcript) == _bare(before)
     assert g2.panel()["chips"] and g2.eng.scene.time == g.eng.scene.time
     g2.start_turn("Ще раз.")
     g2.wait_idle()
@@ -65,10 +70,10 @@ def test_narration_streams_before_the_first_npc_word_and_second_npc_hears_the_fi
     for _ in range(3):  # the third scripted narration has both NPCs speaking
         g.start_turn("Кажу щось.")
         g.wait_idle()
-    evs = g.events_after(0)
+    evs = g.events_after(g.turn_start_seq)  # the last turn's events
     types = [e["type"] for e in evs]
     assert types.index("narr_end") < types.index("speaker")
-    assert [e["who"] for e in evs if e["type"] == "speaker"] == ["horst", "elza"]
+    assert [e["tok"] for e in evs if e["type"] == "speaker"] == [g.camp.tok("horst"), g.camp.tok("elza")]
     elza_ctx = [m for _, m in g.camp.recorder.inner.calls
                 if m[0]["content"].startswith("You are Ельза")][-1][1]["content"]
     assert "Горст: " in elza_ctx.split("Recent conversation:")[-1]

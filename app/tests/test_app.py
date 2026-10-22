@@ -46,17 +46,18 @@ def test_turn_streams_narration_then_labelled_npc_lines(monkeypatch):
     c = TestClient(create_app(g))
     assert c.post("/api/turn", json={"text": "Я киваю Горсту."}).status_code == 202
     evs = sse(c)
-    types = [e["type"] for e in evs]
+    types = [e["type"] for e in evs if e["type"] != "suggestions"]
     assert types[0] == "turn_start" and types[-2:] == ["turn_done", "settled"]
     assert types.index("narr_start") < types.index("narr_end") < types.index("speaker")
     speaker = next(e for e in evs if e["type"] == "speaker")
-    assert speaker["who"] == "horst" and speaker["name"] == "Горст"
+    assert speaker["tok"] == g.camp.tok("horst") and speaker["label"] == "Горст"
+    assert "who" not in speaker and "name" not in speaker
     words = [e["w"] for e in evs if e["type"] == "word"]
     assert len(words) > 20
     st = c.get("/api/state").json()
     kinds = [t["kind"] for t in st["transcript"]]
     assert kinds == ["intro", "player", "narr", "npc"]
-    assert st["transcript"][3]["name"] == "Горст" and not st["running"]
+    assert st["transcript"][3]["tok"] == g.camp.tok("horst") and not st["running"]
 
 
 def test_sse_resumes_after_seq():

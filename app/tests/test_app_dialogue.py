@@ -33,6 +33,10 @@ def make(pace=0.0, narration=False, floors=None, shapes=None) -> Game:
     return Game(lambda new: campaigns.open_campaign(stack, root=root, new=new), pace=pace)
 
 
+def T(g, cid):
+    return g.camp.tok(cid)
+
+
 def wait_phase(g, phase, timeout=10):
     end = time.time() + timeout
     while g.phase != phase and time.time() < end:
@@ -96,9 +100,9 @@ def test_each_line_of_an_exchange_is_its_own_block():
     g.start_turn("Що кажете?")
     g.wait_idle(20)
     evs = g.events_after(0)
-    assert [e["who"] for e in evs if e["type"] == "speaker"] == ["horst", "elza", "horst"]
+    assert [e["tok"] for e in evs if e["type"] == "speaker"] == [T(g, c) for c in ("horst", "elza", "horst")]
     npc = [t for t in g.transcript if t["kind"] == "npc"]
-    assert [t["who"] for t in npc] == ["horst", "elza", "horst"]
+    assert [t["tok"] for t in npc] == [T(g, c) for c in ("horst", "elza", "horst")]
     assert all(t["text"] for t in npc) and all(t["event"] for t in npc)
     done = next(e for e in evs if e["type"] == "turn_done")
     assert done["lines"] == [t["event"] for t in npc]
@@ -108,10 +112,10 @@ def test_gesture_step_is_shown_as_the_npcs_action_between_lines():
     g = make(floors=["horst", "elza", "horst", "player"], shapes=["normal", "gesture", "normal"])
     g.start_turn("Що кажете?")
     g.wait_idle(20)
-    kinds = [(t["kind"], t["who"]) for t in g.transcript if t["kind"] in ("npc", "npc_act")]
-    assert kinds == [("npc", "horst"), ("npc_act", "elza"), ("npc", "horst")]
+    kinds = [(t["kind"], t["tok"]) for t in g.transcript if t["kind"] in ("npc", "npc_act")]
+    assert kinds == [("npc", T(g, "horst")), ("npc_act", T(g, "elza")), ("npc", T(g, "horst"))]
     act = next(t for t in g.transcript if t["kind"] == "npc_act")
-    assert act["text"] and act["name"]
+    assert act["text"] and act["label"]
     order = [e["type"] for e in g.events_after(0) if e["type"] in ("speaker", "npc_act")]
     assert order == ["speaker", "npc_act", "speaker"]  # horst twice: two blocks
 
@@ -154,7 +158,7 @@ def test_skip_delivers_rest_without_interrupt():
     assert next(e for e in evs if e["type"] == "turn_done")["interrupted"] is False
     assert not any(t.get("cut") for t in g.transcript)
     npc = [t for t in g.transcript if t["kind"] == "npc"]
-    assert [t["who"] for t in npc] == ["horst", "elza"]
+    assert [t["tok"] for t in npc] == [T(g, "horst"), T(g, "elza")]
     assert " ".join(e["w"] for e in evs if e["type"] == "word") == " ".join(t["text"] for t in npc)
     assert g.pace == 0
     g.start_turn("Ще.")  # the next turn is paced again
@@ -255,9 +259,9 @@ def test_gesture_step_survives_a_reload():
     g = make(floors=["horst", "elza", "horst", "player"], shapes=["normal", "gesture", "normal"])
     g.start_turn("Що кажете?")
     g.wait_idle(20)
-    live = [(t["kind"], t["who"], t.get("name"), t["text"]) for t in g.transcript
+    live = [(t["kind"], t["tok"], t.get("label"), t["text"]) for t in g.transcript
             if t["kind"] in ("npc", "npc_act")]
-    rebuilt = [(t["kind"], t["who"], t.get("name"), t["text"]) for t in g.camp.transcript()
+    rebuilt = [(t["kind"], t["tok"], t.get("label"), t["text"]) for t in g.camp.transcript()
                if t["kind"] in ("npc", "npc_act")]
     assert rebuilt == live
 
@@ -305,10 +309,26 @@ def test_late_retract_of_a_cut_in_turn_names_that_turn():
     g.start_turn("Друга.")   # cuts in while turn 1's slow lane runs
     release.set()
     g.wait_idle(30)
-    evs = g.events_after(0)
+    evs = g.events_after(g.turn_start_seq)  # the last turn's events
     starts = [e for e in evs if e["type"] == "turn_start"]
     retract = next(e for e in evs if e["type"] == "retract")
     assert starts and starts[-1]["turn"] == 2 and retract["turn"] == 1
     assert evs.index(starts[-1]) < evs.index(retract)
     assert all(e["turn"] == 2 for e in evs if e["type"] in ("turn_done", "speaker", "word"))
     assert [t["text"] for t in g.transcript if t["kind"] == "player"] == ["Друга."]
+
+
+def test_a_cut_in_keeps_the_interrupted_turns_turn_done_in_the_stream():
+    """Book UI review: start_turn used to clear the event list, so a client polling the stream
+    could miss turn 1's turn_done (and its cut marks) when the player cut in with turn 2."""
+    g = make(pace=0.02, floors=["horst", "elza", "horst", "player"])
+    g.start_turn("Перша.")
+    first_start = g.turn_start_seq
+    wait_phase(g, "speaking")
+    wait_event(g, "word")
+    g.start_turn("Друга.")
+    g.wait_idle(30)
+    done = [e for e in g.events_after(first_start) if e["type"] == "turn_done"]
+    assert [e["turn"] for e in done] == [1, 2]
+    assert done[0]["cut_lines"], "the interrupted line is marked for a client that polls late"
+    assert g.events_after(g.turn_start_seq)[0]["type"] == "turn_start"  # replay still starts there

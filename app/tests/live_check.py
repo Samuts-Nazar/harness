@@ -29,14 +29,14 @@ def main() -> None:
         game.start_turn(text)
         game.wait_idle(180)
         d = game.debug
-        err = next((e for e in game.events_after(0) if e["type"] == "error"), None)
+        err = next((e for e in game.events_after(game.turn_start_seq) if e["type"] == "error"), None)
         print(f"\n--- turn {i}: first word {d['timing']['first_word_s']} s, total "
               f"{d['timing']['total_s']} s, cost ${d['cost']:.4f}, error={err and err['message']}")
         for c in d["calls"]:
             print(f"    {c['role']:<18} {c['model']:<36} {c['seconds']:>5} s  ${c['cost']:.5f}")
         print(f"    judgments: {len(d['judgments'])}  notes: {[n['kind'] for n in d['notes']]}")
         for t in game.transcript[-3:]:
-            print(f"    [{t['kind']}{':' + t['name'] if 'name' in t else ''}] {t['text'][:220]}")
+            print(f"    [{t['kind']}{':' + t['label'] if 'label' in t else ''}] {t['text'][:220]}")
     print(f"\ntotal spend ${stack.spend.total:.4f} over {stack.spend.calls} paid calls")  # type: ignore[union-attr]
     print("panel:", game.panel())
 
