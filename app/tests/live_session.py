@@ -49,9 +49,9 @@ def main() -> None:
     for i, text in enumerate(TURNS[:n], 1):
         game.start_turn(text)
         game.wait_idle(240)
-        err = next((e for e in game.events_after(0) if e["type"] == "error"), None)
+        err = next((e for e in game.events_after(game.turn_start_seq) if e["type"] == "error"), None)
         d = game.debug
-        spk = [e["tok"] for e in game.events_after(0) if e["type"] == "speaker"]
+        spk = [e["tok"] for e in game.events_after(game.turn_start_seq) if e["type"] == "speaker"]
         npc_s = [c["seconds"] for c in d["calls"] if c["role"].startswith("npc")]
         row = {"turn": i, "error": err and err["message"], "speakers": spk,
                "first_word_s": d["timing"]["first_word_s"], "total_s": d["timing"]["total_s"],

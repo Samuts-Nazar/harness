@@ -1,10 +1,22 @@
 "use strict";
+// The book page: one continuous page of prose; each character's speech in their own ink.
 const $ = (id) => document.getElementById(id);
 const feed = $("feed");
-let tag = "", lastSeq = 0, es = null, cur = null, busy = false, turnNpc = [], sending = 0;
+const root = document.documentElement;
+// The eight inks offered by the picker: the palette of app/inks.py (a test keeps them equal).
+const PALETTE = ["#e8a87c", "#8fb8e8", "#a8d49a", "#e89ab8", "#c8a8f0", "#e8d27c", "#7cd4cc", "#e8887c"];
+const PLACEHOLDER_IDLE = "Що скажете чи зробите…";
+const PLACEHOLDER_TALK = "Можна писати й зараз — це переб'є…";
+
+let tag = "", lastSeq = 0, es = null, cur = null, busy = false, phase = "idle", turnNpc = [], sending = 0;
 // the feed elements of each turn, by the server's turn id: a late retract or error of an earlier
 // turn (its slow lane failed after the player had cut in) removes only that turn's elements
 let turnEls = {}, curTurn = null;
+let cast = {};            // tok -> {tok, label, ink, present}: who the player character has met
+let actions = [];         // optional line actions the server offers ("model_error", "cut")
+let speakingTok = null;   // whose words stream now (tints ✋)
+let sugg = { turn: null, items: [] };
+let skipReplay = false;   // a reload during the slow lane: the turn is already in the transcript
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -12,6 +24,30 @@ function el(tag, cls, text) {
   if (text != null) e.textContent = text;
   return e;
 }
+function store(key, val) {   // per-viewer conveniences only; the page works without storage
+  try { if (val === undefined) return localStorage.getItem(key); localStorage.setItem(key, val); }
+  catch (e) { return null; }
+  return null;
+}
+
+// -- inks ---------------------------------------------------------------------------------
+const safeTok = (t) => String(t || "").replace(/[^A-Za-z0-9_-]/g, "");
+const inkVar = (tok) => "var(--ink-" + safeTok(tok) + ", var(--ink-none))";
+function setInk(tok, ink) {   // one custom property per character: every line of theirs follows
+  if (!tok || !ink) return;
+  root.style.setProperty("--ink-" + safeTok(tok), ink);
+  if (cast[tok]) cast[tok].ink = ink;
+}
+async function loadCast() {
+  let list;
+  try { const r = await fetch("/api/cast"); if (!r.ok) return; list = await r.json(); }
+  catch (e) { return; }
+  cast = {};
+  for (const c of list) { cast[c.tok] = c; setInk(c.tok, c.ink); }
+  renderLegend();
+}
+
+// -- paragraphs ---------------------------------------------------------------------------
 function add(node, tracked = true) {
   const atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 80;
   feed.appendChild(node);
@@ -19,45 +55,219 @@ function add(node, tracked = true) {
   if (atBottom) feed.scrollTop = feed.scrollHeight;
   return node;
 }
-function addWord(block, w) {
+function follow(fn) {   // keep the newest words in view, unless the reader scrolled up
   const atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 80;
-  const s = el("span", "w", (block.querySelector(".w") ? " " : "") + w);
-  block.appendChild(s);
+  fn();
   if (atBottom) feed.scrollTop = feed.scrollHeight;
 }
-function npcBlock(who, name, text, cut, event) {
-  const b = el("p", "npc"); b.dataset.who = who;
-  b.appendChild(el("span", "who", name));
-  if (text) b.appendChild(el("span", "w", text));
-  if (cut) b.classList.add("cut");
-  if (event != null) addAsk(b, event);
-  return b;
+
+// NPC text: speech, with the speaker's own beats in *asterisks* (one may still be open while it
+// streams). Speech is written with a dash and in the character's ink; beats in the base italic.
+function segments(text) {
+  const out = [];
+  String(text || "").split("*").forEach((s, i) => {
+    s = s.trim();
+    if (i % 2 === 0) s = s.replace(/^[—–-]+\s*/, "");
+    if (s) out.push({ beat: i % 2 === 1, text: s });
+  });
+  return out;
+}
+function fillBody(p, text) {
+  p._raw = text;
+  const body = el("span", "body");
+  const segs = segments(text);
+  segs.forEach((s, i) => {
+    if (i) body.appendChild(document.createTextNode(" "));
+    if (!s.beat) { body.appendChild(el("span", "q", "— " + s.text)); return; }
+    let t = (i ? "— " : "") + s.text;
+    if (i < segs.length - 1 && !/[.!?…,:;]$/.test(t)) t += ".";
+    body.appendChild(el("span", "beat", t));
+  });
+  const old = p._body;
+  p._body = body;
+  if (old) old.replaceWith(body); else p.appendChild(body);   // keeps an open ask box after it
+}
+function who(p, tok, label) {
+  p.dataset.tok = tok;
+  p.style.setProperty("--c", inkVar(tok));
+  const w = el("span", "who");
+  w.append(el("i", "dot"), el("span", "", label));
+  p.appendChild(w);
+  p.appendChild(document.createTextNode(" "));
+}
+function sayBlock(tok, label, text, cut, event) {
+  const p = el("p", "npc"); p.dataset.line = "say"; p.tabIndex = 0;
+  who(p, tok, label);
+  fillBody(p, text || "");
+  if (cut) p.classList.add("cut");
+  if (event != null) p.dataset.event = event;
+  return p;
+}
+function actBlock(tok, label, text) {
+  const p = el("p", "npc act"); p.dataset.line = "act"; p.tabIndex = 0;
+  who(p, tok, label);
+  p.appendChild(el("span", "act-text", text));
+  return p;
+}
+function narrBlock(text, cls = "narr") { const p = el("p", cls, text); p.dataset.line = cls === "intro" ? "intro" : "narr"; return p; }
+function meBlock(text) { const p = el("p", "me", text); p.dataset.line = "me"; return p; }
+function streaming(p) {
+  for (const n of Array.from(feed.children)) if (n !== p && n.classList) n.classList.remove("streaming");
+  if (p) p.classList.add("streaming");
 }
 
-function actBlock(who, name, text) {
-  const b = el("p", "npc act"); b.dataset.who = who;
-  b.appendChild(el("span", "who", name));
-  b.appendChild(el("span", "w", text));
-  return b;
+// -- the line menu (long press / right click / Enter on a line) ----------------------------
+function lines() { return Array.from(feed.children).filter((n) => n.dataset && n.dataset.line); }
+function lineInfo(p) {
+  const all = lines(), i = all.indexOf(p);
+  let lastMe = -1;
+  all.forEach((n, k) => { if (n.dataset.line === "me") lastMe = k; });
+  const kind = p.dataset.line;
+  const world = kind === "narr" || kind === "say" || kind === "act";
+  return { kind, tok: p.dataset.tok || "", event: p.dataset.event != null && p.dataset.event !== "",
+    cut: p.classList.contains("cut"), lastWorld: world && lastMe >= 0 && i > lastMe,
+    lastLine: i === all.length - 1, busy };
 }
+// which items apply to a line (spec: «Звідки він це знає?» on NPC speech only; model error only
+// on the last world output; retroactive cut only on the last NPC line; ink on any line of a
+// character). `offered`: the optional actions the server has endpoints for.
+function sheetItems(x, offered) {
+  const out = [];
+  if (x.kind === "say" && x.event) out.push("challenge");
+  if (offered.includes("model_error") && x.lastWorld && !x.busy) out.push("model_error");
+  if (offered.includes("cut") && x.kind === "say" && x.lastWorld && x.lastLine && !x.busy && !x.cut)
+    out.push("cut");
+  if (x.tok && (x.kind === "say" || x.kind === "act")) out.push("ink");
+  return out;
+}
+const ITEM_TEXT = {
+  challenge: "🔎 Звідки він це знає?", model_error: "⚠ Помилка моделі — переписати",
+  cut: "✂ Перебити тут (заднім числом)", ink: "🎨 Чорнило цього персонажа",
+};
+let sheetLine = null;
+function labelOf(p) { const w = p.querySelector(".who"); return w ? w.textContent.trim() : ""; }
+function openSheet(p) {
+  const sheet = $("sheet");
+  if (sheet.open) return;
+  const items = sheetItems(lineInfo(p), actions);
+  if (!items.length) return;
+  sheetLine = p;
+  p.classList.add("sel");
+  $("sheetHead").textContent = p.dataset.line === "narr" ? "Оповідь" :
+    (p.dataset.line === "act" ? "Жест — " : "Ця репліка — ") + labelOf(p);
+  const body = $("sheetBody"); body.textContent = "";
+  for (const a of items) {
+    const b = el("button", "opt", ITEM_TEXT[a]); b.type = "button"; b.dataset.act = a;
+    b.addEventListener("click", () => act(a, p));
+    body.appendChild(b);
+  }
+  sheet.showModal();
+  $("sheetHead").focus();
+  feed.classList.add("menu-open");
+  p.scrollIntoView({ block: "start" });   // the line stays in sight above the sheet
+}
+function inkPicker(tok) {
+  const c = cast[tok] || { label: "", ink: "" };
+  const now = (c.ink || getComputedStyle(root).getPropertyValue("--ink-" + safeTok(tok))).trim().toLowerCase();
+  $("sheetHead").textContent = "Чорнило: " + (c.label || labelOf(sheetLine || el("p")));
+  const body = $("sheetBody"); body.textContent = "";
+  const sw = el("div", "sw"); sw.setAttribute("role", "group"); sw.setAttribute("aria-label", "Кольори");
+  PALETTE.forEach((ink, i) => {
+    const b = el("button"); b.type = "button"; b.dataset.ink = ink;
+    b.style.setProperty("--sw", ink);
+    b.setAttribute("aria-label", "Колір " + (i + 1));
+    b.setAttribute("aria-pressed", String(ink === now));
+    b.addEventListener("click", () => pickInk(tok, ink, sw));
+    sw.appendChild(b);
+  });
+  body.append(sw, el("p", "note", "Колір належить персонажу: зміниться в усіх його репліках, минулих і майбутніх, у всій кампанії."));
+  const first = sw.querySelector("[aria-pressed=true]") || sw.firstChild;
+  if (first && first.focus) first.focus();
+}
+function openInk(tok) {
+  const sheet = $("sheet");
+  if (!sheet.open) { sheetLine = null; sheet.showModal(); }
+  inkPicker(tok);
+}
+async function pickInk(tok, ink, sw) {
+  const before = cast[tok] ? cast[tok].ink : null;
+  setInk(tok, ink); renderLegend();
+  for (const b of sw.children) b.setAttribute("aria-pressed", String(b.dataset.ink === ink));
+  let ok = false;
+  try { ok = (await fetch("/api/ink", { method: "POST", body: JSON.stringify({ tok, ink }) })).ok; }
+  catch (e) { ok = false; }
+  if (!ok) {
+    if (before) { setInk(tok, before); renderLegend(); }
+    showError("Не вдалося зберегти колір.");
+  }
+}
+function closeSheet() { const s = $("sheet"); if (s.open) s.close(); }
+function act(a, p) {
+  if (a === "ink") { inkPicker(p.dataset.tok); return; }
+  closeSheet();
+  if (a === "challenge") openAsk(p);
+  else if (a === "model_error") openModelError(p);
+  else if (a === "cut") openCut(p);
+}
+$("sheet").addEventListener("close", () => {
+  if (sheetLine) sheetLine.classList.remove("sel");
+  sheetLine = null;
+  feed.classList.remove("menu-open");
+});
+$("sheet").addEventListener("click", (ev) => { if (ev.target === $("sheet")) closeSheet(); });
+
+// long press on touch (and a long click with a mouse), right click on desktop, Enter by keyboard
+let press = null, swallowClick = false;
+const lineOf = (t) => (t && t.closest ? t.closest("#feed [data-line]") : null);
+const onControl = (t) => t && t.closest && t.closest("button, textarea, a, .askbox, .askres");
+function cancelPress() { if (press) { clearTimeout(press.t); press = null; } }
+feed.addEventListener("pointerdown", (ev) => {
+  swallowClick = false;
+  const p = lineOf(ev.target);
+  if (!p || ev.button > 0 || onControl(ev.target)) return;
+  cancelPress();
+  press = { x: ev.clientX, y: ev.clientY,
+    t: setTimeout(() => { press = null; swallowClick = true; openSheet(p); }, 500) };
+});
+feed.addEventListener("pointermove", (ev) => {
+  if (press && Math.hypot(ev.clientX - press.x, ev.clientY - press.y) > 10) cancelPress();
+});
+// a touch scroll ends in pointercancel; a programmatic scroll (the story following) is no reason
+for (const t of ["pointerup", "pointercancel"]) feed.addEventListener(t, cancelPress);
+feed.addEventListener("contextmenu", (ev) => {
+  const p = lineOf(ev.target);
+  if (!p || onControl(ev.target)) return;
+  ev.preventDefault();
+  cancelPress();
+  openSheet(p);
+});
+feed.addEventListener("keydown", (ev) => {
+  const p = ev.target && ev.target.dataset && ev.target.dataset.line ? ev.target : null;
+  if (p && (ev.key === "Enter" || ev.key === "ContextMenu" || (ev.shiftKey && ev.key === "F10"))) {
+    ev.preventDefault(); openSheet(p);
+  }
+});
+feed.addEventListener("click", (ev) => {   // a tap on the story shows the rest at once
+  if (swallowClick) { swallowClick = false; return; }
+  if (!onControl(ev.target)) skipPace();
+});
 
 // "Звідки він це знає?": the player marks a line as impossible; the engine checks the channels
-function addAsk(block, event) {
-  block.dataset.event = event;
-  const old = block.querySelector(".ask"); if (old) old.remove();
-  const btn = el("button", "ask", "звідки він це знає?");
-  btn.type = "button";
-  btn.addEventListener("click", () => openAsk(block));
-  block.appendChild(btn);
-}
-function openAsk(block) {
+function addAsk(block, event) { block.dataset.event = event; }
+function inlineBox(block, placeholder, goText, onGo) {
   if (block.querySelector(".askbox")) return;
   const box = el("span", "askbox");
-  const note = el("textarea"); note.rows = 2; note.placeholder = "Що саме він не міг знати? (можна лишити порожнім)";
-  const go = el("button", "btn primary", "Перевірити"); go.type = "button";
+  const note = el("textarea"); note.rows = 2; note.placeholder = placeholder;
+  const go = el("button", "btn primary", goText); go.type = "button";
   const cancel = el("button", "btn ghost", "Скасувати"); cancel.type = "button";
   cancel.addEventListener("click", () => box.remove());
-  go.addEventListener("click", async () => {
+  go.addEventListener("click", () => onGo(note, go, box));
+  box.append(note, go, cancel);
+  block.appendChild(box);
+  note.focus({ preventScroll: true });
+}
+function openAsk(block) {
+  inlineBox(block, "Що саме він не міг знати? (можна лишити порожнім)", "Перевірити", async (note, go, box) => {
     go.disabled = true; go.textContent = "Перевіряю…";
     let r, d;
     try {
@@ -67,9 +277,6 @@ function openAsk(block) {
     box.remove();
     showAnswer(block, r.ok, d);
   });
-  box.append(note, go, cancel);
-  block.appendChild(box);
-  note.focus({ preventScroll: true });
 }
 function showAnswer(block, ok, d) {
   const prev = block.querySelector(".askres"); if (prev) prev.remove();
@@ -89,7 +296,7 @@ function showAnswer(block, ok, d) {
       return;
     }
     if (d.regenerated) {
-      const w = block.querySelector(".w"); if (w) w.textContent = d.text;
+      fillBody(block, d.text);
       block.classList.remove("cut");
       block.dataset.event = d.new_event;
       res.textContent = "Він не міг цього знати: репліку переписано з твоїм поясненням.";
@@ -97,29 +304,134 @@ function showAnswer(block, ok, d) {
   } else res.textContent = "Не вдалося перевірити (суддя недоступний).";
   block.appendChild(res);
 }
+// «Помилка моделі» and «Перебити тут»: shown only when the server offers them (state.actions)
+async function postAndReload(url, body) {
+  let r, d = {};
+  try { r = await fetch(url, { method: "POST", body: JSON.stringify(body) }); if (!r.ok) d = await r.json(); }
+  catch (e) { r = { ok: false }; d = { error: "Немає зв'язку." }; }
+  if (!r.ok) { showError(d.error || "Не вдалося."); return; }
+  load();
+}
+function openModelError(block) {
+  inlineBox(block, "Що саме не так? (обов'язково)", "Переписати", (note, go) => {
+    if (!note.value.trim()) { note.focus(); return; }
+    go.disabled = true;
+    postAndReload("/api/model_error", { event: Number(block.dataset.event) || null, explanation: note.value.trim() });
+  });
+}
+function openCut(block) {   // tap the word after which he is cut off
+  const words = String(block._raw || "").split(/\s+/).filter(Boolean);
+  const body = el("span", "body cutpick");
+  body.appendChild(el("span", "note", "Торкніться слова, після якого перебити: "));
+  words.forEach((w, i) => {
+    const b = el("button", "cw", w); b.type = "button";
+    b.addEventListener("click", () => postAndReload("/api/cut", { event: Number(block.dataset.event), after_words: i + 1 }));
+    body.append(b, document.createTextNode(" "));
+  });
+  const cancel = el("button", "btn ghost", "Скасувати"); cancel.type = "button";
+  cancel.addEventListener("click", () => fillBody(block, block._raw));
+  body.appendChild(cancel);
+  block._body.replaceWith(body); block._body = body;
+}
 
+// -- legend ------------------------------------------------------------------------------
+function renderLegend() {
+  const list = $("legendList"); list.textContent = "";
+  const all = Object.values(cast);
+  const shown = all.filter((c) => c.present).length ? all.filter((c) => c.present) : all;
+  for (const c of shown) {
+    const b = el("button", "lg"); b.type = "button"; b.dataset.tok = c.tok;
+    b.style.setProperty("--c", inkVar(c.tok));
+    b.append(el("i", "dot"), el("span", "nm", c.label));
+    b.setAttribute("aria-label", c.label + ": змінити чорнило");
+    b.tabIndex = $("legend").dataset.open === "true" ? 0 : -1;
+    b.addEventListener("click", (ev) => {
+      if ($("legend").dataset.open !== "true") return;   // collapsed: the whole row opens it
+      ev.stopPropagation(); openInk(c.tok);
+    });
+    list.appendChild(b);
+  }
+  $("legend").hidden = !shown.length;
+}
+function setLegend(open) {
+  $("legend").dataset.open = String(open);
+  $("btnLegend").setAttribute("aria-expanded", String(open));
+  for (const b of $("legendList").children) b.tabIndex = open ? 0 : -1;
+  store("legendOpen", open ? "1" : "0");
+}
+$("btnLegend").addEventListener("click", (ev) => {
+  ev.stopPropagation();
+  setLegend($("legend").dataset.open !== "true");
+});
+$("legend").addEventListener("click", () => { if ($("legend").dataset.open !== "true") setLegend(true); });
+
+// -- suggestions ---------------------------------------------------------------------------
+function renderSugg() {
+  const box = $("sugg"); box.textContent = "";
+  for (const s of sugg.items.slice(0, 6)) {
+    const b = el("button", "sg", s); b.type = "button"; b.title = s;
+    b.addEventListener("click", () => {   // into the input for editing; nothing is sent
+      const inp = $("input");
+      inp.value = inp.value.trim() ? inp.value.replace(/\s*$/, " ") + s : s;
+      syncSend();
+      inp.focus();
+      inp.setSelectionRange(inp.value.length, inp.value.length);
+    });
+    box.appendChild(b);
+  }
+  box.hidden = busy || !sugg.items.length;
+}
+async function moreSugg() {
+  const btn = $("btnIdea");
+  if (btn.disabled) return;
+  btn.disabled = true; btn.classList.add("wait");
+  try {
+    const r = await fetch("/api/suggestions?more=1");
+    const d = await r.json();
+    if (!r.ok) showError(d.error || "Не вдалося підказати.");
+    else if (d.items && d.items.length) {   // the new ones first, where the eye is
+      sugg.items = d.items.concat(sugg.items.filter((s) => !d.items.includes(s)));
+      renderSugg();
+      $("sugg").scrollLeft = 0;
+    }
+  } catch (e) { showError("Немає зв'язку."); }
+  btn.disabled = false; btn.classList.remove("wait");
+}
+async function loadSugg() {
+  try {
+    const r = await fetch("/api/suggestions");
+    if (!r.ok) return;
+    const d = await r.json();
+    if (!busy) { sugg = { turn: d.turn, items: d.items || [] }; renderSugg(); }
+  } catch (e) { /* suggestions are optional */ }
+}
+
+// -- phases --------------------------------------------------------------------------------
 // the composer stays open during a turn: sending cuts in (the server interrupts, then runs it)
-function setBusy(on, phase) {
+function setBusy(on, ph) {
   busy = on;
-  $("dockBusy").hidden = !on;
+  phase = on ? (ph && ph !== "idle" ? ph : "thinking") : "idle";
+  document.body.dataset.phase = phase;
   feed.classList.toggle("busy", on);
   const talk = phase === "narrating" || phase === "speaking";
   $("btnInterrupt").hidden = !talk;
+  $("btnInterrupt").style.setProperty("--c", phase === "speaking" && speakingTok ? inkVar(speakingTok) : "var(--pen)");
+  $("btnIdea").hidden = on;
   $("btnSkip").hidden = !talk;
-  $("busyText").textContent = talk ? "" : "Світ думає…";
-  $("busyText").hidden = talk;
+  $("btnDrawerSkip").hidden = !talk;
+  $("busyText").hidden = phase !== "thinking";
+  $("input").placeholder = on ? PLACEHOLDER_TALK : PLACEHOLDER_IDLE;
+  if (!on) streaming(null);
+  renderSugg();
 }
 function skipPace() { if (busy) fetch("/api/skip", { method: "POST" }).catch(() => {}); }
 function setPanel(p) {
   $("charName").textContent = p.name;
-  $("btnChar").textContent = p.name;
-  $("input").placeholder = "Що робить і каже " + p.name + "…";
   const chips = $("chips"); chips.textContent = "";
-  if (!p.chips.length) chips.appendChild(el("span", "legend", "Нічого особливого."));
+  if (!p.chips.length) chips.appendChild(el("span", "note", "Нічого особливого."));
   for (const c of p.chips) {
     const chip = el("span", "chip");
-    const d = el("i", "dot" + (c.observable ? " on" : ""));
-    chip.append(d, c.text, el("small", "", c.label));
+    chip.append(el("i", "cdot" + (c.observable ? " on" : "")), c.text, el("small", "", c.label));
     chips.appendChild(chip);
   }
   $("prose").textContent = p.prose.join(" ");
@@ -129,17 +441,20 @@ function showError(msg) { const e = $("errbar"); e.textContent = msg; e.hidden =
 function render(state) {
   feed.textContent = "";
   $("sceneTitle").textContent = state.title;
-  tag = state.live ? " · live" : " · офлайн";
+  tag = state.live ? "" : " · офлайн";
   $("clock").textContent = state.clock + tag;
+  actions = Array.isArray(state.actions) ? state.actions : [];
   for (const t of state.transcript) {
-    if (t.kind === "intro") add(el("p", "intro", t.text), false);
-    else if (t.kind === "player") add(el("p", "me", t.text), false);
-    else if (t.kind === "narr") { if (t.text && t.text.trim()) add(el("p", "narr", t.text), false); }
+    if (t.kind === "intro") add(narrBlock(t.text, "intro"), false);
+    else if (t.kind === "player") add(meBlock(t.text), false);
+    else if (t.kind === "narr") { if (t.text && t.text.trim()) add(narrBlock(t.text), false); }
     else if (t.kind === "npc_act") add(actBlock(t.tok, t.label, t.text), false);
-    else add(npcBlock(t.tok, t.label, t.text, t.cut, t.event), false);
+    else add(sayBlock(t.tok, t.label, t.text, t.cut, t.event), false);
   }
   setPanel(state.panel);
   feed.scrollTop = feed.scrollHeight;
+  if (document.fonts && document.fonts.ready)   // the web font changes the height once it arrives
+    document.fonts.ready.then(() => { feed.scrollTop = feed.scrollHeight; });
   if (state.ended) showFinale(state.chronicle); else $("finale").hidden = true;
 }
 
@@ -152,15 +467,35 @@ function dropTurn(e) {
   cur = null;
   return true;
 }
+function newSpeaker(tok) { if (tok && !cast[tok]) loadCast(); }   // ink assigned on first sight
 
 const handlers = {
-  turn_start(e) { curTurn = e.turn; turnEls[curTurn] = []; turnNpc = []; cur = null; add(el("p", "me", e.text)); },
-  narr_start() { cur = null; setBusy(true, "narrating"); },   // the bubble appears with its first word
-  narr_word(e) { if (!cur || !cur.classList.contains("narr")) cur = add(el("p", "narr")); addWord(cur, e.w); },
-  narr_end() { setBusy(true, "thinking"); },
-  speaker(e) { cur = add(npcBlock(e.tok, e.label, "")); turnNpc.push(cur); setBusy(true, "speaking"); },
-  npc_act(e) { cur = add(actBlock(e.tok, e.label, e.text)); },
-  word(e) { if (cur) addWord(cur, e.w); },
+  turn_start(e) {
+    curTurn = e.turn; turnEls[curTurn] = []; turnNpc = []; cur = null;
+    sugg = { turn: null, items: [] };
+    add(meBlock(e.text));
+    feed.scrollTop = feed.scrollHeight;   // the player's own move: the page follows the story again
+    renderSugg();
+  },
+  narr_start() { cur = null; setBusy(true, "narrating"); },   // the paragraph appears with its first word
+  narr_word(e) {
+    follow(() => {
+      if (!cur || cur.dataset.line !== "narr") { cur = add(narrBlock("")); streaming(cur); }
+      cur.textContent = cur.textContent ? cur.textContent + " " + e.w : e.w;
+    });
+  },
+  narr_end() { streaming(null); setBusy(true, "thinking"); },
+  speaker(e) {
+    speakingTok = e.tok; newSpeaker(e.tok);
+    cur = add(sayBlock(e.tok, e.label, "")); turnNpc.push(cur); streaming(cur);
+    setBusy(true, "speaking");
+  },
+  npc_act(e) { newSpeaker(e.tok); cur = add(actBlock(e.tok, e.label, e.text)); streaming(null); },
+  word(e) {
+    if (!cur || cur.dataset.line !== "say") return;
+    const p = cur;
+    follow(() => fillBody(p, p._raw ? p._raw + " " + e.w : e.w));
+  },
   turn_done(e) {
     $("clock").textContent = e.clock + tag;
     (e.lines || []).forEach((id, i) => {
@@ -169,6 +504,7 @@ const handlers = {
       if ((e.cut_lines || []).includes(id)) turnNpc[i].classList.add("cut");
     });
     setPanel(e.panel);
+    sugg.turn = e.turn;
     if (!sending) setBusy(false);       // a text typed during the turn is already on its way
     showError("");
     if (!$("debugPanel").hidden) loadDebug();
@@ -185,19 +521,29 @@ const handlers = {
   settled(e) {            // the slow lane is done: the panel now shows what the turn changed
     $("clock").textContent = e.clock + tag;
     setPanel(e.panel);
+    loadCast();           // a learned name changes a label; token and ink stay
+    if ($("drawer").open) loadPeople();
     if (!$("debugPanel").hidden) loadDebug();
   },
   retract(e) {            // the bookkeeping of the turn failed after the player had read it
-    if (dropTurn(e)) {      // an earlier turn: the running one keeps its bubbles, input and busy state
+    if (dropTurn(e)) {      // an earlier turn: the running one keeps its paragraphs, input and busy state
       if (!$("input").value.trim()) $("input").value = e.text;
       syncSend();
       setBusy(false);
     }
     showError(e.message);
   },
+  suggestions(e) {        // the turn assistant: 2–3 actions above the input, never sent by itself
+    if (e.turn !== curTurn && curTurn != null) return;
+    sugg = { turn: e.turn, items: (sugg.turn === e.turn ? sugg.items : []).concat(e.items || []) };
+    renderSugg();
+  },
+  ink(e) { setInk(e.tok, e.ink); renderLegend(); },
   ended(e) { showFinale(e.chronicle); },
   reset() {},
 };
+// events of a turn whose text the transcript already holds (a reload during its slow lane)
+const FEED_EVENTS = new Set(["turn_start", "narr_start", "narr_word", "narr_end", "speaker", "npc_act", "word", "turn_done"]);
 
 // the player character died: a final chronicle, the campaign is read-only
 function showFinale(lines) {
@@ -205,13 +551,13 @@ function showFinale(lines) {
   for (const l of lines || []) {
     const cls = l.kind === "death" ? "death" : l.kind === "outcome" ? "outcome" : l.kind === "line" ? "npc" : "narr";
     const p = el("p", cls);
-    if (l.kind === "line") p.append(el("span", "who", l.who), el("span", "w", l.text));
+    if (l.kind === "line") p.append(el("span", "who", l.who), el("span", "q", " — " + l.text));
     else p.textContent = l.text;
     box.appendChild(p);
   }
   $("finale").hidden = false;
   $("composer").hidden = true;
-  $("dockBusy").hidden = true;
+  $("sugg").hidden = true;
 }
 
 function connect(after) {
@@ -223,6 +569,11 @@ function connect(after) {
       const e = JSON.parse(m.data);
       if (e.seq <= lastSeq) return;      // replay after a reconnect: already shown
       lastSeq = e.seq;
+      if (skipReplay && FEED_EVENTS.has(type)) {
+        if (type === "turn_start") curTurn = e.turn;
+        if (type === "turn_done") skipReplay = false;
+        return;
+      }
       handlers[type](e);
     });
   }
@@ -231,13 +582,18 @@ function connect(after) {
 async function load() {
   const state = await (await fetch("/api/state")).json();
   render(state);
-  setBusy(state.running, state.phase);
+  turnEls = {}; cur = null;
+  skipReplay = Boolean(state.running && state.phase === "idle");
+  setBusy(state.phase !== "idle", state.phase);
   showError("");
   connect(state.resume_after);
+  loadCast();
+  if (state.phase === "idle") loadSugg();
 }
 
 function syncSend() { $("btnSend").disabled = !$("input").value.trim(); }
-$("input").addEventListener("input", syncSend);
+function grow() { const i = $("input"); i.style.height = "auto"; i.style.height = Math.min(i.scrollHeight, 160) + "px"; }
+$("input").addEventListener("input", () => { syncSend(); grow(); });
 $("input").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("composer").requestSubmit(); }
 });
@@ -246,7 +602,7 @@ $("composer").addEventListener("submit", async (ev) => {
   const text = $("input").value.trim();
   if (!text) return;
   showError("");
-  $("input").value = ""; syncSend();
+  $("input").value = ""; syncSend(); grow();
   sending++;
   setBusy(true, "thinking");
   let r, d = {};
@@ -265,24 +621,66 @@ $("composer").addEventListener("submit", async (ev) => {
 });
 $("btnInterrupt").addEventListener("click", () => fetch("/api/interrupt", { method: "POST" }));
 $("btnSkip").addEventListener("click", skipPace);
-feed.addEventListener("click", (ev) => {   // a tap on the story skips the pace (not on its buttons)
-  if (!ev.target.closest("button, textarea, a, .askbox, .askres")) skipPace();
-});
+$("btnIdea").addEventListener("click", moreSugg);
 
-// panels
-$("btnChar").addEventListener("click", () => { $("charPanel").hidden = false; });
-$("charClose").addEventListener("click", () => { $("charPanel").hidden = true; });
+// -- the ☰ drawer --------------------------------------------------------------------------
+async function loadPeople() {
+  let list = [];
+  try { const r = await fetch("/api/people"); if (r.ok) list = await r.json(); } catch (e) { /* none */ }
+  const box = $("people"); box.textContent = "";
+  if (!list.length) box.appendChild(el("p", "note", "Поки нікого."));
+  for (const c of list) {
+    const row = el("div", "person"); row.dataset.tok = c.tok;
+    row.style.setProperty("--c", inkVar(c.tok));
+    const head = el("div", "person-h");
+    const ink = el("button", "inkbtn"); ink.type = "button";
+    ink.setAttribute("aria-label", "Чорнило: " + c.label);
+    ink.addEventListener("click", () => { $("drawer").close(); openInk(c.tok); });
+    head.append(ink, el("b", "", c.label), el("small", "", c.present ? "тут" : "не тут"));
+    row.appendChild(head);
+    if (c.known && c.known.length) {
+      const ul = el("ul");
+      for (const k of c.known) ul.appendChild(el("li", "", k));
+      row.appendChild(ul);
+    } else row.appendChild(el("p", "note", "Нічого певного."));
+    box.appendChild(row);
+  }
+}
+async function loadPlaces() {   // "where can I go" (Task 4); nothing when the endpoint is missing
+  let list = [];
+  try { const r = await fetch("/api/places"); if (r.ok) list = await r.json(); } catch (e) { list = []; }
+  if (list && !Array.isArray(list)) list = list.places || [];
+  const ul = $("places"); ul.textContent = "";
+  for (const pl of list || []) {
+    const name = typeof pl === "string" ? pl : (pl.label || pl.name || pl.title || "");
+    if (!name) continue;
+    const li = el("li", "", name);
+    const extra = typeof pl === "object" ? (pl.how || pl.distance || pl.note || "") : "";
+    if (extra) li.appendChild(el("small", "", " · " + extra));
+    ul.appendChild(li);
+  }
+  $("placesSec").hidden = !ul.children.length;
+}
+$("btnMenu").addEventListener("click", () => {
+  $("drawer").showModal();
+  loadPeople(); loadPlaces();
+});
+$("drawerClose").addEventListener("click", () => $("drawer").close());
+$("drawer").addEventListener("click", (ev) => { if (ev.target === $("drawer")) $("drawer").close(); });
+$("btnDrawerSkip").addEventListener("click", () => { skipPace(); $("drawer").close(); });
 $("btnNew").addEventListener("click", async () => {
   if (!confirm("Почати гру спочатку? Поточна пригода буде втрачена.")) return;
   const r = await fetch("/api/campaign/new", { method: "POST" });
-  if (r.ok) { $("charPanel").hidden = true; load(); }
+  if (r.ok) { $("drawer").close(); cast = {}; load(); }
 });
-$("btnDebug").addEventListener("click", () => {
-  const on = $("debugPanel").hidden;
+function showDebug(on) {
   $("debugPanel").hidden = !on;
   $("btnDebug").setAttribute("aria-pressed", String(on));
   if (on) loadDebug();
-});
+}
+$("btnDebug").addEventListener("click", () => { $("drawer").close(); showDebug($("debugPanel").hidden); });
+$("debugClose").addEventListener("click", () => { showDebug(false); $("btnMenu").focus(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("debugPanel").hidden) showDebug(false); });
 
 function section(title, rows) {
   const frag = document.createDocumentFragment();
@@ -365,7 +763,7 @@ function appendWorld(body, w) {
   }
 }
 
-// who knows what and from where (per character), so the user can check knowledge directly
+// who knows what and from where (per character; debug only: real names), to check knowledge
 async function loadKnowledge(body) {
   const r = await fetch("/api/knowledge");
   if (!r.ok) { body.appendChild(section("Хто що знає", [["", "недоступно під час ходу"]])); return; }
@@ -400,9 +798,11 @@ document.addEventListener("visibilitychange", () => {
 });
 window.addEventListener("pagehide", () => presence(false));
 
+setLegend(store("legendOpen") !== "0");
+presence(document.visibilityState !== "hidden");   // a reload sent "hidden" on its way out
 load();
 
 $("btnNewFinale").addEventListener("click", async () => {
   const r = await fetch("/api/campaign/new", { method: "POST" });
-  if (r.ok) { $("finale").hidden = true; load(); }
+  if (r.ok) { $("finale").hidden = true; $("composer").hidden = false; cast = {}; load(); }
 });

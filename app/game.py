@@ -297,8 +297,10 @@ class Game:
                 self.pace = self.base_pace
                 self.handle = InterruptHandle()
                 self.skip_narration = False
+                # keep the turn before (from its start): a client polling the stream must still
+                # get its turn_done when this new text cut it in a moment ago
+                self.events = [e for e in self.events if e["seq"] > self.turn_start_seq]
                 self.turn_start_seq = self.seq
-                self.events = []
                 self.turn_no += 1
                 self._emit("turn_start", text=text, turn=self.turn_no)
                 # the last turn's thread may still be in its slow lane and bookkeeping: the new

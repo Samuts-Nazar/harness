@@ -4,52 +4,83 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#231d18">
 <title>Harness</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400;0,700;1,400&family=Alegreya+SC:wght@500&subset=cyrillic&display=swap">
 <link rel="stylesheet" href="/static/style.css">
 </head>
-<body>
+<body data-phase="loading">
 <div id="app">
   <header class="top">
-    <div class="title"><b id="sceneTitle">…</b><small id="clock"></small></div>
-    <button class="btn ghost" id="btnDebug" aria-pressed="false">Debug</button>
-    <button class="btn ghost" id="btnChar">Рагнар</button>
+    <p class="where"><span id="sceneTitle">…</span><span id="clock"></span></p>
+    <div id="legend" class="legend" data-open="true" hidden>
+      <button id="btnLegend" class="lgtoggle" type="button" aria-expanded="true" aria-controls="legendList"
+        aria-label="Хто є хто: сховати чи показати"><span class="open-only">▴ сховати</span><span class="closed-only" aria-hidden="true">▾</span></button>
+      <div id="legendList" class="lglist"></div>
+    </div>
+    <button id="btnMenu" class="ic menu" type="button" aria-label="Меню" aria-haspopup="dialog">☰</button>
   </header>
 
-  <section id="debugPanel" hidden aria-label="Налагодження (debug)">
-    <div id="debugBody">Ходу ще не було.</div>
-  </section>
-
-  <main id="feed" aria-live="polite"></main>
-
-  <section id="finale" class="sheet" hidden aria-label="Хроніка">
-    <header><div><b>Кінець кампанії</b><small>Персонаж загинув. Це тільки для читання.</small></div></header>
-    <div id="finaleBody"></div>
-    <button class="btn wide" id="btnNewFinale">Почати нову гру</button>
-  </section>
+  <main id="feed" class="page" aria-live="polite"></main>
 
   <div id="errbar" role="alert" hidden></div>
 
   <footer id="dock">
-    <div id="dockBusy" hidden>
-      <span id="busyText">Світ думає…</span>
-      <button class="skip" id="btnSkip" type="button" hidden>торкніться, щоб показати одразу</button>
-      <button class="btn danger" id="btnInterrupt" hidden>✋ Перебити</button>
-    </div>
+    <div id="sugg" class="sugg" role="group" aria-label="Варіанти дій" hidden></div>
+    <button id="btnSkip" class="hint" type="button" hidden>торкніться тексту — показати одразу</button>
+    <p id="busyText" class="hint" hidden>Світ думає…</p>
     <form id="composer" autocomplete="off">
-      <textarea id="input" rows="2" placeholder="Що робить і каже Рагнар…" enterkeyhint="send"></textarea>
-      <button class="btn primary" id="btnSend" type="submit" disabled>Надіслати ➤</button>
+      <span class="slot">
+        <button id="btnIdea" class="ic" type="button" aria-label="Ще варіанти дій" title="Ще варіанти дій">💡</button>
+        <button id="btnInterrupt" class="ic live" type="button" aria-label="Перебити" title="Перебити" hidden>✋</button>
+      </span>
+      <textarea id="input" rows="1" placeholder="Що скажете чи зробите…" enterkeyhint="send" aria-label="Ваш хід"></textarea>
+      <button id="btnSend" class="ic send" type="submit" aria-label="Надіслати" title="Надіслати" disabled>✒</button>
     </form>
   </footer>
 
-  <aside id="charPanel" class="sheet" hidden aria-label="Персонаж">
-    <header><div><b id="charName">Рагнар</b><small>Як ти відчуваєш себе зараз</small></div>
-      <button class="btn ghost" id="charClose" aria-label="Закрити">✕</button></header>
-    <div class="legend"><i class="dot on"></i> видно іншим <i class="dot"></i> знаєш лише ти</div>
+  <section id="finale" class="overlay" hidden aria-label="Хроніка">
+    <header><div><b>Кінець кампанії</b><small>Персонаж загинув. Це тільки для читання.</small></div></header>
+    <div id="finaleBody"></div>
+    <button class="btn wide" id="btnNewFinale" type="button">Почати нову гру</button>
+  </section>
+
+  <section id="debugPanel" class="overlay debug" hidden aria-label="Налагодження (debug)">
+    <header><b>Налагодження</b><button id="debugClose" class="ic" type="button" aria-label="Закрити налагодження">✕</button></header>
+    <div id="debugBody">Ходу ще не було.</div>
+  </section>
+</div>
+
+<dialog id="sheet" class="sheet" aria-labelledby="sheetHead">
+  <p id="sheetHead" class="sheet-h" tabindex="-1" autofocus></p>
+  <div id="sheetBody"></div>
+</dialog>
+
+<dialog id="drawer" class="drawer" aria-label="Меню">
+  <header class="drawer-h"><b id="charName">…</b><button id="drawerClose" class="ic" type="button" aria-label="Закрити меню">✕</button></header>
+  <section class="dsec">
+    <h2>Як ви зараз</h2>
     <div id="chips"></div>
     <p id="prose"></p>
-    <button class="btn wide" id="btnNew">Почати гру спочатку</button>
-  </aside>
-</div>
+    <p class="note"><i class="cdot on"></i> видно іншим <i class="cdot"></i> знаєте лише ви</p>
+  </section>
+  <section class="dsec" id="peopleSec">
+    <h2>👥 Хто тут і що я про них знаю</h2>
+    <div id="people"></div>
+  </section>
+  <section class="dsec" id="placesSec" hidden>
+    <h2>🗺 Куди можна піти</h2>
+    <ul id="places"></ul>
+    <p class="note">Щоб піти, просто напишіть про це: «іду на ринок».</p>
+  </section>
+  <section class="dsec acts">
+    <button id="btnDrawerSkip" class="opt" type="button" hidden>⏩ Показати текст одразу</button>
+    <button id="btnDebug" class="opt" type="button" aria-pressed="false">⚙ Налагодження</button>
+    <button id="btnNew" class="opt danger" type="button">Почати гру спочатку</button>
+  </section>
+</dialog>
 <script src="/static/app.js"></script>
 </body>
 </html>

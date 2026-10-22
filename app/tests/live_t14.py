@@ -65,7 +65,7 @@ def main() -> None:
         before = len(game.transcript)
         game.start_turn(text)
         game.wait_idle(240)
-        err = next((e for e in game.events_after(0) if e["type"] == "error"), None)
+        err = next((e for e in game.events_after(game.turn_start_seq) if e["type"] == "error"), None)
         r = (game.debug.get("repetition") or {}).get("score")
         reps.append(r if r is not None else 0.0)
         print(f"\n== turn {i}: {text}  (rep {r}, cost ${game.debug['cost']:.4f}, err {err and err['message']})")

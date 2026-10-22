@@ -65,7 +65,7 @@ def test_narration_streams_before_the_first_npc_word_and_second_npc_hears_the_fi
     for _ in range(3):  # the third scripted narration has both NPCs speaking
         g.start_turn("Кажу щось.")
         g.wait_idle()
-    evs = g.events_after(0)
+    evs = g.events_after(g.turn_start_seq)  # the last turn's events
     types = [e["type"] for e in evs]
     assert types.index("narr_end") < types.index("speaker")
     assert [e["tok"] for e in evs if e["type"] == "speaker"] == [g.camp.tok("horst"), g.camp.tok("elza")]

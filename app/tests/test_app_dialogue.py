@@ -309,7 +309,7 @@ def test_late_retract_of_a_cut_in_turn_names_that_turn():
     g.start_turn("Друга.")   # cuts in while turn 1's slow lane runs
     release.set()
     g.wait_idle(30)
-    evs = g.events_after(0)
+    evs = g.events_after(g.turn_start_seq)  # the last turn's events
     starts = [e for e in evs if e["type"] == "turn_start"]
     retract = next(e for e in evs if e["type"] == "retract")
     assert starts and starts[-1]["turn"] == 2 and retract["turn"] == 1
