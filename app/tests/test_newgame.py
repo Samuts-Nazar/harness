@@ -508,3 +508,37 @@ def test_bundled_packages_listed(tmp_path, monkeypatch):
     assert parse(yen["text"]).warnings == []
     s = summary(parse(yen["text"]))
     assert "Йеннефер" in " ".join(x["value"] for x in s["set"])
+
+
+@pytest.mark.parametrize("attitude,rung", [
+    ("дружня й приязна", "ally"), ("довіряє йому", "ally"), ("старий друг", "ally"),
+    ("не довіряє", "client"), ("недружня", "client"), ("без симпатії", "client"),
+    ("невірна", "client"), ("другий раз бачить", "client"), ("дала пораду", "client"),
+    ("подруга його сестри, але ніякої приязні", "client"), ("рада його бачити", "ally"),
+])
+def test_rung_seed_reads_negation_and_whole_words(attitude, rung):
+    assert newgame.rung_seed({"knows_player": True, "attitude": attitude}) == rung
+    assert newgame.rung_seed({"knows_player": False, "attitude": attitude}) == "stranger"
+
+
+def test_a_broken_portrait_file_is_named_in_ukrainian(monkeypatch):
+    from pathlib import Path
+
+    import harness.portrait as hp
+
+    def boom(world):
+        raise hp.PortraitError(Path("worlds/witcher/portraits/broken.yaml"), "core", "missing")
+    monkeypatch.setattr(hp, "load_world_portraits", boom)
+    got = issues(PORTRAIT_PERSON.format(pid="yennefer_rinde"))
+    assert got[0].field == "start.who_is_here[1].portrait"
+    assert "broken.yaml" in got[0].fix and "поки жодного" not in got[0].fix
+
+
+def test_portrait_person_gets_no_generated_age(tmp_path):
+    text = (ROOT / "worlds" / "witcher" / "packages" / "yennefer_rinde.yaml").read_text(
+        encoding="utf-8")
+    g, _ = make(tmp_path, text)
+    eng = g.eng
+    yen = next(c for c, p in eng.profiles.items() if p.portrait == "yennefer_rinde")
+    assert "років" not in eng.profiles[yen].description
+    assert "взяти" not in eng.profiles[yen].description   # curiosity, not what she can take

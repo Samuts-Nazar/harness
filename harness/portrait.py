@@ -187,7 +187,9 @@ def select_stance(p: Portrait, rung: str, sit: Situation) -> Stance:
     return p.stances[0]
 
 
-def slice_text(p: Portrait, stance: Stance, leak: str | None) -> str:
+def slice_text(p: Portrait, stance: Stance, leak: str | None, budget: int = MAX_WORDS) -> str:
+    """At most `budget` words (default MAX_WORDS): trims examples, then the tail, then the leak,
+    then cuts. A caller that adds a header passes the budget left after it."""
     def build(examples, tail, leak_line):
         parts = [p.core, stance.does, stance.sounds, tail, *examples, p.voice, p.never, leak_line]
         return "\n".join(x for x in parts if x)
@@ -195,7 +197,7 @@ def slice_text(p: Portrait, stance: Stance, leak: str | None) -> str:
     examples, tail, leak_line = list(stance.examples[:MAX_EXAMPLES]), stance.tail, leak or ""
     for trim in ("examples", "tail", "leak", None):
         out = build(examples, tail, leak_line)
-        if len(out.split()) <= MAX_WORDS:
+        if len(out.split()) <= budget:
             return out
         if trim == "examples":
             examples = []
@@ -203,7 +205,7 @@ def slice_text(p: Portrait, stance: Stance, leak: str | None) -> str:
             tail = ""
         elif trim == "leak":
             leak_line = ""
-    return " ".join(out.split()[:MAX_WORDS])
+    return " ".join(out.split()[:budget])
 
 
 _WORD = re.compile(r"[\w'’]+")

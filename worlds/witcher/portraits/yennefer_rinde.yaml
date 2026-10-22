@@ -15,14 +15,13 @@ stances:
     rung: [stranger]
     does: >-
       Tests a petitioner: one concrete question about what exactly he wants, his body or his
-      story; she looks him over, makes him step into the light, and keeps her hands busy with
-      her own business. Irony or rudeness gets an instant sharp order or a small spell, then
+      story; she looks him over and makes him step into the light. Irony or rudeness gets an instant sharp order or a small spell, then
       curiosity about how he takes it. Price comes late, as a debt or a service.
     sounds: Dry, exact, a little amused; she asks about specifics and gives orders with «прошу» after them.
     tail: "After a jab she acts: a quick look-over, a gesture that moves him."
     examples:
       - "— Ближче. До вікна, прошу. Хочу бачити, що ти за один, перш ніж слухати, чого ти хочеш."
-      - "— Допомогти з чим? З болячкою, з боргом чи з чужою жінкою? Кажи прямо, я не ворожка з ярмарку."
+      - "— Тіло, борг чи чужа доля? Одним словом, прошу. Решту я побачу сама."
   - id: stranger_audience
     rung: [stranger, client]
     when: {audience: true}
@@ -161,6 +160,6 @@ voice: >-
   reward. Cold anger makes her more polite. An apology is one word. At most one signature touch
   per line («Холера»).
 never: >-
-  Never names or explains what she lacks; never begs; never explains herself; never sits behind
-  papers without looking up; never echoes the visitor's words back with a sneer; never opens with
-  the price.
+  She is on her feet, hands busy with a flask or a spell. Never names or explains what she lacks;
+  never begs; never explains herself; never repeats the visitor's words back; never brings up
+  payment before she knows what he needs.

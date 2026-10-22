@@ -117,3 +117,62 @@ def test_portrait_binding_survives_reopen(tmp_path):
     assert "yennefer_rinde" in again.ctx.portraits
     assert again.ctx.rung_of("yen") == "client"
     assert again.ctx.portrait_section("yen", again.scene)
+
+
+# -- review fixes (round 1) -----------------------------------------------------------------
+
+def _world_portraits():
+    from harness.portrait import WORLDS, load_world_portraits
+    out = []
+    for w in sorted(d.name for d in WORLDS.iterdir() if (d / "portraits").is_dir()):
+        out += list(load_world_portraits(w).values())   # every bundled portrait loads
+    return out
+
+
+def test_all_bundled_portraits_load():
+    assert "yennefer_rinde" in {p.id for p in _world_portraits()}
+
+
+def test_section_with_header_fits_the_budget_for_every_stance():
+    e = eng()
+    for p in _world_portraits():
+        for st in p.stances:
+            sec = e.ctx.portrait_text(p, st, "yen")
+            assert len(sec.split()) <= 260, (p.id, st.id, len(sec.split()))
+
+
+def test_yennefer_prompt_has_no_desk_cliche_and_an_unconditional_echo_ban():
+    e = eng()
+    p = next(x for x in _world_portraits() if x.id == "yennefer_rinde")
+    for st in p.stances:
+        sec = e.ctx.portrait_text(p, st, "yen").lower()
+        assert "papers" not in sec and "looking up" not in sec
+        assert "never repeats the visitor's words back;" in sec and "sneer" not in sec
+        assert "before she knows what he needs" in sec
+    assert not any(ex.startswith("— Допомогти") for st in p.stances for ex in st.examples)
+    first = e.ctx.portrait_text(p, p.stances[0], "yen")   # stranger_test keeps both examples
+    assert all(ex in first for ex in p.stances[0].examples)
+
+
+def test_copy_check_uses_the_masked_examples():
+    e = eng()
+    e.bind_portrait("yen", "p_yen")
+    v = e.ctx.character_view("yen", e.scene)
+    assert v.examples and not any("Рагнар" in x for x in v.examples)
+    assert v.examples[0] in "\n".join(v.sections)
+
+
+def test_a_broken_portrait_file_does_not_stop_the_engine(monkeypatch):
+    from pathlib import Path
+
+    import harness.pipeline as pl
+    from harness.portrait import PortraitError
+
+    def boom(world):
+        raise PortraitError(Path("x/broken.yaml"), "core", "missing")
+    monkeypatch.setattr(pl, "load_world_portraits", boom)
+    e = Engine(FakeProvider(script={}), PROFILES, Scene("Рінде", (PLAYER,), 0),
+               models=ModelConfig(), judge=FakeJudge(), world="witcher")
+    assert e.ctx.portraits == {}
+    note = next(n for n in e.devlog if n["kind"] == "portraits_failed")
+    assert "broken.yaml" in note["error"]

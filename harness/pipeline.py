@@ -68,7 +68,7 @@ from .policy import (
 )
 from .providers import Provider, ProviderError
 from .stylehits import count_by_kind, style_hits
-from .portrait import RUNGS, copy_overlap, load_world_portraits
+from .portrait import RUNGS, PortraitError, copy_overlap, load_world_portraits
 from .repetition import WINDOW as REPETITION_WINDOW, measure_turn, sentences
 from .profile import WorldProfile, distance, profile_of_lines
 from .settings import (
@@ -376,7 +376,11 @@ class Engine:
                                   player_unlimited=player_unlimited)
         self.ctx.outcomes = outcomes
         self.world = world
-        self.ctx.portraits = load_world_portraits(world) if world else {}
+        try:  # a broken portrait file must not stop a campaign from opening
+            self.ctx.portraits = load_world_portraits(world) if world else {}
+        except (OSError, PortraitError) as e:
+            self.ctx.portraits = {}
+            self._note("portraits_failed", world=world, error=str(e)[:300])
         self.ctx.rung_seeds = dict(rung_seeds or {})
         self.memory = (MemoryWriter(self.campaign_dir / "memory", self.deriver, self.log,
                                     self.profiles, self.agents) if self.campaign_dir else None)

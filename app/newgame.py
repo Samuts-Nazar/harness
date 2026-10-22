@@ -81,8 +81,14 @@ START_KEYS = ("canon", "place", "day", "time", "situation", "who_is_here")
 PERSON_KEYS = ("name", "role", "appearance", "attitude", "goal", "knows_player", "portrait")
 PACKAGES = ROOT / "worlds" / "witcher" / "packages"  # bundled game packages (the new-game list)
 # an `attitude` that reads as friendly: a person who knows the player starts as an ally
-FRIENDLY = re.compile(r"дружн|друг|приязн|прихильн|тепл|довір|симпат|радий|рада|любить|вірн",
-                      re.IGNORECASE)
+# whole words only, so «другий», «подруга», «порада», «недружня», «невірна» do not count
+FRIENDLY = re.compile(r"(?:друг|друга|другом|друзі|друзів|дружн\w*|дружб\w*|дружелюбн\w*|"
+                      r"приязн\w*|прихильн\w*|тепл\w*|довір\w*|симпат\w*|радий|рада|раді|"
+                      r"радіє|люб\w*|вірн\w*)", re.IGNORECASE)
+# a word before it that turns it around («не довіряє», «без симпатії», «ніякої приязні»)
+NEGATION = {"не", "ні", "без", "ніякої", "ніякого", "жодної", "жодного", "аніскільки", "анітрохи",
+            "зовсім"}
+_UK_WORD = re.compile(r"[\w'’-]+")
 PACE_EN = {"slow": "slow: unhurried, detailed narration; let moments breathe",
            "fast": "fast: short narration that moves straight to what matters"}
 
@@ -113,13 +119,17 @@ class Package:
         return self.data
 
 
-def world_portraits() -> dict[str, Any]:
-    """The portraits of the Witcher world by id ({} when they cannot be read)."""
-    from harness.portrait import PortraitError, load_world_portraits
+def world_portraits() -> tuple[dict[str, Any], str]:
+    """The portraits of the Witcher world by id, and "" or what is wrong (Ukrainian) when a
+    portrait file cannot be read (then no portraits)."""
+    from harness import portrait as hp
     try:
-        return load_world_portraits("witcher")
-    except (OSError, PortraitError):
-        return {}
+        return hp.load_world_portraits("witcher"), ""
+    except hp.PortraitError as e:
+        return {}, (f"файл портрета «{Path(e.path).name}» зіпсований (поле {e.field}: "
+                    f"{e.problem})")
+    except OSError as e:
+        return {}, f"портрети світу не читаються ({e.strerror or e})"
 
 
 def bundled_packages() -> list[dict[str, str]]:
@@ -335,9 +345,12 @@ def _people(c: _Checker, v: Any) -> list[dict[str, Any]] | None:
         person["knows_player"] = bool(kp)
         pid = c.text(f"{pf}.portrait", p.get("portrait"))
         if pid:
-            known = world_portraits()
+            known, broken = world_portraits()
             if pid in known:
                 person["portrait"] = pid
+            elif broken:
+                c.err(f"{pf}.portrait", f"Портрет «{_show(pid)}» зараз недоступний.",
+                      f"У застосунку {broken}; приберіть поле portrait або виправте файл.")
             else:
                 c.err(f"{pf}.portrait", f"Невідомий портрет «{_show(pid)}».",
                       "Оберіть один із готових портретів світу: " + (", ".join(sorted(known))
@@ -725,9 +738,10 @@ def _build_people(eng: Engine, people: list[dict[str, Any]]) -> tuple[list[str],
                              description=q.get("attitude", ""))
         if q.get("name"):
             spec = replace(spec, name=q["name"])
+        # a portrait person's age is the portrait's business: no generated age to contradict it
+        age = "" if q.get("portrait") else f", {spec.vitals.age(eng.scene.time)} років"
         desc = " ".join(x for x in (
-            f"{spec.name.split()[0]}, {spec.occupation}, {spec.vitals.age(eng.scene.time)} "
-            "років.", q.get("attitude") and f"Toward the newcomer: {q['attitude']}.",
+            f"{spec.name.split()[0]}, {spec.occupation}{age}.", q.get("attitude") and f"Toward the newcomer: {q['attitude']}.",
             q.get("goal") and f"Wants: {q['goal']}.") if x)
         eng.add_npc(spec, description=desc, appearance=look)
         ids.append(spec.id)
@@ -744,7 +758,11 @@ def rung_seed(person: dict[str, Any]) -> str:
     ally when the attitude reads friendly, else a client; anyone else is a stranger."""
     if not person.get("knows_player"):
         return "stranger"
-    return "ally" if FRIENDLY.search(person.get("attitude", "")) else "client"
+    words = [w.lower() for w in _UK_WORD.findall(person.get("attitude", ""))]
+    for i, w in enumerate(words):
+        if FRIENDLY.fullmatch(w) and not (i and words[i - 1] in NEGATION):
+            return "ally"
+    return "client"
 
 
 def _passers_by(eng: Engine, place_id: str) -> list[dict[str, Any]]:

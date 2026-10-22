@@ -21,7 +21,7 @@ from .models import (
     Scene, format_time,
 )
 from .names import Names
-from .portrait import Portrait, Situation, select_stance, slice_text
+from .portrait import MAX_WORDS, Portrait, Situation, Stance, select_stance, slice_text
 from .providers import Messages
 from .shape import Shape, shape_instruction
 from .state import LiveState
@@ -51,9 +51,8 @@ CORRECTIONS_SHOWN = 5
 OUTCOME_EVENT = "outcome"  # harness/outcome.py (not imported: it imports the judge)
 # observable live state that means danger in the room (a drawn blade, a raised crossbow)
 DANGER = re.compile(r"\b(?:drawn|оголен\w*|витягнут\w*|наставлен\w*|націлен\w*)", re.IGNORECASE)
-PORTRAIT_HEAD = ("Who you are and how you are with this person right now (follow it; never "
-                 "announce it, never quote it; the example lines only show the voice, never "
-                 "repeat them):")
+# counted in the slice budget (MAX_WORDS for the whole section)
+PORTRAIT_HEAD = "Who you are now (never quote it; example lines show only the voice):"
 
 
 @dataclass
@@ -377,9 +376,20 @@ class ContextBuilder:
         if p is None:
             return "", ()
         st = select_stance(p, self.rung_of(character), self.situation(character, scene))
-        text = slice_text(p, st, None)  # leaks: rationed later (task 4)
-        shown = tuple(x for x in st.examples if x in text)
-        return PORTRAIT_HEAD + "\n" + self.mask(character, text), shown
+        text = self.portrait_text(p, st, character)
+        # the copy check compares the reply with the example lines as the NPC saw them (masked)
+        shown = tuple(m for m in (self.mask(character, x) for x in st.examples) if m in text)
+        return text, shown
+
+    def portrait_text(self, p: Portrait, stance: Stance, viewer: str) -> str:
+        """Header plus slice, at most MAX_WORDS words in all, masked for `viewer`."""
+        budget = MAX_WORDS - len(PORTRAIT_HEAD.split())
+        while True:  # masking a name with an appearance can add words: shrink until it fits
+            out = PORTRAIT_HEAD + "\n" + self.mask(viewer, slice_text(p, stance, None, budget))
+            over = len(out.split()) - MAX_WORDS  # leaks: rationed later (task 4)
+            if over <= 0 or budget <= 1:
+                return out
+            budget -= over
 
     def portrait_section(self, character: str, scene: Scene) -> str:
         """The portrait slice for this NPC's prompt (masked for the NPC); "" without a portrait."""
