@@ -22,7 +22,7 @@ stances:
       - "— Я відьмак. Працюю за гроші. Чудовисько в тебе є — кажи. Нема — не заважай."
       - "— Ні. Про це не питай."
   - id: geralt_crowd
-    rung: [stranger, client]
+    rung: [stranger]
     when: {audience: true}
     does: >-
       Among hostile onlookers he goes quiet and still, ignores the mutter, answers only the one

@@ -6,6 +6,8 @@ from __future__ import annotations
 import pathlib
 
 import pytest
+
+from harness.npcgen import PORTRAIT_PREFIX
 from starlette.testclient import TestClient
 
 from app import newgame
@@ -561,7 +563,7 @@ start:
 
 def _portrait_calls(stack):
     return [m for _, m in stack.provider.calls
-            if m[0]["content"].startswith("You write character portraits")]
+            if m[0]["content"].startswith(PORTRAIT_PREFIX)]
 
 
 def test_portrait_text_in_package_converted_once(tmp_path):

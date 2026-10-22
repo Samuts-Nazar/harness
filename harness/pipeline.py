@@ -2633,10 +2633,12 @@ class Engine:
         if npc in self._short_portraits:
             return bool(self._short_portraits[npc]) and bool(self.profiles[npc].portrait)
         spec = self._spec_of(npc)
-        p = short_portrait(spec, self.style, lambda m: self._complete("extractor", m), text=text)
+        why: list[str] = []
+        p = short_portrait(spec, self.style, lambda m: self._complete("extractor", m), text=text,
+                           on_fail=why.append)
         self._short_portraits[npc] = asdict(p) if p else None
         if p is None:
-            self._note("short_portrait_failed", npc=npc)
+            self._note("short_portrait_failed", npc=npc, reason=why[0] if why else "unknown")
         else:
             self.ctx.portraits[p.id] = p
             self.bind_portrait(npc, p.id, rung)
@@ -2789,8 +2791,13 @@ class Engine:
         eng._owns_conn = True
         eng._short_portraits = dict(meta.get("short_portraits") or {})
         for pid, raw in eng._short_portraits.items():  # generated portraits: cached, never re-made
-            if raw:
-                eng.ctx.portraits[raw["id"]] = parse_portrait(raw, f"npc:{pid}")
+            try:  # a bad cached entry must not stop the campaign from opening
+                if raw:
+                    eng.ctx.portraits[raw["id"]] = parse_portrait(raw, f"npc:{pid}")
+            except (PortraitError, KeyError, TypeError) as e:
+                eng._note("short_portrait_unreadable", npc=pid, error=str(e)[:200])
+                if pid in eng.profiles and eng.profiles[pid].portrait == (raw or {}).get("id"):
+                    eng.profiles[pid] = replace(eng.profiles[pid], portrait="")
         eng.refresh_memory()
         return eng
 

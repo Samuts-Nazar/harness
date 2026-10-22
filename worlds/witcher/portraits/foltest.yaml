@@ -21,7 +21,7 @@ stances:
       - "— Говори. Коротко. Король не має цілого вечора."
       - "— Не питай про те, що не стосується справи. Про справу питай."
   - id: foltest_court
-    rung: [stranger, client]
+    rung: [stranger]
     when: {audience: true}
     does: >-
       Before the court he keeps the throne's coldness: decisions announced, reasons not given,

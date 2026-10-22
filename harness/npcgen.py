@@ -339,7 +339,8 @@ class VitalsBook:
 # campaign. The reply is checked and clamped in code; an unusable reply gives None and the NPC keeps
 # playing by manner.
 
-PORTRAIT_SYSTEM = """You write character portraits for a text role-playing game. Reply with ONE yaml \
+PORTRAIT_PREFIX = "You write character portraits"
+PORTRAIT_SYSTEM = PORTRAIT_PREFIX + """ for a text role-playing game. Reply with ONE yaml \
 block only, no prose. Write the instructions in English; example lines in Ukrainian. Invent no \
 names of other people, places or events: the portrait only says how this person behaves.
 
@@ -379,28 +380,36 @@ def _portrait_request(spec: NpcSpec, style: object, text: str) -> list[dict[str,
 
 
 def short_portrait(spec: NpcSpec, style: object, complete: Callable[[list[dict[str, str]]], str],
-                   *, text: str = "") -> "Portrait | None":
+                   *, text: str = "", on_fail: Callable[[str], None] | None = None
+                   ) -> "Portrait | None":
     """A Portrait for an invented NPC from one extractor-role call (`complete(messages)` returns the
     reply). `text`: the author's free-text description, when there is one. None when the call fails
-    or its reply is not a usable portrait (at least 3 stances, 3 switches and a voice)."""
+    or its reply is not a usable portrait (at least 3 stances, 3 switches and a voice);
+    `on_fail(reason)` is told why."""
     from .portrait import RUNGS, PortraitError, parse_portrait
 
-    try:
-        reply = complete(_portrait_request(spec, style, text))
-    except Exception:  # noqa: BLE001 - any provider failure: the NPC keeps playing by manner
+    def fail(reason: str) -> None:
+        if on_fail:
+            on_fail(reason)
         return None
+
+    messages = _portrait_request(spec, style, text)   # our own code: its errors are not hidden
+    try:
+        reply = complete(messages)
+    except Exception as e:  # noqa: BLE001 - any provider failure: the NPC keeps playing by manner
+        return fail(f"call failed: {type(e).__name__}: {str(e)[:150]}")
     m = _YAML_FENCE.search(reply or "")
     try:
         d = yaml.safe_load(m.group(1) if m else reply)
     except yaml.YAMLError:
-        return None
+        return fail("unparseable reply: invalid YAML")
     if not isinstance(d, dict) or not isinstance(d.get("stances"), list):
-        return None
+        return fail("unparseable reply: no stances mapping")
     try:
         d["stances"] = [_clean_stance(s, RUNGS) for s in d["stances"]]
         d["switches"] = [_clean_switch(s) for s in d.get("switches") or []]
         if len(d["stances"]) < MIN_STANCES or len(d["switches"]) < MIN_SWITCHES:
-            return None
+            return fail(f"too thin: {len(d['stances'])} stances, {len(d['switches'])} switches")
         d.update(id=f"npc:{spec.id}", character=spec.id, name=spec.name,
                  phase="invented person, as of the start of play")
         d["hidden"] = str(d.get("hidden") or "")
@@ -410,10 +419,10 @@ def short_portrait(spec: NpcSpec, style: object, complete: Callable[[list[dict[s
         d["leaks"] = [str(x) for x in d["leaks"]]
         d.pop("relations", None)
         if not isinstance(d.get("voice"), str) or not d["voice"].strip():
-            return None
+            return fail("no voice")
         return parse_portrait(d, f"npc:{spec.id}")
-    except (PortraitError, KeyError, TypeError, ValueError, AttributeError):
-        return None
+    except (PortraitError, KeyError, TypeError, ValueError, AttributeError) as e:
+        return fail(f"unusable portrait: {type(e).__name__}: {str(e)[:150]}")
 
 
 def _clean_stance(s: dict, rungs: Sequence[str]) -> dict:

@@ -11,6 +11,7 @@ from harness.judge import (
     fake_needs_narration,
 )
 from harness.director import EXCHANGE_HEADER, NOBODY, PLAYER_FLOOR
+from harness.npcgen import PORTRAIT_PREFIX
 from harness.pipeline import ModelConfig
 from harness.policy import DEFAULT_JUDGE_FIRST, FALLBACKS, Spend
 from harness.providers import Messages, OpenRouterProvider
@@ -123,7 +124,7 @@ class FakeUk:
         sys = messages[0]["content"]
         with self._lock:
             self.calls.append((model, messages))
-            if sys.startswith("You write character portraits"):  # a short portrait (portraits task 5)
+            if sys.startswith(PORTRAIT_PREFIX):  # a short portrait (portraits task 5)
                 return PORTRAIT_REPLY
             if "turn assistant" in sys:  # suggestions: a different set every call
                 i = self.n.setdefault("assistant", 0)

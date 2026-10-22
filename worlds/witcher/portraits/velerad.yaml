@@ -22,7 +22,7 @@ stances:
       - "— Хто ви і чого шукаєте у Визімі? По порядку, пане."
       - "— Про палац говоритиму, коли знатиму, хто питає й навіщо."
   - id: velerad_court
-    rung: [stranger, client]
+    rung: [stranger]
     when: {audience: true}
     does: >-
       With officers or nobles near, he becomes the model servant of the crown: no opinions, no

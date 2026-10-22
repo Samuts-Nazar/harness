@@ -22,7 +22,7 @@ stances:
       - "— Кухоль — два гроші. Вечеря — п'ять. Кімнат нема."
       - "— Про що ви питаєте, добродію? Скажіть прямо, я прямо й відповім."
   - id: keeper_crowd
-    rung: [stranger, client]
+    rung: [stranger]
     when: {audience: true}
     does: >-
       With guards or a full room listening he says nothing that could be repeated. Praise for the

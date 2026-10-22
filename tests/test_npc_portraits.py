@@ -4,7 +4,7 @@ import pytest
 
 from harness.judge import FakeJudge
 from harness.models import PLAYER, CharacterProfile, Scene
-from harness.npcgen import generate_npc, short_portrait
+from harness.npcgen import PORTRAIT_PREFIX, generate_npc, short_portrait
 from harness.pipeline import Engine, ModelConfig
 from harness.portrait import LADDER, WORLDS, load_world_portraits
 from harness.providers import FakeProvider
@@ -65,7 +65,7 @@ def test_short_portrait_parsed_from_fake_reply():
     s = spec()
     p = short_portrait(s, Style.load("witcher"), complete, text="Мовчун, що любить річку.")
     assert p is not None and len(seen) == 1
-    assert seen[0][0]["content"].startswith("You write character portraits")
+    assert seen[0][0]["content"].startswith(PORTRAIT_PREFIX)
     assert "Мовчун, що любить річку." in seen[0][1]["content"]
     assert p.id == f"npc:{s.id}" and p.character == s.id and p.name == s.name
     assert len(p.stances) >= 3 and len(p.switches) >= 3 and p.voice
@@ -89,7 +89,7 @@ def engine(script, tmp_path=None):
 
 
 def portrait_calls(prov):
-    return [m for _, m in prov.calls if m[0]["content"].startswith("You write character portraits")]
+    return [m for _, m in prov.calls if m[0]["content"].startswith(PORTRAIT_PREFIX)]
 
 
 def test_background_extra_gets_no_portrait_call(tmp_path):
@@ -169,3 +169,45 @@ def test_the_innkeeper_answers_direct_questions():
     p = load_world_portraits("witcher")["innkeeper_vizima"]
     text = " ".join([p.core, p.voice, p.never] + [st.does for st in p.stances]).lower()
     assert "answers" in text and "direct question" in text
+
+
+# -- fix round 1 ------------------------------------------------------------------------------
+
+@pytest.mark.parametrize("pid,client", [("innkeeper_vizima", "keeper_client"),
+                                        ("velerad", "velerad_client"),
+                                        ("foltest", "foltest_client"),
+                                        ("geralt_vidmak", "geralt_client")])
+def test_client_with_an_audience_plays_the_client_stance(pid, client):
+    from harness.portrait import Situation, select_stance
+    p = load_world_portraits("witcher")[pid]
+    crowd = Situation("even", True, "low")
+    assert select_stance(p, "client", crowd).id == client
+    assert "crowd" in select_stance(p, "stranger", crowd).id or \
+        "court" in select_stance(p, "stranger", crowd).id
+
+
+def test_failure_note_carries_the_reason():
+    e, prov = engine({"extractor": ["not a portrait"]})
+    extra = e.add_npc(e.fresh_npc("walkin1", "northern", sex="m"), appearance="візник")
+    e.enter_scene(extra.id)
+    e.leave_scene(extra.id)
+    e.enter_scene(extra.id)
+    e.promote_short_portraits()
+    note = next(n for n in e.devlog if n["kind"] == "short_portrait_failed")
+    assert "unparseable" in note["reason"]
+
+
+def test_a_bad_cached_portrait_does_not_stop_the_campaign_opening(tmp_path):
+    e, prov = engine({"extractor": [REPLY]}, tmp_path)
+    extra = e.add_npc(e.fresh_npc("walkin1", "northern", sex="m"), appearance="худий візник")
+    e.enter_scene(extra.id)
+    e.names.learn(PLAYER, extra.id, how="told", scene=e.scene)
+    e.promote_short_portraits()
+    with e.conn:
+        e.conn.execute("INSERT OR REPLACE INTO campaign_meta (key, value) VALUES (?,?)",
+                       ("short_portraits", '{"%s": {"id": "npc:%s"}}' % (extra.id, extra.id)))
+    e.close()
+    again = Engine.open_campaign("c", FakeProvider(script={}), root=tmp_path,
+                                 models=ModelConfig(), judge=FakeJudge())
+    assert again.ctx.portrait_of(extra.id) is None
+    assert any(n["kind"] == "short_portrait_unreadable" for n in again.devlog)
