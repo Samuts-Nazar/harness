@@ -127,7 +127,7 @@ switches:
     warmth: 0.2
     trust: 0.1
   - id: helpless_nearby
-    trigger: Did the player take care of someone helpless nearby (a child, a sick person, an animal)?
+    trigger: Did the player take care of someone helpless nearby other than her and the player (a child, a sick person, an animal)?
     warmth: 0.2
     trust: 0.1
   - id: pity_or_pathos
