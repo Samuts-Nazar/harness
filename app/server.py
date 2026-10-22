@@ -61,29 +61,42 @@ def create_app(game: Game) -> Starlette:
             return JSONResponse({"error": "Хід триває."}, status_code=409)
         return JSONResponse(game.state())
 
+    PACKAGE_BYTES = 400_000  # a request body bigger than this is refused before parsing
+
     async def package_text(request: Request) -> str:
+        raw = await request.body()
+        if len(raw) > PACKAGE_BYTES:
+            return "x" * (PACKAGE_BYTES)  # parse() refuses it as too big, with a readable issue
         try:
-            body = await request.json()
+            body = json.loads(raw)
         except ValueError:
             return ""
         return str(body.get("text", "")) if isinstance(body, dict) else ""
 
+    def parse_package(text: str):  # type: ignore[no-untyped-def]
+        """(package, None) or (None, issues as JSON); any failure becomes a «файл» issue."""
+        from . import newgame
+        try:
+            return newgame.parse(text), None
+        except newgame.PackageError as e:
+            return None, [i.to_json() for i in e.issues]
+        except Exception:  # noqa: BLE001 - never a 500 for a bad file
+            return None, [newgame.Issue(
+                "файл", "Файл не вдалося прочитати.",
+                "Перевірте, що це YAML за прикладом з інструкції, і спробуйте ще раз.").to_json()]
+
     async def package_check(request: Request) -> JSONResponse:
         """A game package (app/newgame.py): its summary card, or the problems to fix."""
-        from .newgame import PackageError, parse, summary
-        try:
-            pkg = parse(await package_text(request))
-        except PackageError as e:
-            return JSONResponse({"ok": False, "errors": [i.to_json() for i in e.issues]})
+        from .newgame import summary
+        pkg, errors = parse_package(await package_text(request))
+        if errors:
+            return JSONResponse({"ok": False, "errors": errors})
         return JSONResponse({"ok": True, "summary": summary(pkg)})
 
     async def package_start(request: Request) -> JSONResponse:
-        from .newgame import PackageError, parse
-        try:
-            pkg = parse(await package_text(request))
-        except PackageError as e:
-            return JSONResponse({"ok": False, "errors": [i.to_json() for i in e.issues]},
-                                status_code=400)
+        pkg, errors = parse_package(await package_text(request))
+        if errors:
+            return JSONResponse({"ok": False, "errors": errors}, status_code=400)
         if game.open_package is None:
             return JSONResponse({"error": "Нова гра з файлу тут недоступна."}, status_code=501)
         try:

@@ -76,6 +76,7 @@ class Game:
         self.thread: threading.Thread | None = None
         self.threads: list[threading.Thread] = []
         self.challenging = False
+        self.building = False  # a new campaign is being made (outside the lock: it is slow)
         self.turn_no = 0  # every turn's events carry its id, so a client scopes them per turn
         self._tl = threading.local()  # the turn id of the running thread
         self.reset(new=False)
@@ -87,9 +88,16 @@ class Game:
         current one. `opener`: how to make it instead of the default (a game package). Refused
         while a turn runs."""
         with self.lock:
-            if self.running or self.challenging:
+            if self.running or self.challenging or self.building:
                 raise Busy("a turn is running")
-            self.camp = (opener or self._open)(new)
+            self.building = True
+        try:  # the build (a model call, the database) runs without the lock: state() still answers
+            camp = (opener or self._open)(new)
+        finally:
+            with self.lock:
+                self.building = False
+        with self.lock:
+            self.camp = camp
             self._ended = self.eng.ended  # read again whenever no turn's thread uses the database
             self.transcript: list[dict[str, Any]] = self.camp.transcript()
             self.phase = "idle"  # idle | thinking | narrating | speaking
@@ -295,7 +303,7 @@ class Game:
             with self.lock:
                 if self._is_ended():
                     raise Ended("the character is dead; the campaign is read-only")
-                if self.challenging:
+                if self.challenging or self.building:
                     raise Busy("a challenge is running")
                 if self.phase != "idle":
                     self.interrupt(any_phase=True)
@@ -307,7 +315,7 @@ class Game:
             with self.lock:
                 if self._is_ended():
                     raise Ended("the character is dead; the campaign is read-only")
-                if self.challenging:  # a challenge began while this waited
+                if self.challenging or self.building:  # began while this waited
                     raise Busy("a challenge is running")
                 self.pending = text
                 self._sugg = None  # suggestions of the turn before are stale from now on
@@ -337,7 +345,7 @@ class Game:
         from dataclasses import asdict
 
         with self.lock:
-            if self.running or self.challenging:
+            if self.running or self.challenging or self.building:
                 raise Busy("a turn is running")
             self.challenging = True
         try:
@@ -375,7 +383,7 @@ class Game:
 
     def _begin_edit(self) -> None:
         with self.lock:
-            if self.running or self.challenging:
+            if self.running or self.challenging or self.building:
                 raise Busy("a turn is running")
             if self._is_ended():
                 raise Ended("the character is dead; the campaign is read-only")
@@ -457,7 +465,7 @@ class Game:
     def knowledge(self) -> dict[str, Any]:
         """The debug view: per character, what they know and from where."""
         with self.lock:
-            if self.running or self.challenging:
+            if self.running or self.challenging or self.building:
                 raise Busy("a turn is running")
             eng = self.eng
             return {c: {"name": eng.profiles[c].name, "label": eng.names.label(c),

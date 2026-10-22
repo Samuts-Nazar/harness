@@ -50,6 +50,9 @@ START_POINTS = ROOT / "worlds" / "witcher" / "start_points.yaml"
 KIND = "package"
 WORLDS = ("witcher",)
 MAX_PEOPLE = 6
+MAX_TEXT = 200_000   # characters of a package, checked before the YAML parser runs
+MAX_NOTES = 4_000    # characters of `notes` (with the unknown fields) that reach the narrator
+MAX_SHOW = 300       # characters of one unknown field's value kept in the notes
 LONG_LOOK = 8  # words: a longer appearance makes a clumsy label
 
 # parts of the day a package may name instead of a clock time (minutes after midnight)
@@ -128,10 +131,36 @@ def _strip_chat(text: str) -> str:
     return blocks[0] if blocks else text
 
 
+class _NoAliases(yaml.SafeLoader):
+    """SafeLoader that refuses aliases (`*name`): a package never needs them, and they allow
+    self-referencing values and exponential expansion ("billion laughs")."""
+
+    def compose_node(self, parent: Any, index: Any) -> Any:  # type: ignore[override]
+        if self.check_event(yaml.events.AliasEvent):
+            ev = self.peek_event()
+            raise _AliasError(ev.start_mark)
+        return super().compose_node(parent, index)
+
+
+class _AliasError(Exception):
+    def __init__(self, mark: Any) -> None:
+        super().__init__("alias")
+        self.mark = mark
+
+
 def _show(v: Any) -> str:
-    if isinstance(v, (dict, list)):
-        return json.dumps(v, ensure_ascii=False)
-    return str(v)
+    try:
+        out = json.dumps(v, ensure_ascii=False) if isinstance(v, (dict, list)) else str(v)
+    except (ValueError, TypeError, RecursionError):
+        out = "…"
+    return out if len(out) <= MAX_SHOW else out[:MAX_SHOW] + "…"
+
+
+def _joined(v: Any) -> Any:
+    """A free-text field given as a list of items: one text."""
+    if isinstance(v, list) and all(isinstance(x, (str, int, float)) for x in v):
+        return "; ".join(str(x).strip() for x in v if str(x).strip())
+    return v
 
 
 class _Checker:
@@ -278,8 +307,21 @@ def _people(c: _Checker, v: Any) -> list[dict[str, Any]] | None:
 def parse(text: str) -> Package:
     """Validate a package. Raises PackageError with every problem found (Ukrainian)."""
     c = _Checker()
+    text = text or ""
+    if len(text) > MAX_TEXT:
+        raise PackageError([Issue(
+            "файл", f"Файл завеликий ({len(text) // 1000} тис. знаків; можна до "
+            f"{MAX_TEXT // 1000} тис.).",
+            "Скоротіть опис персонажа або нотатки: світові досить головного.")])
     try:
-        raw = yaml.safe_load(_strip_chat(text or ""))
+        raw = yaml.load(_strip_chat(text), Loader=_NoAliases)  # noqa: S506 - a safe loader
+    except _AliasError as e:
+        raise PackageError([Issue(
+            "файл", f"Посилання &/* у файлі не підтримуються (рядок {e.mark.line + 1}).",
+            "Запишіть значення повністю там, де воно потрібне, без &назва і *назва.")]) from None
+    except RecursionError:
+        raise PackageError([Issue("файл", "Файл занадто глибоко вкладений.",
+                                  "Спростіть структуру за прикладом з інструкції.")]) from None
     except yaml.YAMLError as e:
         mark = getattr(e, "problem_mark", None)
         where = f" (рядок {mark.line + 1}, позиція {mark.column + 1})" if mark else ""
@@ -375,7 +417,7 @@ def parse(text: str) -> Package:
         got = c.choice(k, raw.get(k))
         if got is not None:
             d[k] = got
-    tone = c.text("tone", raw.get("tone"))
+    tone = c.text("tone", _joined(raw.get("tone")))
     if tone:
         d["tone"] = tone
 
@@ -409,9 +451,13 @@ def parse(text: str) -> Package:
             if ok:
                 d["inks"] = ok
 
-    notes = c.text("notes", raw.get("notes"))
+    notes = c.text("notes", _joined(raw.get("notes")))
     if c.extra:
         notes = "\n".join(([notes] if notes else []) + ["Інші побажання з файлу:"] + c.extra)
+    if notes and len(notes) > MAX_NOTES:
+        notes = notes[:MAX_NOTES].rsplit(" ", 1)[0] + "…"
+        c.warnings.append(Issue("notes", f"Нотатки задовгі; оповідач побачить перші {MAX_NOTES} "
+                                "знаків.", "Залиште в notes лише найважливіше."))
     if notes:
         d["notes"] = notes
 
@@ -525,6 +571,19 @@ def _minute(sp: dict[str, Any]) -> int:
     return int(h) * 60 + int(m)
 
 
+def limits_text(pkg: Package) -> str:
+    """Only the content limits, for every prompt that writes what the player reads (NPCs too)."""
+    lim, lines = pkg.data.get("limits", {}), []
+    if lim.get("avoid"):
+        lines.append("- Content the player does not want in this game at all (never show it, "
+                     "never let it happen on the page; the world steers elsewhere): "
+                     + "; ".join(lim["avoid"]))
+    if lim.get("veil"):
+        lines.append("- Content that may happen only off-screen: say in one plain sentence that "
+                     "it happened, never show it in detail: " + "; ".join(lim["veil"]))
+    return "\n".join(lines)
+
+
 # -- campaign intent (the narrator) -----------------------------------------------------------
 
 def intent_text(pkg: Package) -> str:
@@ -534,14 +593,8 @@ def intent_text(pkg: Package) -> str:
         lines.append(f"- Tone: {d['tone']}")
     if d.get("pace") in PACE_EN:
         lines.append(f"- Pace: {PACE_EN[d['pace']]}.")
-    lim = d.get("limits", {})
-    if lim.get("avoid"):
-        lines.append("- Content the player does not want in this game at all (never show it, "
-                     "never let it happen on the page; the world steers elsewhere): "
-                     + "; ".join(lim["avoid"]))
-    if lim.get("veil"):
-        lines.append("- Content that may happen only off-screen: say in one plain sentence that "
-                     "it happened, never show it in detail: " + "; ".join(lim["veil"]))
+    if limits_text(pkg):
+        lines.append(limits_text(pkg))
     if d.get("canon") == "loose":
         lines.append("- Canon: the books are only background here; do not pull events toward "
                      "the saga's plot.")
@@ -689,7 +742,9 @@ def open_package(stack: Stack, pkg: Package, *, root: Path | str = CAMPAIGNS,
     def setup(eng: Engine) -> None:
         """Before anyone enters: the player's live state and what the character knows."""
         for fact in d["player"].get("knows", []):
-            eng.facts.add_canon(fact, game_time=eng.scene.time,
+            # what the character believes from their own life: a claim, not world truth
+            eng.facts.add_canon(f"{pname} believes (from own life, may be wrong): {fact}",
+                                game_time=eng.scene.time,
                                 knowers=[(PLAYER, "told", "own life")])
         seed_player_state(eng, traits, base=())
 
@@ -743,15 +798,16 @@ def open_package(stack: Stack, pkg: Package, *, root: Path | str = CAMPAIGNS,
         intro = sit or f"{day_phrase(day, minute)}. {place[:1].upper() + place[1:]}."
         ttl = title(pkg, place)
     eng.ctx.intent = intent_text(pkg)
+    eng.ctx.limits = limits_text(pkg)
     _store(eng, "package", {"data": d, "title": ttl, "intro": intro, "world": meta_world,
                             "filled": filled})
     eng._note("package_start", filled=filled, calls=len(rec.calls))
-    _pointer(root).write_text(name)
     tr = Translator(rec, stack.models.extractor, folder / "translations.json")
     camp = Campaign(eng, rec, stack.spend, stack.live, name, tr, title=ttl, intro=intro,
                     world=world, assistant=d.get("assistant", "on") == "on")
     if d.get("inks"):
         _apply_inks(camp, d["inks"])
+    _pointer(root).write_text(name)  # only a fully built campaign becomes the current one
     return camp
 
 
@@ -772,11 +828,14 @@ def reopen(stack: Stack, name: str, *, root: Path | str = CAMPAIGNS, canon_db: A
     from the stored package."""
     root = Path(root)
     rec = Recorder(stack.provider, stack.models, stack.spend)
-    eng = Engine.open_campaign(name, rec, root=root, **viz.engine_kw(stack))
+    kw = viz.engine_kw(stack)
+    kw.pop("dialogue")  # the campaign's own stored setting (a package may say classic)
+    eng = Engine.open_campaign(name, rec, root=root, **kw)
     saved = _meta(eng, "package") or {}
     pkg = Package(saved.get("data") or {"player": {}, "start": {}})
     pkg.data.setdefault("start", {})
     eng.ctx.intent = intent_text(pkg)
+    eng.ctx.limits = limits_text(pkg)
     mw = saved.get("world") or {}
     if mw.get("kind") == "situation_a":
         canon = viz.load_canon(stack, canon_db) if mw.get("canon") else None

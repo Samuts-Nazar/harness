@@ -111,6 +111,8 @@ class ContextBuilder:
         # the player's wishes for the campaign, set at its start (a game package: tone, pace,
         # content limits, notes); shown to the narrator, never above the rules
         self.intent = ""
+        # only the content limits of that intent: also for NPC lines and resolution prose
+        self.limits = ""
         self.language, self.record_language = language, record_language
         self.glossary, self.narration = glossary, narration
         self.names = names
@@ -295,6 +297,7 @@ class ContextBuilder:
                 *(it.fact.content for it in mem.knows[-4:])]))
             if examples:
                 parts.append(examples)
+        system += self.limits_section()
         known = (self.knowledge_lines(mem) + [self._seen(e, character) for e in seen]
                  + [f"- (own condition) {e.category}: {e.item}" for e in mem.state]
                  + [f"- (just noticed) {self.mask(character, f.content)}"
@@ -427,6 +430,13 @@ class ContextBuilder:
             {"role": "system", "content": system + self._intent_section()},
             {"role": "user", "content": "\n\n".join([*parts, tail])},
         ], PLAYER)
+
+    def limits_section(self) -> str:
+        """The campaign's content limits, for the NPCs and any other prose the player reads."""
+        if not self.limits.strip():
+            return ""
+        return ("\n\nContent limits the player set for this campaign (never break them in what "
+                "you write):\n" + self.limits.strip())
 
     def _intent_section(self) -> str:
         if not self.intent.strip():

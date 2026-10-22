@@ -1875,7 +1875,7 @@ class Engine:
             try:
                 text = self._prose_of(self._complete_text("narrator", self.ctx.finish([
                     {"role": "system", "content": "You are the narrator of a role-playing game. "
-                     "Write vivid prose."},
+                     "Write vivid prose." + self.ctx.limits_section()},
                     {"role": "user", "content": user}], PLAYER))).strip()
             except ProviderError as e:
                 self._note("resolution_unavailable", error=str(e))

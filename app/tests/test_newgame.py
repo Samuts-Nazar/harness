@@ -298,3 +298,116 @@ def test_instruction_examples_are_valid_and_the_full_one_is_the_example_file():
     # every canon start point is described in the document
     for cid in newgame.start_points():
         assert f"`{cid}`" in doc
+
+
+# -- review fix round 1 ----------------------------------------------------------------------
+
+@pytest.mark.parametrize("text", [
+    MINIMAL + "extra: &a [*a]\n",
+    MINIMAL + "inks: {a: &b [*b]}\n",
+    "version: &a [*a]\nworld: witcher\nplayer: {description: x}\n",
+    MINIMAL + "a: &a [x, x]\nb: &b [*a, *a]\nc: &c [*b, *b]\nd: [*c, *c]\n",  # billion laughs
+])
+def test_yaml_aliases_are_refused_with_a_readable_error(text):
+    got = issues(text)
+    assert got[0].field == "файл" and "посилання" in got[0].problem.lower()
+
+
+def test_oversized_file_is_refused_before_parsing():
+    got = issues(MINIMAL + "notes: |\n" + ("  " + "а" * 1000 + "\n") * 300)
+    assert got[0].field == "файл" and "завеликий" in got[0].problem
+
+
+def test_unknown_fields_and_notes_are_capped():
+    big = MINIMAL + "extra: [" + ", ".join(["слово"] * 5000) + "]\n" + \
+        "".join(f"x{i}: {'б' * 200}\n" for i in range(100))
+    pkg = parse(big)
+    assert len(pkg.data["notes"]) <= newgame.MAX_NOTES + 100
+
+
+def test_notes_and_tone_may_be_lists():
+    pkg = parse(MINIMAL + "tone: [похмуро, з гумором]\nnotes: [перше, друге]\n")
+    assert pkg.data["tone"] == "похмуро; з гумором" and "перше" in pkg.data["notes"]
+
+
+def test_endpoints_turn_any_parser_failure_into_a_file_issue(tmp_path, monkeypatch):
+    _, c = server(tmp_path, monkeypatch)
+
+    def boom(_text):
+        raise RuntimeError("unexpected")
+    monkeypatch.setattr(newgame, "parse", boom)
+    r = c.post("/api/package/check", json={"text": MINIMAL})
+    assert r.status_code == 200 and r.json()["errors"][0]["field"] == "файл"
+    r = c.post("/api/package/start", json={"text": MINIMAL})
+    assert r.status_code == 400 and r.json()["errors"][0]["field"] == "файл"
+
+
+def test_limits_reach_npc_prompts(tmp_path):
+    g, stack = make(tmp_path, EXAMPLE)
+    assert "жорстокість до дітей" in g.eng.ctx.limits and "докладні тортури" in g.eng.ctx.limits
+    assert "Ольдрих" not in g.eng.ctx.limits                     # not the whole intent
+    g.start_turn("*показую торговці гребінець* Ви знаєте цього хлопця?")
+    g.wait_idle(20)
+    names = {p.name for c, p in g.eng.profiles.items() if c.startswith("npc_")}
+    npc_calls = [m for _, m in stack.provider.calls
+                 if any(m[0]["content"].startswith(f"You are {n}") for n in names)]
+    assert npc_calls
+    for m in npc_calls:
+        assert "жорстокість до дітей" in m[0]["content"] and "докладні тортури" in m[0]["content"]
+
+
+def test_classic_dialogue_survives_a_restart(tmp_path):
+    g, stack = make(tmp_path, MINIMAL + "dialogue: classic\n")
+    g.eng.close()
+    camp = newgame.opener(stack, root=tmp_path, fallback=lambda new: pytest.fail("x"))(False)
+    assert camp.engine.dialogue == "classic"
+
+
+def test_player_knowledge_is_a_belief_not_world_truth(tmp_path):
+    g, _ = make(tmp_path, EXAMPLE)
+    texts = [r[0] for r in g.eng.conn.execute("SELECT content FROM facts")]
+    rumour = [t for t in texts if "старого палацу" in t]
+    assert rumour and all(t != "У місті кажуть, що біля старого палацу щось неладне і люди "
+                          "туди не ходять уночі." for t in rumour)
+    assert all("believes" in t for t in rumour)
+
+
+def test_pointer_is_written_only_after_a_successful_build(tmp_path, monkeypatch):
+    stack = fake_stack()
+    newgame._pointer(tmp_path).write_text("old")
+    monkeypatch.setattr(newgame, "_free_world", lambda *a: (_ for _ in ()).throw(RuntimeError()))
+    with pytest.raises(RuntimeError):
+        newgame.open_package(stack, parse(EXAMPLE), root=tmp_path, canon_db=False)
+    assert newgame._pointer(tmp_path).read_text() == "old"
+
+
+def test_the_game_stays_responsive_while_a_package_builds(tmp_path):
+    import threading
+    stack = fake_stack()
+    g = Game(lambda new: newgame.open_package(stack, parse(MINIMAL), root=tmp_path,
+                                              canon_db=False), pace=0.0)
+    gate, entered = threading.Event(), threading.Event()
+
+    def slow(pkg):
+        entered.set()
+        gate.wait(5)
+        return newgame.open_package(stack, pkg, root=tmp_path, canon_db=False)
+    g.open_package = slow
+    t = threading.Thread(target=g.start_package, args=(parse(EXAMPLE),))
+    t.start()
+    assert entered.wait(5)
+    got = []
+    reader = threading.Thread(target=lambda: got.append(g.state()))
+    reader.start()
+    reader.join(2)
+    assert got, "state() blocked while the new campaign was being built"
+    gate.set()
+    t.join(10)
+    assert g.camp.intro.startswith("Ранок третього дня")
+
+
+def test_a_huge_request_is_refused_readably(tmp_path, monkeypatch):
+    _, c = server(tmp_path, monkeypatch)
+    r = c.post("/api/package/check", json={"text": MINIMAL + "notes: " + "я" * 500_000 + "\n"})
+    assert r.status_code == 200 and r.json()["errors"][0]["field"] == "файл"
+    assert "завеликий" in r.json()["errors"][0]["problem"]
