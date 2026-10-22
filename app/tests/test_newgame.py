@@ -90,6 +90,9 @@ def test_unknown_field_gives_a_warning_and_is_kept_in_notes():
     assert [w.field for w in pkg.warnings] == ["weather", "player_extra"]
     assert "туман" in pkg.data["notes"]
     assert all(w.fix for w in pkg.warnings)
+    long = parse(MINIMAL + "start:\n  who_is_here:\n    - role: корчмар\n      appearance: "
+                 "кремезний лисий чоловік у шкіряному фартусі з великим черпаком у руці\n")
+    assert [w.field for w in long.warnings] == ["start.who_is_here[1].appearance"]
     pkg2 = parse(MINIMAL + "  horse: сива кобила\n")
     assert pkg2.warnings[0].field == "player.horse"
     assert "сива кобила" in pkg2.data["notes"]
@@ -180,7 +183,7 @@ def test_free_start_uses_the_map_npcgen_and_the_package_people(tmp_path):
     npcs = [c for c in eng.scene.present if c != PLAYER]
     assert len(npcs) == 2
     looks = [eng.profiles[c].appearance for c in npcs]
-    assert "огрядна жінка в червоній хустці, з мірною линвою на шиї" in looks
+    assert "огрядна жінка в червоній хустці" in looks
     for c in npcs:
         assert eng.profiles[c].core                      # npcgen: a whole person
         assert not eng.names.knows(c, PLAYER)            # knows_player: false
@@ -279,3 +282,19 @@ def test_start_endpoint_starts_the_package_game(tmp_path, monkeypatch):
     # a restart of the app continues the package campaign
     st2 = c.get("/api/state").json()
     assert st2["title"] == st["title"]
+
+
+# -- the instruction document for external AIs -----------------------------------------------
+
+def test_instruction_examples_are_valid_and_the_full_one_is_the_example_file():
+    import re
+    doc = (ROOT / "docs" / "new_game_instruction.md").read_text(encoding="utf-8")
+    blocks = re.findall(r"```yaml\n(.*?)```", doc, re.DOTALL)
+    examples = [b for b in blocks if "..." not in b]  # the schema block has placeholders
+    assert len(examples) == 3
+    assert examples[0] == EXAMPLE
+    for b in examples:
+        assert parse(b).warnings == []
+    # every canon start point is described in the document
+    for cid in newgame.start_points():
+        assert f"`{cid}`" in doc

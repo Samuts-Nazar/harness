@@ -50,6 +50,7 @@ START_POINTS = ROOT / "worlds" / "witcher" / "start_points.yaml"
 KIND = "package"
 WORLDS = ("witcher",)
 MAX_PEOPLE = 6
+LONG_LOOK = 8  # words: a longer appearance makes a clumsy label
 
 # parts of the day a package may name instead of a clock time (minutes after midnight)
 DAY_PARTS = {"світанок": 5 * 60, "ранок": 8 * 60, "полудень": 12 * 60, "день": 14 * 60,
@@ -257,6 +258,13 @@ def _people(c: _Checker, v: Any) -> list[dict[str, Any]] | None:
         person = {k: c.text(f"{pf}.{k}", p.get(k))
                   for k in ("name", "role", "appearance", "attitude", "goal")}
         person = {k: x for k, x in person.items() if x}
+        look = person.get("appearance", "")
+        if len(look.split()) > LONG_LOOK:
+            c.warnings.append(Issue(
+                f"{pf}.appearance", "Опис зовнішності задовгий: саме так персонаж називатиме "
+                "цю людину, доки не дізнається ім'я.",
+                "Скоротіть до 3–7 слів (наприклад, «жінка в червоній хустці»); решту можна "
+                "перенести в attitude або notes."))
         kp = c.flag(f"{pf}.knows_player", p.get("knows_player"))
         person["knows_player"] = bool(kp)
         if not (person.get("role") or person.get("name") or person.get("appearance")):
