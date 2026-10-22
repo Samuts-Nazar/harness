@@ -167,6 +167,31 @@ def create_app(game: Game) -> Starlette:
     async def cut(request: Request) -> JSONResponse:
         return await edit(request, "cut")
 
+    async def rate(request: Request) -> JSONResponse:
+        try:
+            body = await request.json()
+            if not isinstance(body, dict) or isinstance(body.get("event"), bool):
+                raise ValueError
+            event = int(body["event"])
+            note = body.get("note") or ""
+            if not isinstance(note, str):
+                raise ValueError
+            args = (event, str(body.get("kind", "")), str(body.get("rating", "")), note)
+        except (ValueError, KeyError, TypeError):
+            return JSONResponse({"error": "Недійсний запит."}, status_code=400)
+        try:
+            await run_in_threadpool(game.rate, *args)
+        except KeyError:
+            return JSONResponse({"error": "Невідома репліка."}, status_code=400)
+        except ValueError:
+            return JSONResponse({"error": "Недійсна оцінка."}, status_code=400)
+        except Exception:  # noqa: BLE001 - e.g. the disk: a message, not a 500 page
+            return JSONResponse({"error": "Не вдалося зберегти оцінку."}, status_code=500)
+        return JSONResponse({"ok": True})
+
+    async def ratings(_: Request) -> JSONResponse:
+        return JSONResponse(await run_in_threadpool(game.ratings))
+
     async def places(_: Request) -> JSONResponse:
         return JSONResponse(await run_in_threadpool(game.places))
 
@@ -248,6 +273,8 @@ def create_app(game: Game) -> Starlette:
         Route("/api/challenge", challenge, methods=["POST"]),
         Route("/api/model_error", model_error, methods=["POST"]),
         Route("/api/cut", cut, methods=["POST"]),
+        Route("/api/rate", rate, methods=["POST"]),
+        Route("/api/ratings", ratings),
         Route("/api/places", places),
         Route("/api/knowledge", knowledge),
         Route("/api/cast", cast),

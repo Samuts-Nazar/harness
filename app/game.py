@@ -7,6 +7,8 @@ background gets `transcript` + the events it missed.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import threading
 import time
@@ -22,6 +24,7 @@ from harness.pipeline import InterruptionError
 
 from .campaigns import Campaign
 from .inks import INK_RE, assign_ink
+from .ratings import KINDS as RATE_KINDS, NOTE_MAX, ROLE_OF, RatingBook
 
 CATEGORY_UK = {"injury": "тіло", "clothing": "одяг", "inventory": "речі",
                "equipment": "спорядження", "internal": "відчуття", "appearance": "вигляд"}
@@ -142,6 +145,9 @@ class Game:
             self.camp = camp
             self._ended = ended  # read again whenever no turn's thread uses the database
             self.transcript = transcript
+            self._produced: dict[int, dict[str, str]] = {}  # event -> role and model that wrote it
+            d = camp.engine.campaign_dir
+            self._ratings = RatingBook(d / "ratings.jsonl" if d else None)
             self.phase = "idle"  # idle | thinking | narrating | speaking
             self.handle: InterruptHandle | None = None
             self.skip_narration = False
@@ -546,6 +552,69 @@ class Game:
         finally:
             self.challenging = False
 
+    # -- ratings (👍/👎 on world lines; app-side, never an engine event) --------------------------
+    @staticmethod
+    def _used_model(eng: Any, role: str, notes: list[dict[str, Any]]) -> str:
+        """The model that wrote for `role` this turn: the configured one, or the fallback the
+        engine switched to (devlog notes `model_fallback` / `model_timeout`)."""
+        model = str(getattr(eng.models, role))
+        for n in notes:
+            if n.get("role") != role:
+                continue
+            if n.get("kind") == "model_fallback":
+                model = str(n.get("fallback") or model)
+            elif n.get("kind") == "model_timeout":
+                model = str(n.get("retry_on") or model)
+        return model
+
+    def _note_production(self, entries: list[dict[str, Any]], eng: Any, dev_mark: int) -> None:
+        notes = list(eng.devlog[dev_mark:])
+        for en in entries:
+            if en["kind"] in ROLE_OF and "event" in en:
+                role = "narrator" if en["kind"] == "narr" else "npc"
+                self._produced[en["event"]] = {"role": ROLE_OF[en["kind"]],
+                                               "model": self._used_model(eng, role, notes)}
+
+    def _prompt_version(self) -> str:
+        """A short hash of the style sheet the creative prompts are built from."""
+        style = getattr(self.eng, "style", None)
+        sheet = getattr(style, "sheet", None) or {}
+        return hashlib.sha1(json.dumps(sheet, sort_keys=True, ensure_ascii=False)
+                            .encode("utf-8")).hexdigest()[:8]
+
+    def ratings(self) -> dict[str, str]:
+        return self._ratings.marks()
+
+    def rate(self, event: int, kind: str, rating: str, note: str = "") -> None:
+        """Store the player's rating of one world line. ValueError: the request is not valid;
+        KeyError: no such line."""
+        from datetime import datetime, timezone
+
+        from harness.policy import MODEL_TEMPERATURE
+
+        if kind not in RATE_KINDS or rating not in ("up", "down"):
+            raise ValueError("kind or rating")
+        note = note.strip()
+        if len(note) > NOTE_MAX:
+            raise ValueError("note")
+        with self.lock:
+            en = next((t for t in self.transcript
+                       if t.get("event") == event and t["kind"] == kind), None)
+            if en is None:
+                raise KeyError(event)
+            made = self._produced.get(event) or {"role": ROLE_OF[kind]}
+            model = made.get("model") or str(getattr(
+                self.eng.models, "narrator" if kind == "narr" else "npc"))
+            d = self.eng.campaign_dir
+            self._ratings.put({
+                "time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "campaign": d.name if d else self.camp.name, "turn": en.get("turn"),
+                "event": event, "kind": kind, "speaker": en.get("tok", ""),
+                "label": en.get("label", ""), "text": en["text"], "rating": rating, "note": note,
+                "role": made["role"], "model": model,
+                "temperature": MODEL_TEMPERATURE.get(model), "dialogue": self.eng.dialogue,
+                "prompt": self._prompt_version()})
+
     def places(self) -> list[dict[str, Any]]:
         """Where the player character can go from here: the world map's other places with the
         walking minutes, nearest first. [] when the campaign has no world."""
@@ -715,13 +784,16 @@ class Game:
         turn_id = getattr(self._tl, "turn", None)
         for en in entries:
             en["turn"] = turn_id  # a reloaded client matches its replay by this
+        self._note_production(entries, eng, marks["dev"])
         fast_s = round(time.monotonic() - t0, 2)
         with self.lock:
             self.transcript += entries
             self._ended = eng.ended  # before the player is free: a death shows at once
             self.phase = "idle"  # the player can read and type now; bookkeeping goes on below
             self._emit("turn_done", interrupted=r.interrupted, clock=self.clock(),
-                       panel=self._panel, lines=line_ids, cut_lines=cut_ids, settling=True)
+                       panel=self._panel, lines=line_ids, cut_lines=cut_ids, settling=True,
+                       narr_lines=[en["event"] for en in entries
+                                   if en["kind"] == "narr" and "event" in en])
         # the slow lane: extraction, salience, attitudes, world catch-up (while the player reads)
         eng.settle()
         failure, eng.slow_failure = eng.slow_failure, None
