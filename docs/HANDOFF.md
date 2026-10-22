@@ -56,14 +56,15 @@ You are the lead ("brain") for the harness project. The user talks to you; Sonne
   - living dialogue (spec `2026-10-21-living-dialogue-design.md`, plan `…-living-dialogue.md`, report `reports/dialogue/SUMMARY.md`): world profile, response shapes, NPC exchanges, optional narration, cut-in, scene cast, and challenge removal;
   - research reports `reports/research/18A/18B/21A/21B`;
   - the human-writing bake-off (`reports/human_ab/`);
-  - the model switch: narrator `xiaomi/mimo-v2.6-pro`, NPC `xiaomi/mimo-v2.6-flash`, temperature 0.8. The user's blind grading was mimo-pro 4.0, mimo-flash 3.6, luna 3.0.
+  - the model switch: narrator and NPC both `xiaomi/mimo-v2.6-flash` since 2026-10-22 (narrator was `mimo-v2.6-pro`, too slow to the first word), temperature 0.8. The user's blind grading was mimo-pro 4.0, mimo-flash 3.6, luna 3.0.
 - **Interactive book UI: merged 2026-10-22** (spec `docs/superpowers/specs/2026-10-22-interactive-book-ui-design.md`, plan `docs/superpowers/plans/2026-10-22-interactive-book-ui.md`, live report `reports/ui/SUMMARY.md`, rulings `reports/ui/deferred_and_rulings.md`). New game from a file: `docs/new_game_instruction.md` + `docs/game_package_example.yaml`.
 - **Next, after the UI:** active play tests by the user on the Vizima pilot (`docs/pilot_vizima_test_plan.md`, `app/static/checklist.html`). Start: `nix develop --command python -m app --live --host 0.0.0.0 --budget 0.5`; phone at `http://192.168.1.109:8765/`.
 - **Later projects agreed with the user:**
   - project 2, a decision layer against averaging (`reports/research/21A_decisions.md`);
   - project 3, prose tone (`21B`);
   - a bake-off of models on the known failures.
-- **Open user questions:**
-  - whether a bake-off may test models above the price ceiling (the user said no to Gemini 3.8 Flash for now);
-  - an 8 GB Gemma 4 E4B local download for a base-model tone test (not answered).
+- **User answers 2026-10-22:**
+  - anything may run locally (models, later image generation); put large downloads on `/home/cock/1TB`;
+  - models above the price ceiling: first show the user which models they are (names, prices, why), no spend before their OK;
+  - speaker names on the page: a setting (on = names visible, off = colours only).
 - **Known test-data defects:** `experiments/bakeoff/testset/npc.json` c07 lists Marta as Roche's rumour source, and the old tests predate names-as-knowledge. Fix them when touching these sets.

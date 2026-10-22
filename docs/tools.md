@@ -289,3 +289,4 @@ Not taken: `google/gemini-3.6/3.7/3.8-flash` (0.75 to 0.83 input, over the ceili
 ### Narrator and NPC model change (2026-10-22)
 - Narrator: `xiaomi/mimo-v2.6-pro` (0.435/0.87, catalog date 2026-09-21); NPC lines: `xiaomi/mimo-v2.6-flash` (0.14/0.28, 2026-09-21); temperature 0.8 for both (`MODEL_TEMPERATURE` in `harness/policy.py`). Fallbacks unchanged (`deepseek/deepseek-v4.1-flash-1017`).
 - Reason: task 22 blind "writes like a person" grading by the user (`reports/human_ab/`): mimo-v2.6-pro mean 4.0, mimo-v2.6-flash 3.6, gpt-6-luna 3.0, deepseek 3.0, others lower; one text per model per moment, one grader. Trade-off: mimo-v2.6-pro averaged 11 s per call vs 3.5 s for luna; flash 6.9 s. `openai/gpt-6-luna` stays as the escalation judge only.
+- 2026-10-22: narrator switched to `xiaomi/mimo-v2.6-flash` as well (user's choice: speed over the small quality gap; pro gave 10–23 s to the first word in the live UI check). `mimo-v2.6-pro` stays a candidate.

@@ -40,7 +40,7 @@ DENY = frozenset({
 ANTHROPIC_MARKERS = ("anthropic/", "claude")
 
 # Defaults per role (docs/tools.md, Models) and the fallback from another vendor.
-DEFAULT_NARRATOR = "xiaomi/mimo-v2.6-pro"  # task 22: the user's blind "writes like a person" grading
+DEFAULT_NARRATOR = "xiaomi/mimo-v2.6-flash"  # 2026-10-22: user chose speed (pro gave 10-23 s to first word); flash graded 3.6 vs pro 4.0
 DEFAULT_NPC = "xiaomi/mimo-v2.6-flash"  # second in that grading; faster for many short lines
 DEFAULT_EXTRACTOR = "deepseek/deepseek-v4.1-flash-1017"
 DEFAULT_JUDGE_FIRST = "liquid/d1-ultra"
