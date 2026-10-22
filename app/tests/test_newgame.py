@@ -6,6 +6,8 @@ from __future__ import annotations
 import pathlib
 
 import pytest
+
+from harness.npcgen import PORTRAIT_PREFIX
 from starlette.testclient import TestClient
 
 from app import newgame
@@ -542,3 +544,74 @@ def test_portrait_person_gets_no_generated_age(tmp_path):
     yen = next(c for c, p in eng.profiles.items() if p.portrait == "yennefer_rinde")
     assert "років" not in eng.profiles[yen].description
     assert "взяти" not in eng.profiles[yen].description   # curiosity, not what she can take
+
+
+# -- portraits task 5: free-text portraits, canon portraits at a canon start -------------------
+
+PORTRAIT_TEXT = MINIMAL + """\
+start:
+  place: Рінде
+  who_is_here:
+    - name: Ольха
+      role: перевізниця
+      portrait_text: >-
+        Стара перевізниця, що всім трохи винна. З чужими сувора й говорить лише про ціну,
+        з друзями жартує про митників. Теплішає від чесної плати, злиться від глуму.
+        Ховає, що возить листи ворогам митників. Говорить коротко, числами.
+"""
+
+
+def _portrait_calls(stack):
+    return [m for _, m in stack.provider.calls
+            if m[0]["content"].startswith(PORTRAIT_PREFIX)]
+
+
+def test_portrait_text_in_package_converted_once(tmp_path):
+    pkg = parse(PORTRAIT_TEXT)
+    assert pkg.warnings == []
+    assert "возить листи" in pkg.data["start"]["who_is_here"][0]["portrait_text"]
+    g, stack = make(tmp_path, PORTRAIT_TEXT)
+    eng = g.eng
+    olha = next(c for c, p in eng.profiles.items() if p.name == "Ольха")
+    calls = _portrait_calls(stack)
+    assert len(calls) == 1 and "возить листи" in calls[0][1]["content"]
+    pid = eng.profiles[olha].portrait
+    assert pid == f"npc:{olha}" and eng.ctx.portrait_of(olha) is not None
+    g.start_turn("Скільки за переправу?")
+    g.wait_idle(20)
+    assert len(_portrait_calls(stack)) == 1   # never again in play
+    name = g.camp.name
+    g.camp.engine.close()
+    stack2 = fake_stack()
+    again = newgame.reopen(stack2, name, root=tmp_path)
+    assert again.engine.profiles[olha].portrait == pid
+    assert again.engine.ctx.portrait_of(olha) is not None and _portrait_calls(stack2) == []
+
+
+def test_portrait_and_portrait_text_together_keep_the_id_with_a_warning():
+    text = PORTRAIT_PERSON.format(pid="yennefer_rinde") + "      portrait_text: Сувора.\n"
+    pkg = parse(text)
+    person = pkg.data["start"]["who_is_here"][0]
+    assert person["portrait"] == "yennefer_rinde" and "portrait_text" not in person
+    assert [w.field for w in pkg.warnings] == ["start.who_is_here[1].portrait_text"]
+
+
+def test_canon_start_binds_portraits(tmp_path):
+    points = newgame.start_points()
+    for cid, sp in points.items():
+        assert sp["portraits"]["char:innkeeper"] == "innkeeper_vizima", cid
+        assert set(sp["portraits"].values()) <= set(newgame.world_portraits()[0]), cid
+    g, stack = make(tmp_path, CANON)          # vidmak_A_tavern, no canon store: the stand-in
+    eng = g.eng
+    keeper = next(c for c in eng.scene.present if c.endswith("innkeeper"))
+    assert eng.profiles[keeper].portrait == "innkeeper_vizima"
+    assert eng.ctx.rung_of(keeper) == "stranger"
+    assert not any(eng.profiles[c].portrait for c in eng.scene.present
+                   if c not in (PLAYER, keeper))          # the extras keep the cheap profile
+    assert _portrait_calls(stack) == []
+    g.start_turn("Корчмарю, скільки коштує кухоль пива?")
+    g.wait_idle(20)
+    assert _portrait_calls(stack) == []       # a canon portrait is never generated
+    p = eng.ctx.portraits["innkeeper_vizima"]
+    section = eng.ctx.portrait_section(keeper, eng.scene)   # what his prompt would carry
+    assert any(st.does in section for st in p.stances)

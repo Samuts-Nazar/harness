@@ -10,8 +10,9 @@
 # elsewhere in the city), acquainted (pairs that know each other: slot or character id), who (the
 # default company, for the card), geralt (where the canon has the witcher then), geralt_here (true:
 # the canon brings him to this place within the hour), pitch (one line for the instruction),
-# summary (the longer card/instruction text), situation (the opening shown to the player; absent =
-# the built-in text of situation A). Nothing in `situation` names a person the newcomer has not met.
+# portraits (canon entity id -> portrait id of worlds/witcher/portraits: the people made at the
+# start play it, and Geralt when the canon brings him in), summary (the longer card/instruction
+# text), situation (the opening shown to the player; absent = the built-in text of situation A). Nothing in `situation` names a person the newcomer has not met.
 
 vidmak_A_tavern:
   title: "Визім · корчма «Під Лисом»"
@@ -38,6 +39,11 @@ vidmak_A_tavern:
   geralt: "у кордегардії біля палацу, під опікою двору; у корчмі його немає"
   geralt_here: false
   pitch: "Вечір третього дня: корчма гуде чутками про палац і білоголового чужинця."
+  portraits:
+    char:innkeeper: innkeeper_vizima
+    char:velerad: velerad
+    char:foltest: foltest
+    char:geralt: geralt_vidmak
   summary: >-
     Вечір третього дня у Визімі, столиці Темерії. Корчма «Під Лисом» біля брами повна возіїв,
     дрібних торговців і стражників. Місто переказує чутки про те, що сталося біля старого
@@ -74,6 +80,11 @@ vidmak_B_gate:
   geralt: "за двадцять хвилин прийде до брами пішки з півночі, ведучи коня, і попрямує до корчми «Під Лисом»"
   geralt_here: true
   pitch: "Перший день, по обіді: біля брами черга з возів, а до міста підходить чужинець із конем."
+  portraits:
+    char:innkeeper: innkeeper_vizima
+    char:velerad: velerad
+    char:foltest: foltest
+    char:geralt: geralt_vidmak
   summary: >-
     Перший день, по обіді, у Визімі. Брама Линварів пропускає возіїв, селян і мандрівників,
     митник бере мито, вартові косяться на чужих. За двадцять хвилин до брами підійде самотній
@@ -116,6 +127,11 @@ vidmak_C_tavern_morning:
   geralt: "не тут: після вчорашнього його взяли під опіку варта й двір"
   geralt_here: false
   pitch: "Ранок після побоїща: корчмар мовчить, підлогу відмито, і всі шепочуться про вчорашнє."
+  portraits:
+    char:innkeeper: innkeeper_vizima
+    char:velerad: velerad
+    char:foltest: foltest
+    char:geralt: geralt_vidmak
   summary: >-
     Другий день, ранок. Корчма «Під Лисом» щойно прокинулась після важкого вчорашнього вечора:
     на підлозі біля одного зі столів ще мокро, корчмар поглядає на двері, наймичка відводить очі,
@@ -159,6 +175,11 @@ vidmak_D_market:
   geralt: "не тут: він у місті під опікою двору (кордегардія біля палацу)"
   geralt_here: false
   pitch: "Пізній ранок на ринку: говорять про королівську нагороду, стриґу й чужинця зі срібним мечем."
+  portraits:
+    char:innkeeper: innkeeper_vizima
+    char:velerad: velerad
+    char:foltest: foltest
+    char:geralt: geralt_vidmak
   summary: >-
     Другий день, пізній ранок, на головному ринку Визіма. Торговці, служниці й перекупники
     збиваються групками й переказують одне одному про стриґу в старому палаці, королівську
@@ -198,6 +219,11 @@ vidmak_E_velerad_office:
   geralt: "о 19:00 вартові приведуть його до кабінету бургомістра; зараз його ще немає"
   geralt_here: true
   pitch: "Передпокій бургомістра: черга скаржників, писар, за дверима людина, що вирішує справи міста."
+  portraits:
+    char:innkeeper: innkeeper_vizima
+    char:velerad: velerad
+    char:foltest: foltest
+    char:geralt: geralt_vidmak
   summary: >-
     Перший день, надвечір'я. У передпокої кабінету бургомістра сидять і стоять ті, у кого діло
     до міської влади: купець зі скаргою, писар із книгою записів, вартовий біля дверей. За
@@ -237,6 +263,11 @@ vidmak_F_palace_dusk:
   geralt: "не тут: він у кімнатці над кордегардією, до нього о 23:00 прийдуть гості"
   geralt_here: false
   pitch: "Двір палацу, смеркає: варта чекає нічної зміни, а темне крило палацу всі обходять."
+  portraits:
+    char:innkeeper: innkeeper_vizima
+    char:velerad: velerad
+    char:foltest: foltest
+    char:geralt: geralt_vidmak
   summary: >-
     Другий день, надвечір'я, у дворі палацу. Вікна де-не-де світяться, вартові на брамі чекають
     нічної зміни, стайничий заводить коней, а одне крило будівлі стоїть без вогню, і прислуга
@@ -275,6 +306,11 @@ vidmak_G_night_watch:
   geralt: "не тут: він у старому палаці, у зруйнованій кімнаті й на подвір'ї; це його ніч"
   geralt_here: false
   pitch: "Ніч повного місяця: двері на засувах, варта біля палацу не сідає, і всі чекають крику."
+  portraits:
+    char:innkeeper: innkeeper_vizima
+    char:velerad: velerad
+    char:foltest: foltest
+    char:geralt: geralt_vidmak
   summary: >-
     Сьомий день, пізня ніч, повний місяць. У Визімі зачинено віконниці, двері під засувами,
     діти в хатах. Біля кордегардії під палацом стоїть нічна варта; ніхто не сидить і ніхто не

@@ -17,10 +17,12 @@ from .facts import FactStore
 from .glossary import Glossary
 from .memory import CharacterMemory, MemoryDeriver
 from .models import (
-    ACTION, CORRECTION, PLAYER, SCENE_ENTRY, UTTERANCE, WITNESSED, CharacterProfile, Event, Fact, Knower,
+    ACTION, CORRECTION, PLAYER, PORTRAIT_LEAK, SCENE_ENTRY, UTTERANCE, WITNESSED, CharacterProfile,
+    Event, Fact, Knower,
     Scene, format_time,
 )
 from .names import Names
+from .relations import Relations
 from .portrait import MAX_WORDS, Portrait, Situation, Stance, select_stance, slice_text
 from .providers import Messages
 from .shape import Shape, shape_instruction
@@ -52,6 +54,7 @@ OUTCOME_EVENT = "outcome"  # harness/outcome.py (not imported: it imports the ju
 # observable live state that means danger in the room (a drawn blade, a raised crossbow)
 DANGER = re.compile(r"\b(?:drawn|оголен\w*|витягнут\w*|наставлен\w*|націлен\w*)", re.IGNORECASE)
 # counted in the slice budget (MAX_WORDS for the whole section)
+LEAK_TRUST = 0.4  # a hidden-layer leak goes into a portrait NPC's prompt only from this trust on
 PORTRAIT_HEAD = "Who you are now (never quote it; example lines show only the voice):"
 
 
@@ -69,6 +72,10 @@ class NpcView:
     finish: Callable[[Messages], Messages]
     character: str = ""
     examples: tuple[str, ...] = ()  # the portrait's example lines in this prompt (copy check)
+    # a hidden-layer leak in this prompt and its scene key: used (a PORTRAIT_LEAK event) only
+    # when a line or gesture made from it is delivered
+    leak: str = ""
+    leak_scene: str = ""
 
     def messages(self, heard_lines: Sequence[str] = (), notes: Sequence[str] = (),
                  instruction: str | None = None) -> Messages:
@@ -141,6 +148,7 @@ class ContextBuilder:
         self.portraits: dict[str, Portrait] = {}
         # the rung each NPC starts on toward the player (a game package's person), by NPC id
         self.rung_seeds: dict[str, str] = {}
+        self.relations = Relations(log, self.rung_seeds)
 
     # -- names ------------------------------------------------------------------------------
     def name(self, cid: str) -> str:
@@ -284,10 +292,14 @@ class ContextBuilder:
         # Order for prompt caching: what grows slowly first (the character's knowledge, condition),
         # the scene and what just happened last.
         parts: list[str] = []
-        portrait, own_lines = self._portrait_slice(character, scene)
+        portrait, own_lines, leak = self._portrait_slice(character, scene)
         core = portrait or self.core_text(prof)  # a portrait replaces the core and the manner
         if core:
             parts.append(core)
+        if portrait:  # the NPC's own standing toward the player (never the narrator's)
+            rel = self.relations.get(character, PLAYER)
+            parts.append(f"Your standing toward {self.ref(character, PLAYER)}: {rel.rung}, "
+                         f"warmth {rel.warmth:g}, trust {rel.trust:g}.")
         if mem.knows:
             parts.append("What you know:\n" + "\n".join(self.knowledge_lines(mem)))
         if mem.state:
@@ -328,7 +340,8 @@ class ContextBuilder:
         return NpcView(
             system=system, sections=parts,
             seen=[self._seen(e, character) for e in seen], instruction=instruction, known=known,
-            name=prof.name, character=character, examples=own_lines,
+            name=prof.name, character=character, examples=own_lines, leak=leak or "",
+            leak_scene=self.scene_key(character, scene) if leak else "",
             finish=lambda m, c=character, k=known_names: self.finish(m, c, k))
 
     # -- portraits ---------------------------------------------------------------------------
@@ -337,13 +350,30 @@ class ContextBuilder:
         return self.portraits.get(prof.portrait) if prof is not None and prof.portrait else None
 
     def rung_of(self, character: str, toward: str = PLAYER) -> str:
-        """The rung of the relationship ladder `character` stands on toward `toward`. Toward the
-        player: the seed (a game package's person), else stranger. Toward another NPC: the
-        portrait's static relations. (A relations store replaces this later.)"""
+        """The rung of the relationship ladder `character` stands on toward `toward`: the latest
+        RELATION event; without one, toward the player the package seed (campaigns made before
+        the store), else stranger; toward another NPC the portrait's static relations."""
         if toward == PLAYER:
-            return self.rung_seeds.get(character, "stranger")
+            return self.relations.get(character, PLAYER).rung  # event, else the stored seed
         p = self.portrait_of(character)
         return p.relations.get(toward, "stranger") if p is not None else "stranger"
+
+    def relation_line(self, npc: str, scene: Scene | None = None) -> str:
+        """The NPC's standing toward the player for the omniscient judges (real names). With a
+        scene and a portrait, the stance that standing selects."""
+        rel = self.relations.get(npc, PLAYER)
+        rung = rel.rung
+        line = (f"{self.name(npc)} → the player: {rung}, warmth {rel.warmth:g}, "
+                f"trust {rel.trust:g}")
+        p = self.portrait_of(npc)
+        if p is not None and scene is not None:
+            line += f"; stance: {select_stance(p, rung, self.situation(npc, scene)).id}"
+        return line
+
+    def relation_lines(self, scene: Scene) -> list[str]:
+        """One line per present NPC with a portrait (judges only)."""
+        return [self.relation_line(c, scene) for c in scene.present
+                if c != PLAYER and self.portrait_of(c) is not None]
 
     def situation(self, character: str, scene: Scene) -> Situation:
         """Power, audience and stakes for stance selection, in code. Audience: anyone present
@@ -371,22 +401,43 @@ class ContextBuilder:
                 stakes = "high"
         return Situation(power, audience, stakes)
 
-    def _portrait_slice(self, character: str, scene: Scene) -> tuple[str, tuple[str, ...]]:
+    def _portrait_slice(self, character: str, scene: Scene
+                        ) -> tuple[str, tuple[str, ...], str | None]:
+        """The slice text, the example lines shown (masked) and the leak it carries, if any."""
         p = self.portrait_of(character)
         if p is None:
-            return "", ()
+            return "", (), None
         st = select_stance(p, self.rung_of(character), self.situation(character, scene))
-        text = self.portrait_text(p, st, character)
+        leak = self._leak_for(p, character, scene)
+        text = self.portrait_text(p, st, character, leak)
+        if leak and self.mask(character, leak) not in text:  # no room left in the slice
+            leak = None
         # the copy check compares the reply with the example lines as the NPC saw them (masked)
         shown = tuple(m for m in (self.mask(character, x) for x in st.examples) if m in text)
-        return text, shown
+        return text, shown, leak
 
-    def portrait_text(self, p: Portrait, stance: Stance, viewer: str) -> str:
+    def scene_key(self, character: str, scene: Scene) -> str:
+        return self.relations.scene_key(character, scene)
+
+    def _leak_for(self, p: Portrait, character: str, scene: Scene) -> str | None:
+        """A hidden-layer leak for this prompt: only with trust >= LEAK_TRUST and none used for
+        this NPC in this scene yet (an active PORTRAIT_LEAK event, caused by the line that
+        carried it); the portrait's leaks in turn."""
+        if not p.leaks or self.relations.get(character, PLAYER).trust < LEAK_TRUST:
+            return None
+        key = self.scene_key(character, scene)
+        used = [e for e in self.log.active([PORTRAIT_LEAK]) if e.payload.get("npc") == character]
+        if any(e.payload.get("scene") == key for e in used):
+            return None
+        return p.leaks[len(used) % len(p.leaks)]
+
+    def portrait_text(self, p: Portrait, stance: Stance, viewer: str,
+                      leak: str | None = None) -> str:
         """Header plus slice, at most MAX_WORDS words in all, masked for `viewer`."""
         budget = MAX_WORDS - len(PORTRAIT_HEAD.split())
         while True:  # masking a name with an appearance can add words: shrink until it fits
-            out = PORTRAIT_HEAD + "\n" + self.mask(viewer, slice_text(p, stance, None, budget))
-            over = len(out.split()) - MAX_WORDS  # leaks: rationed later (task 4)
+            out = PORTRAIT_HEAD + "\n" + self.mask(viewer, slice_text(p, stance, leak, budget))
+            over = len(out.split()) - MAX_WORDS
             if over <= 0 or budget <= 1:
                 return out
             budget -= over
@@ -549,6 +600,9 @@ class ContextBuilder:
         lines.append(f"The player does/says: {player_input}")
         if narration:  # none when the moment is just talk (living dialogue)
             lines.append(f"Narration: {narration}")
+        rel = self.relation_lines(scene)
+        if rel:
+            lines.append("Relationships:\n" + "\n".join(rel))
         g = self.glossary
         return [g.apply(x) for x in lines] if g else lines
 

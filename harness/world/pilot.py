@@ -102,6 +102,7 @@ class CanonStart:
     pairs: tuple[tuple[str, str], ...] = (("guard", "drunk"), ("innkeeper", "guard"),
                                           ("innkeeper", "drunk"))  # who knows whom (slot or cid)
     intro: str = ""
+    portraits: tuple[tuple[str, str], ...] = ()   # (canon entity, portrait id): who plays a portrait
 
     @classmethod
     def from_dict(cls, cid: str, d: dict[str, Any]) -> "CanonStart":
@@ -111,7 +112,8 @@ class CanonStart:
         return cls(cid, (int(d["day"]) - 1) * 1440 + int(h) * 60 + int(m), str(d["canon_place"]),
                    str(d["map_place"]), tuple(d.get("here", [])), extras,
                    tuple((str(a), str(b)) for a, b in d.get("acquainted", [])),
-                   str(d.get("situation", "")))
+                   str(d.get("situation", "")),
+                   tuple((str(k), str(v)) for k, v in (d.get("portraits") or {}).items()))
 
     @property
     def map_extra(self) -> tuple[str, ...]:
@@ -168,7 +170,8 @@ def populate_canon_campaign(eng: Engine, canon: Any, start: CanonStart = SITUATI
     from ..canon.api import CanonCampaign
     from ..canon.play import CanonPlay, cid_of
 
-    play = CanonPlay(canon, CanonCampaign(start_t=start.t, place=start.canon_place, offset=0))
+    play = CanonPlay(canon, CanonCampaign(start_t=start.t, place=start.canon_place, offset=0),
+                     portraits=dict(start.portraits))
     for ent, cid in (("char:innkeeper", "innkeeper"), ("char:velerad", "velerad"),
                      ("char:foltest", "foltest"), *CANON_GROUPS.items()):
         try:
@@ -197,7 +200,8 @@ def make_canon_world(eng: Engine, canon: Any, judge: Judge, *, play: Any = None,
     from .canon_adapter import PlayCanon
 
     if play is None:
-        play = CanonPlay(canon, CanonCampaign(start_t=start.t, place=start.canon_place, offset=0))
+        play = CanonPlay(canon, CanonCampaign(start_t=start.t, place=start.canon_place, offset=0),
+                         portraits=dict(start.portraits))
         for ent in ("char:innkeeper", "char:velerad", "char:foltest", *CANON_GROUPS):
             cid = CANON_GROUPS.get(ent) or cid_of(ent)
             if cid in eng.profiles:

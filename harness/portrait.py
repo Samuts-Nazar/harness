@@ -126,6 +126,11 @@ def load_portrait(path: Path) -> Portrait:
         d = yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as e:
         raise PortraitError(path, "<file>", f"invalid YAML: {e}") from e
+    return parse_portrait(d, path)
+
+
+def parse_portrait(d: object, path: Path | str = "<portrait>") -> Portrait:
+    """A Portrait from its mapping (a loaded YAML file, or a cached generated portrait)."""
     if not isinstance(d, dict):
         raise PortraitError(path, "<file>", "top level must be a mapping")
     sts = _req(path, d, "stances", list)
@@ -188,24 +193,31 @@ def select_stance(p: Portrait, rung: str, sit: Situation) -> Stance:
 
 
 def slice_text(p: Portrait, stance: Stance, leak: str | None, budget: int = MAX_WORDS) -> str:
-    """At most `budget` words (default MAX_WORDS): trims examples, then the tail, then the leak,
-    then cuts. A caller that adds a header passes the budget left after it."""
-    def build(examples, tail, leak_line):
-        parts = [p.core, stance.does, stance.sounds, tail, *examples, p.voice, p.never, leak_line]
-        return "\n".join(x for x in parts if x)
+    """At most `budget` words (default MAX_WORDS): trims the leak (it is rationed anyway), then the
+    examples, then the tail, then cuts words from the core, `does`, `sounds` and `voice`, in that
+    order, so `never` is kept longest. A caller that adds a header passes the budget left after it."""
+    def build(parts):
+        core, does, sounds, tail, examples, voice, never, leak_line = parts
+        return "\n".join(x for x in (core, does, sounds, tail, *examples, voice, never, leak_line)
+                          if x)
 
-    examples, tail, leak_line = list(stance.examples[:MAX_EXAMPLES]), stance.tail, leak or ""
-    for trim in ("examples", "tail", "leak", None):
-        out = build(examples, tail, leak_line)
+    parts = [p.core, stance.does, stance.sounds, stance.tail, list(stance.examples[:MAX_EXAMPLES]),
+             p.voice, p.never, leak or ""]
+    for trim in (7, 4, 3):   # the leak, the examples, the tail
+        out = build(parts)
         if len(out.split()) <= budget:
             return out
-        if trim == "examples":
-            examples = []
-        elif trim == "tail":
-            tail = ""
-        elif trim == "leak":
-            leak_line = ""
-    return " ".join(out.split()[:budget])
+        parts[trim] = [] if trim == 4 else ""
+    out = build(parts)
+    over = len(out.split()) - budget
+    for i in (0, 1, 2, 5, 6):   # core, does, sounds, voice, never
+        if over <= 0:
+            break
+        words = parts[i].split()
+        cut = min(over, len(words))
+        parts[i] = " ".join(words[:len(words) - cut])
+        over -= cut
+    return build(parts)
 
 
 _WORD = re.compile(r"[\w'’]+")

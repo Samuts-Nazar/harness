@@ -10,7 +10,7 @@ import sqlite3
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
@@ -25,13 +25,14 @@ from .director import (
     parse_actions,
 )
 from .eventlog import EventLog
+from .relations import SEED_VALUES
 from .extractor import Diff, DiffValidationError, parse_diff, validate_diff
 from .facts import FactStore
 from .glossary import Glossary
 from .judge import (
     Judge, JudgeError, JudgmentLog, LoggingJudge, choice_q, default_fake_judge, score_q, yes_no_q,
 )
-from . import knowledge
+from . import knowledge, relations
 from .memory import CharacterMemory, MemoryDeriver, MemoryWriter
 from .names import INTRODUCED, OVERHEARD, PLAYER_SAID, TOLD as NAME_TOLD, Names
 from .player_guard import PLAYER_ACT_Q, flag_player_acts, split_sentences, strip_player_quotes
@@ -44,6 +45,8 @@ from .models import (
     INTERRUPTION,
     NARRATION,
     PLAYER,
+    PORTRAIT_LEAK,
+    RELATION,
     SCENE_ENTRY,
     SCRIPTED,
     STATE_CHANGE,
@@ -58,7 +61,7 @@ from .narrator import (
     parse_narration,
     strip_speech,
 )
-from .npcgen import NpcSpec, VitalsBook, generate_npc, taken_names, with_core
+from .npcgen import NpcSpec, VitalsBook, generate_npc, short_portrait, taken_names, with_core
 from .outcome import (
     CHARACTER_DEATH, FAILS, OUTCOME, CampaignEnded, Outcome, OutcomeJudge, record_death, record_outcome,
 )
@@ -68,7 +71,7 @@ from .policy import (
 )
 from .providers import Provider, ProviderError
 from .stylehits import count_by_kind, style_hits
-from .portrait import RUNGS, PortraitError, copy_overlap, load_world_portraits
+from .portrait import PortraitError, copy_overlap, load_world_portraits, parse_portrait
 from .repetition import WINDOW as REPETITION_WINDOW, measure_turn, sentences
 from .profile import WorldProfile, distance, profile_of_lines
 from .settings import (
@@ -122,6 +125,9 @@ class InterruptionError(RuntimeError):
 
 class ExtractionRejected(RuntimeError):
     """The extractor never produced a valid diff; the turn was rolled back."""
+
+
+MAX_PORTRAITS_PER_SETTLE = 2  # short portraits made per slow lane; the rest wait for the next
 
 
 @dataclass(frozen=True)
@@ -235,6 +241,8 @@ class TurnResult:
     # why the NPCs stopped talking: "player_addressed", "nobody", "cap" or "interrupted" (living
     # mode); classic mode sets only "interrupted"
     stop_reason: str = ""
+    # living mode: the NPC the director found the player's input addressed to ("" if none)
+    addressee: str = ""
     # living mode, in order: ("line", npc, delivered text), ("gesture", npc, the action as the
     # player sees it) or ("silence", npc, "")
     exchange: list[tuple[str, str, str]] = field(default_factory=list)
@@ -348,6 +356,7 @@ class Engine:
         self._fixes_lock = threading.Lock()
         self._tl = threading.local()
         self._slow: _Slow | None = None  # the slow lane of the last turn, not yet applied
+        self._last_prep: dict[str, _NpcPrep] = {}  # per NPC: the context read last (leaks)
         self._slow_lock = threading.RLock()
         self.slow_failure: BaseException | None = None
         self.after_settle: list[Callable[[], None]] = []  # run after the slow lane (the world)
@@ -376,12 +385,13 @@ class Engine:
                                   player_unlimited=player_unlimited)
         self.ctx.outcomes = outcomes
         self.world = world
+        self._short_portraits: dict[str, dict | None] = {}  # npc -> generated portrait (None: failed)
         try:  # a broken portrait file must not stop a campaign from opening
             self.ctx.portraits = load_world_portraits(world) if world else {}
         except (OSError, PortraitError) as e:
             self.ctx.portraits = {}
             self._note("portraits_failed", world=world, error=str(e)[:300])
-        self.ctx.rung_seeds = dict(rung_seeds or {})
+        self.ctx.rung_seeds.update(rung_seeds or {})  # in place: Relations shares the dict
         self.memory = (MemoryWriter(self.campaign_dir / "memory", self.deriver, self.log,
                                     self.profiles, self.agents) if self.campaign_dir else None)
         self._save_scene()
@@ -944,8 +954,10 @@ class Engine:
         """Read an NPC's context and the judge's state from the database (main thread only)."""
         self._ensure_manner(npc)
         mem = self.deriver.derive(npc, self.scene.time)
-        return _NpcPrep(npc, mem, self.ctx.character_view(npc, self.scene, mem),
+        prep = _NpcPrep(npc, mem, self.ctx.character_view(npc, self.scene, mem),
                         self.names.known_set(npc), self.names.known_set(PLAYER))
+        self._last_prep[npc] = prep
+        return prep
 
     def _ensure_manner(self, npc: str) -> None:
         """Manner notes for an NPC profile that has none, once, from a cheap model (main thread
@@ -1527,6 +1539,8 @@ class Engine:
                 nxt, shape, dist = self._decide_next(
                     self._exchange_state(launch.director, lines), npcs, launch.out.description,
                     step == 0)
+            if step == 0:
+                result.addressee = str(getattr(dist, "addressee", "") or "")
             if nxt == PLAYER_FLOOR:
                 result.stop_reason = "player_addressed"
                 return
@@ -1565,6 +1579,7 @@ class Engine:
                 ev = self._event(ACTION_EVENT, [nxt], {"text": act, "by": nxt, "gesture": True},
                                  notability=0.3)
                 turn_events.append(ev)
+                self._record_leak(prep.view, ev)
                 gestures += 1
                 sources[f"gesture{gestures}"] = ev
                 segments.append((f"gesture{gestures}", act))
@@ -1603,6 +1618,7 @@ class Engine:
             {"speech": parsed.speech} if parsed is not None and parsed.has_dash else {})
         ev = self._utterance(npc, sr.spoken_text, interrupted=sr.interrupted, **extra)
         turn_events.append(ev)
+        self._record_leak(prep.view, ev)
         result.utterances.append(ev)
         # only what is said aloud teaches a name, never the NPC's own beats
         self._learn_from_speech(
@@ -1942,6 +1958,8 @@ class Engine:
                 diff = self._extract(slow.segments, slow.outcomes, messages=slow.messages,
                                      first_raw=first)
                 slow.result.fact_ids = self._commit(diff, slow.sources)
+                self._apply_switches(slow)
+                self._promote_portraits()
                 self._turn_report(slow.player_event.id, slow.result)
                 for u in slow.result.utterances:
                     self.agents.promote(u.payload["speaker"], sc)
@@ -1971,6 +1989,152 @@ class Engine:
                                     "slow_s": round(time.monotonic() - t0, 3),
                                     "waited_s": 0.0, "needed": False})
             return True
+
+    # -- portrait switches: the relationship moves on the slow lane --------------------------
+    def _switch_npcs(self, slow: _Slow) -> list[str]:
+        """Present portrait NPCs with switches the player dealt with this turn: those who spoke
+        or gestured, the one the director found addressed, one the player's input names or
+        describes, or the only NPC in the scene."""
+        others = [c for c in self.scene.present if c != PLAYER]
+        acted = ({u.payload["speaker"] for u in slow.result.utterances}
+                 | {n for kind, n, _ in slow.result.exchange if kind in ("line", "gesture")}
+                 | {slow.result.addressee})
+        said = " ".join(e.payload.get("text", "") for e in slow.turn_events
+                        if (e.payload.get("speaker") or e.payload.get("actor")) == PLAYER)
+        out = []
+        for c in others:
+            p = self.ctx.portrait_of(c)
+            if p is None or not p.switches:
+                continue
+            if c in acted or len(others) == 1 or self._mentioned(c, said):
+                out.append(c)
+        return out
+
+    def _mentioned(self, npc: str, text: str) -> bool:
+        """`text` names `npc` (any case) or describes them by their label (its longer words, as
+        stems: «чорнокосій жінці» for «чорнокоса жінка»)."""
+        if not text:
+            return False
+        if npc in self.names.named_in(text):
+            return True
+        words = [w for w in re.findall(r"\w+", self.names.label(npc).lower()) if len(w) >= 4]
+        have = re.findall(r"\w+", text.lower())
+        hits = sum(1 for w in words if any(h.startswith(w[:max(3, len(w) - 2)]) for h in have))
+        return bool(words) and hits >= min(2, len(words))
+
+    def _switch_state(self, npc: str, cause_id: int) -> tuple[list[str], list[int]]:
+        """The judge's state for one NPC's switch questions (real names: the judge is
+        omniscient): the NPC's last line before the turn, then the turn as it stands in the log
+        (from the player's input `cause_id` on). Also the ids of this NPC's own lines and
+        gestures in it, kept on the relation event."""
+        name = self.ctx.name(npc)
+
+        def who(c: str | None) -> str:
+            return "The player" if c == PLAYER else self.ctx.name(c) if c else "Narration"
+
+        lines: list[str] = []
+        ids: list[int] = []
+        before = [e for e in self.log.active([UTTERANCE])
+                  if e.id < cause_id and e.payload.get("speaker") == npc]
+        if before:
+            lines.append(f"(just before) {name}: {before[-1].payload['text']}")
+        for e in self.log.active([UTTERANCE, ACTION_EVENT, NARRATION]):
+            if e.id < cause_id:
+                continue
+            p = e.payload
+            c = None if e.type == NARRATION else (p.get("speaker") or p.get("actor")
+                                                   or p.get("by"))
+            mark = " (does)" if e.type == ACTION_EVENT and c else ""
+            lines.append(f"{who(c)}{mark}: {p.get('text', '')}")
+            if c == npc:
+                ids.append(e.id)
+        state = [f"The questions are about {name}: \"she\" and \"her\" mean {name} (\"he\" and "
+                 f"\"him\" if {name} is a man). Judge what the player did or said this turn "
+                 f"(toward her or others present).", "This turn:\n" + "\n".join(lines)]
+        return state, ids
+
+    def _judge_switches(self, npcs: Sequence[str], cause_id: int) -> None:
+        """One batched yes/no judgment per NPC (a question per switch trigger); the hits move
+        the relationship, paced (harness/relations.py `apply`). Every judged turn leaves a
+        RELATION event, caused by the player's input `cause_id`, with the scene key and this
+        NPC's own lines (so a replaced line can be judged again)."""
+        rels = self.ctx.relations
+        jobs = []
+        for npc in npcs:
+            p = self.ctx.portrait_of(npc)
+            if p is None or not p.switches:
+                continue
+            state, ids = self._switch_state(npc, cause_id)
+            qs = {sw.id: yes_no_q(sw.trigger, tag="portrait_switch") for sw in p.switches}
+            jobs.append(_Job(lambda st=state, q=qs: self._ask_safe(st, q),
+                             {"npc": npc, "portrait": p, "ids": ids}))
+        for job, got in zip(jobs, self._map([j.ask for j in jobs])):
+            npc, p = job.meta["npc"], job.meta["portrait"]
+            if isinstance(got, JudgeError):
+                self._note("switches_unavailable", npc=npc, error=str(got)[:200])
+                continue
+            hits = [sw for sw in p.switches if sw.id in got and got[sw.id].answer]
+            old = rels.get(npc, PLAYER)
+            key = rels.scene_key(npc, self.scene)
+            new = relations.apply(old, hits, rels.pace(npc, PLAYER, key))
+            rels.set(npc, PLAYER, new.rung, new.warmth, new.trust, new.reason, self.scene,
+                     cause_id, lines=job.meta["ids"], key=key, counted=new.counted)
+            if hits or (new.rung, new.warmth, new.trust) != (old.rung, old.warmth, old.trust):
+                self._note("relation_changed", npc=npc, **{"from": old.rung}, to=new.rung,
+                           switches=[sw.id for sw in hits], counted=list(new.counted),
+                           warmth=new.warmth, trust=new.trust)
+
+    def _apply_switches(self, slow: _Slow) -> None:
+        """The slow lane's relationship step. It never aborts the slow lane: any failure is a
+        note and the relationship stays as it was."""
+        try:
+            self._judge_switches(self._switch_npcs(slow), slow.player_event.id)
+        except Exception as e:  # noqa: BLE001 - bookkeeping must not undo the turn
+            self._note("switches_failed", error=repr(e)[:200])
+
+    def _revert_relations(self, line_id: int) -> list[tuple[str, int]]:
+        """A model error, challenge or cut replaced the NPC's line or gesture `line_id`: the
+        relation events judged on it are rolled back. Returns (npc, the turn's player input) to
+        judge again once the replacement is in the log."""
+        out = []
+        for e in self.log.active([RELATION]):
+            if line_id in e.payload.get("lines", ()):
+                self.log.rollback(e.id, "its line was replaced")
+                self._note("relation_reverted", npc=e.payload["npc"], event=e.id, line=line_id)
+                if e.cause_id is not None:
+                    out.append((e.payload["npc"], e.cause_id))
+        return out
+
+    def _rejudge(self, reverted: Sequence[tuple[str, int]]) -> None:
+        """Ask the switches again for each reverted NPC, with the new (or restored) line in the
+        log: the player keeps what they earned (one judge call per NPC, never on the fast
+        lane). A failure is a note; the relationship stays reverted."""
+        for npc, cause in reverted:
+            try:
+                self._judge_switches([npc], cause)
+            except Exception as e:  # noqa: BLE001
+                self._note("switches_failed", npc=npc, error=repr(e)[:200])
+
+    # -- hidden-layer leaks ------------------------------------------------------------------
+    def _leaks_of(self, event_id: int) -> list[Event]:
+        return [e for e in self.log.active([PORTRAIT_LEAK]) if e.cause_id == event_id]
+
+    def _record_leak(self, view: NpcView | None, ev: Event, *, leak: str = "",
+                     scene: str = "") -> None:
+        """A delivered line or gesture made from a prompt that carried a leak uses it for the
+        scene: a PORTRAIT_LEAK event caused by that line (a rollback of the line frees it)."""
+        leak = leak or (view.leak if view is not None else "")
+        scene = scene or (view.leak_scene if view is not None else "")
+        if not leak or not ev.payload.get("text", "").strip():
+            return
+        npc = ev.payload.get("speaker") or ev.payload.get("by")
+        self._event(PORTRAIT_LEAK, [npc], {"npc": npc, "scene": scene, "leak": leak},
+                    witnesses=[], notability=0.05, cause_id=ev.id)
+        self._note("portrait_leak", npc=npc, scene=scene, leak=leak[:120], line=ev.id)
+
+    def _carry_leaks(self, leaks: Sequence[Event], ev: Event) -> None:
+        for e in leaks:
+            self._record_leak(None, ev, leak=e.payload["leak"], scene=e.payload["scene"])
 
     def _prefetch(self) -> None:
         """Work for the next turn that does not depend on what the player will write: the manner
@@ -2079,15 +2243,21 @@ class Engine:
         npc = last.payload["speaker"]
         sr = StreamResult(tuple(words[:after_words]), tuple(words[after_words:]), True)
 
+        leaks = self._leaks_of(last.id)
         self.log.rollback(last.id, f"retroactive interrupt of {npc}")
-        kept = self._utterance(npc, sr.spoken_text, interrupted=True, replaces=last.id)
-        self._record_interruption(kept, sr)
-        self._learn_from_speech(kept, npc, sr.spoken_text)
+        reverted = self._revert_relations(last.id)  # judged again on the kept part
         try:
-            self._commit(self._extract([(npc, sr.spoken_text)]), {npc: kept})
-        except ExtractionRejected:
-            pass  # keep the cut; simply record no facts from the kept part
-        self.refresh_memory()
+            kept = self._utterance(npc, sr.spoken_text, interrupted=True, replaces=last.id)
+            self._carry_leaks(leaks, kept)
+            self._record_interruption(kept, sr)
+            self._learn_from_speech(kept, npc, sr.spoken_text)
+            try:
+                self._commit(self._extract([(npc, sr.spoken_text)]), {npc: kept})
+            except ExtractionRejected:
+                pass  # keep the cut; simply record no facts from the kept part
+            self.refresh_memory()
+        finally:
+            self._rejudge(reverted)
         return kept
 
     # -- "how does he know that?" (model-error flow for knowledge leaks) -------------------------
@@ -2332,13 +2502,24 @@ class Engine:
 
     def _regenerate(self, old: Event, res: "Challenge", explanation: str = "") -> None:
         """Replace the NPC line `old` by a new one generated with the correction in context. If
-        generating fails the old text is put back (the log is append-only, so as a new event)."""
-        npc = old.payload["speaker"]
+        generating fails the old text is put back (the log is append-only, so as a new event).
+        Either way the relationship the line was judged on is judged again with what stands."""
+        leaks = self._leaks_of(old.id)
         self.log.rollback(old.id, "model error: no channel")
+        reverted = self._revert_relations(old.id)
+        try:
+            self._regenerate_line(old, res, explanation, leaks)
+        finally:
+            self._rejudge(reverted)
+
+    def _regenerate_line(self, old: Event, res: "Challenge", explanation: str,
+                         leaks: Sequence[Event]) -> None:
+        npc = old.payload["speaker"]
         try:
             text = self._regenerate_text(npc, old, explanation)
         except Exception:
-            self._utterance(npc, old.payload["text"], replaces=old.id, restored=True)
+            back = self._utterance(npc, old.payload["text"], replaces=old.id, restored=True)
+            self._carry_leaks(leaks, back)
             self.refresh_memory()
             raise
         if text is None:  # the point cannot be removed from this line: the NPC says nothing
@@ -2346,6 +2527,8 @@ class Engine:
             res.withdrawn = True
             return
         new = self._utterance(npc, text, replaces=old.id, regenerated=True)
+        prep = self._last_prep.get(npc)
+        self._record_leak(prep.view if prep is not None else None, new)
         self._learn_from_speech(new, npc, text)
         try:
             self._commit(self._extract([(npc, text)]), {npc: new})
@@ -2357,9 +2540,20 @@ class Engine:
     def _regenerate_gesture(self, old: Event, res: "Challenge") -> None:
         """Replace the NPC gesture `old` by a new one made the way the exchange makes a gesture
         step (same context, gesture shape and name fixing), with the correction in the NPC's
-        context. Failing (or no action coming back) puts the old gesture back."""
-        npc = old.payload["by"]
+        context. Failing (or no action coming back) puts the old gesture back. Either way the
+        relationship it was judged on is judged again."""
+        leaks = self._leaks_of(old.id)
         self.log.rollback(old.id, "model error: gesture")
+        reverted = self._revert_relations(old.id)
+        try:
+            self._regenerate_gesture_act(old, res, leaks)
+        finally:
+            self._rejudge(reverted)
+
+    def _regenerate_gesture_act(self, old: Event, res: "Challenge",
+                                leaks: Sequence[Event]) -> None:
+        npc = old.payload["by"]
+        prep: _NpcPrep | None = None
         try:
             prep = self._prep_npc(npc)
             text = self._shaped_line(prep, Shape.GESTURE,
@@ -2369,14 +2563,16 @@ class Engine:
             act = self._fix_names(beat_as_action(text, self.names.real(npc),
                                                  [self.names.label(npc)]), "npc_beat")
         except Exception:
-            self._event(ACTION_EVENT, [npc], {"text": old.payload["text"], "by": npc,
-                                              "gesture": True, "replaces": old.id,
-                                              "restored": True}, notability=0.3)
+            back = self._event(ACTION_EVENT, [npc], {"text": old.payload["text"], "by": npc,
+                                                     "gesture": True, "replaces": old.id,
+                                                     "restored": True}, notability=0.3)
+            self._carry_leaks(leaks, back)
             self.refresh_memory()
             raise
         new = self._event(ACTION_EVENT, [npc], {"text": act, "by": npc, "gesture": True,
                                                 "replaces": old.id, "regenerated": True},
                           notability=0.3)
+        self._record_leak(prep.view if prep is not None else None, new)
         self.refresh_memory()
         res.regenerated, res.text, res.new_event = True, act, new.id
 
@@ -2423,12 +2619,81 @@ class Engine:
         """`npc` plays the world portrait `portrait` and starts on `rung` toward the player."""
         if portrait not in self.ctx.portraits:
             raise ValueError(f"no portrait {portrait!r} in world {self.world!r}")
-        if rung not in RUNGS:
-            raise ValueError(f"unknown rung {rung!r}")
+        if rung not in SEED_VALUES:
+            raise ValueError(f"unknown or unseedable rung {rung!r}")
         self.profiles[npc] = replace(self.profiles[npc], portrait=portrait)
         self.ctx.rung_seeds[npc] = rung
+        if self.ctx.relations.get(npc, PLAYER).event_id is None:  # never re-seed over play
+            self.ctx.relations.seed(npc, PLAYER, rung, self.scene)
         if self._owns_conn:
             self._save_setup()
+
+    # -- short portraits for invented NPCs who matter ---------------------------------------
+    def make_short_portrait(self, npc: str, text: str = "", rung: str = "stranger") -> bool:
+        """One extractor-role call: a short portrait for the invented NPC `npc` (`text`: the
+        author's free-text description), cached in the campaign and played from now on. A failure
+        is noted and not retried; the NPC keeps playing by manner. True when it now has one."""
+        return self.make_short_portraits([(npc, text, rung)])[0]
+
+    def make_short_portraits(self, items: Sequence[tuple[str, str, str]]) -> list[bool]:
+        """`make_short_portrait` for several NPCs (npc, text, rung): the calls run concurrently
+        when the engine allows it, the results are installed in order."""
+        todo = [(c, t, r) for c, t, r in items if c not in self._short_portraits]
+
+        def job(npc: str, text: str) -> Callable[[], tuple[Any, list[str]]]:
+            spec = self._spec_of(npc)
+
+            def run() -> tuple[Any, list[str]]:
+                why: list[str] = []
+                p = short_portrait(spec, self.style, lambda m: self._complete("extractor", m),
+                                   text=text, on_fail=why.append)
+                return p, why
+            return run
+
+        results = self._map([job(c, t) for c, t, _r in todo])
+        for (npc, _t, rung), (p, why) in zip(todo, results):
+            self._short_portraits[npc] = asdict(p) if p else None
+            if p is None:
+                self._note("short_portrait_failed", npc=npc, reason=why[0] if why else "unknown")
+            else:
+                self.ctx.portraits[p.id] = p
+                self.bind_portrait(npc, p.id, rung)
+        if todo and self._owns_conn:
+            with self.conn:
+                self.conn.execute("INSERT OR REPLACE INTO campaign_meta (key, value) VALUES (?,?)",
+                                  ("short_portraits",
+                                   json.dumps(self._short_portraits, ensure_ascii=False)))
+        return [bool(self._short_portraits.get(c)) and bool(self.profiles[c].portrait)
+                for c, _t, _r in items]
+
+    def _spec_of(self, npc: str) -> NpcSpec:
+        """What the portrait writer is told about an invented NPC, from the profile and vitals."""
+        prof, v = self.profiles[npc], self.vitals.people[npc]
+        return NpcSpec(npc, prof.name, v.culture, v.sex, prof.description, (), "", prof.core, v)
+
+    def promote_short_portraits(self) -> list[str]:
+        """Present invented NPCs who now matter (the player knows their name, or they came into a
+        scene a second time) and have no portrait yet get a short one (slow lane): at most
+        `MAX_PORTRAITS_PER_SETTLE` a time, made concurrently; the rest wait for a later settle.
+        Canon people, package people with a portrait, and anyone already tried are skipped."""
+        entries: dict[str, int] = {}
+        for e in self.log.active([SCENE_ENTRY]):
+            c = e.payload.get("character")
+            entries[c] = entries.get(c, 0) + 1
+        due = [c for c in self.scene.present
+               if c != PLAYER and c in self.vitals.people and c not in self._short_portraits
+               and not self.profiles[c].portrait
+               and (self.names.knows(PLAYER, c) or entries.get(c, 0) >= 2)]
+        due = due[:MAX_PORTRAITS_PER_SETTLE]
+        got = self.make_short_portraits([(c, "", "stranger") for c in due])
+        return [c for c, ok in zip(due, got) if ok]
+
+    def _promote_portraits(self) -> None:
+        """The slow lane's portrait step; like the switches, it never aborts the slow lane."""
+        try:
+            self.promote_short_portraits()
+        except Exception as e:  # noqa: BLE001 - bookkeeping must not undo the turn
+            self._note("short_portraits_failed", error=repr(e)[:200])
 
     def set_core(self, npc: str, core: str) -> None:
         """Set an NPC's immutable core once (a second, different core is refused)."""
@@ -2547,6 +2812,15 @@ class Engine:
         eng = cls(provider, kw.pop("profiles", profiles), scene, conn=conn, campaign_dir=d, **kw)
         eng.vitals = VitalsBook.from_json(meta.get("vitals", []))
         eng._owns_conn = True
+        eng._short_portraits = dict(meta.get("short_portraits") or {})
+        for pid, raw in eng._short_portraits.items():  # generated portraits: cached, never re-made
+            try:  # a bad cached entry must not stop the campaign from opening
+                if raw:
+                    eng.ctx.portraits[raw["id"]] = parse_portrait(raw, f"npc:{pid}")
+            except (PortraitError, KeyError, TypeError) as e:
+                eng._note("short_portrait_unreadable", npc=pid, error=str(e)[:200])
+                if pid in eng.profiles and eng.profiles[pid].portrait == (raw or {}).get("id"):
+                    eng.profiles[pid] = replace(eng.profiles[pid], portrait="")
         eng.refresh_memory()
         return eng
 

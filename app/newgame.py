@@ -51,6 +51,7 @@ KIND = "package"
 WORLDS = ("witcher",)
 MAX_PEOPLE = 6
 MAX_TEXT = 200_000   # characters of a package, checked before the YAML parser runs
+MAX_PORTRAIT_TEXT = 1_500   # characters of one person's free-text portrait
 MAX_TONE = 1_000     # characters of `tone`; it reaches every narrator prompt
 MAX_NOTES = 4_000    # characters of `notes` (with the unknown fields) that reach the narrator
 MAX_SHOW = 300       # characters of one unknown field's value kept in the notes
@@ -78,7 +79,8 @@ TOP = ("version", "world", "player", "start", "canon", "tone", "pace", "limits",
        "dialogue", "assistant", "inks", "notes", "title", "pitch")
 PLAYER_KEYS = ("name", "description", "appearance", "traits", "knows", "unbounded", "hidden")
 START_KEYS = ("canon", "place", "day", "time", "situation", "who_is_here")
-PERSON_KEYS = ("name", "role", "appearance", "attitude", "goal", "knows_player", "portrait")
+PERSON_KEYS = ("name", "role", "appearance", "attitude", "goal", "knows_player", "portrait",
+               "portrait_text")
 PACKAGES = ROOT / "worlds" / "witcher" / "packages"  # bundled game packages (the new-game list)
 # an `attitude` that reads as friendly: a person who knows the player starts as an ally
 # whole words only, so «другий», «подруга», «порада», «недружня», «невірна» do not count
@@ -355,6 +357,18 @@ def _people(c: _Checker, v: Any) -> list[dict[str, Any]] | None:
                 c.err(f"{pf}.portrait", f"Невідомий портрет «{_show(pid)}».",
                       "Оберіть один із готових портретів світу: " + (", ".join(sorted(known))
                       or "(поки жодного)") + "; або приберіть поле portrait.")
+        text = c.text(f"{pf}.portrait_text", p.get("portrait_text"))
+        if text and person.get("portrait"):
+            c.warnings.append(Issue(
+                f"{pf}.portrait_text", "У людини є і portrait, і portrait_text: потрібен лише один.",
+                "Використано готовий портрет portrait, а portrait_text проігноровано."))
+        elif text:
+            if len(text) > MAX_PORTRAIT_TEXT:
+                c.warnings.append(Issue(
+                    f"{pf}.portrait_text", f"Опис задовгий ({len(text)} знаків): беруться перші "
+                    f"{MAX_PORTRAIT_TEXT}.", "Скоротіть до головного: ядро, чужі й близькі, "
+                    "що гріє й злить, що приховує, як говорить."))
+            person["portrait_text"] = text[:MAX_PORTRAIT_TEXT]
         if not (person.get("role") or person.get("name") or person.get("appearance")):
             c.err(pf, "Невідомо, хто це: немає ні ролі, ні імені, ні зовнішності.",
                   "Додайте хоча б role (наприклад, «корчмар»).")
@@ -731,6 +745,7 @@ def _free_map(place: str) -> tuple[WorldMap, str]:
 def _build_people(eng: Engine, people: list[dict[str, Any]]) -> tuple[list[str], dict[str, str]]:
     """The package's people (or two passers-by when none are given), made whole by npcgen."""
     ids, goals = [], {}
+    texted: list[tuple[str, str, str]] = []   # (npc, free-text portrait, starting rung)
     for i, q in enumerate(people, 1):
         role = q.get("role")
         look = q.get("appearance") or role or q.get("name", "")
@@ -750,6 +765,10 @@ def _build_people(eng: Engine, people: list[dict[str, Any]]) -> tuple[list[str],
             eng.acquaint(spec.id, PLAYER)
         if q.get("portrait"):
             eng.bind_portrait(spec.id, q["portrait"], rung_seed(q))
+        elif q.get("portrait_text"):  # the author's free text, made into a portrait once
+            texted.append((spec.id, q["portrait_text"], rung_seed(q)))
+    if texted:   # the conversions are independent calls: made concurrently
+        eng.make_short_portraits(texted)
     return ids, goals
 
 
