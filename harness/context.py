@@ -25,6 +25,15 @@ from .shape import Shape, shape_instruction
 from .state import LiveState
 from .style import Style
 
+PLAYER_CHARACTER_RULE = (
+    "The player character is the player's: never repeat or quote the player's own words (the "
+    "screen already shows them) and never write what the player character does, takes, "
+    "decides, thinks or wants; write only the world: what is seen, heard, felt in the body, "
+    "and what others do. Wrong: «Ти кладеш гаманець до кишені, береш хліб і йдеш до дверей.» "
+    "(the player only wrote «Іду на ринок»). Right: «Брук мокрий, попереду шумить ринок; "
+    "пахне хлібом.»")
+
+
 UNLIMITED_NARRATOR = (
     "The player character is a being without limits: whatever the player declares the character "
     "does, happens exactly as declared. Never refuse it, soften it, let it fail or turn it into "
@@ -395,7 +404,8 @@ class ContextBuilder:
                 "Never write speech for anyone but the player: NPC lines are produced "
                 "separately, so no quotation marks and no dialogue dashes; show what a "
                 "character does, not what they say. Do not decide what the player character says, does or feels beyond "
-                "what the player gave. Never narrate people, guards or events the player character "
+                "what the player gave. "
+                + PLAYER_CHARACTER_RULE + " Never narrate people, guards or events the player character "
                 "could not perceive or has not been told of."
                 + (" When someone else attacks, robs, restrains or arrests the player character, "
                    "narrate only the attempt and stop there: the world decides separately whether "

@@ -67,7 +67,7 @@ def price_catalog():
 # with the real default, "living"; tests/test_exchange.py covers the living exchange loop.
 CLASSIC_DIRECTOR_MODULES = {
     "test_prose", "test_task19_turn", "test_glossary_repetition", "test_style", "test_decisions",
-    "test_eval_sessions",
+    "test_eval_sessions", "test_player_guard",
 }
 
 

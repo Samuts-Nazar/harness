@@ -24,6 +24,7 @@ CODE_CHOICE_KINDS: set[str] = {
     "npc_lowest_suspicion",    # no candidate passed: code picked the least suspicious
     "state_change_dropped",    # an extractor state change the code refused
     "narrator_speech_stripped",  # speech cut out of the narration
+    "narrator_player_action_dropped",  # a sentence deciding the player character's act, or repeating the player's line, cut
     "narrator_bad_speakers",   # unknown speakers filtered from the narrator's list
     "shape_regenerated",       # an NPC line far over its shape, asked again once
     "shape_trimmed",          # still over after that: cut at a sentence boundary
