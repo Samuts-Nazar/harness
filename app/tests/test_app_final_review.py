@@ -213,11 +213,15 @@ def test_set_ink_validates_against_the_cast_and_errors_are_clean():
     assert r.status_code == 500 and "error" in r.json()
 
 
-def test_drawer_says_the_characters_name_not_the_records_player():
-    assert _as_the_character("Розмовляв з гравцем про млин.", "Рагнар") == \
-        "Розмовляв з Рагнар про млин."
-    assert _as_the_character("Гравець бачив його вчора.", "Рагнар") == "Рагнар бачив його вчора."
-    assert _as_the_character("He told the player about it.", "Рагнар") == \
-        "He told Рагнар about it."
-    assert _as_the_character("Гравець бачив.", "") == "Ви бачив."
-    assert _as_the_character("Ігровий гравецький стіл.", "Р") == "Ігровий гравецький стіл."
+def test_drawer_says_vy_in_the_case_of_the_replaced_word():
+    f = lambda t: _as_the_character(t, "Рагнар")
+    assert f("Гравець бачив його вчора.") == "Рагнар бачив його вчора."          # nominative
+    assert f("Він бачив, що гравець мовчить.") == "Він бачив, що Рагнар мовчить."
+    assert f("Розмовляв з гравцем про млин.") == "Розмовляв з вами про млин."   # instrumental
+    assert f("Він розповів гравцеві про млин.") == "Він розповів вам про млин."  # dative
+    assert f("Він довірився гравцю.") == "Він довірився вам."
+    assert f("Він не знає гравця.") == "Він не знає вас."                      # genitive
+    assert f("Він розповів про це the player.") == "Він розповів про це Рагнар."
+    assert _as_the_character("Гравець бачив.") == "Ви бачив."   # no name: «ви»
+    assert f("") == ""
+    assert f("Ігровий гравецький стіл.") == "Ігровий гравецький стіл."

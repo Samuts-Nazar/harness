@@ -11,7 +11,7 @@ from app.campaigns import open_campaign
 from app.game import Game
 from app.server import create_app
 from app.stacks import fake_stack
-from harness.director import NEXT_TAG
+from harness.director import NEXT_TAG, SHAPE_TAG
 from harness.models import CORRECTION, NARRATION, UTTERANCE
 
 
@@ -20,12 +20,15 @@ def _no_local_character_file(monkeypatch, tmp_path):
     monkeypatch.setattr(campaigns, "DATA_FILE", tmp_path / "missing.md")
 
 
-def make(floors=("horst", "player"), narration=False):
+def make(floors=("horst", "player"), narration=False, shapes=None):
     stack = fake_stack()
     stack.judge.rules["director_narration"] = narration
+    if shapes:
+        stack.judge.rules[SHAPE_TAG] = list(shapes)
     stack.judge.rules[NEXT_TAG] = list(floors)
     root = tempfile.mkdtemp(prefix="harness-app-corr-")
     g = Game(lambda new: open_campaign(stack, root=root, new=new), pace=0.0, suggestions=False)
+    g.root = root
     g.start_turn("Що кажете?")
     g.wait_idle(20)
     return g, TestClient(create_app(g)), stack
@@ -48,6 +51,36 @@ def test_model_error_on_the_last_npc_line_rewrites_it_and_stores_the_note():
     assert notes and notes[-1].payload["explanation"] == "він грубіянить"
     assert not g.eng.log.is_active(line["event"])
     assert any("він грубіянить" in x for x in g.eng.ctx.corrections("horst"))
+
+
+def test_model_error_on_the_last_gesture_regenerates_it_and_survives_a_reload():
+    g, c, stack = make(floors=("horst", "elza", "player"), shapes=("normal", "gesture"))
+    act = last(g, "npc_act")
+    assert last_kind(g) == "npc_act" and act["event"]
+    players = [t for t in g.transcript if t["kind"] == "player"]
+    r = c.post("/api/model_error", json={"event": act["event"], "explanation": "надто театрально"})
+    assert r.status_code == 200, r.text
+    new = last(g, "npc_act")
+    assert new["event"] != act["event"] and new["text"] and new["tok"] == act["tok"]
+    assert [t for t in g.transcript if t["kind"] == "player"] == players
+    assert not g.eng.log.is_active(act["event"])
+    ev = g.eng.log.get(new["event"])
+    assert ev.payload["gesture"] and ev.payload["by"] == "elza" and ev.payload["regenerated"]
+    assert g.eng.last_world_output().id == new["event"]
+    assert g.eng.log.active([CORRECTION])[-1].payload["explanation"] == "надто театрально"
+    assert any("надто театрально" in x for x in g.eng.ctx.corrections("elza"))
+    assert g.state()["transcript"][-1]["event"] == new["event"]
+    reloaded = campaigns.open_campaign(stack, root=g.root, new=False).transcript()
+    assert [t for t in reloaded if t["kind"] == "npc_act"][-1]["text"] == new["text"]
+
+
+def test_model_error_on_an_older_gesture_is_refused():
+    g, c, _ = make(floors=("horst", "elza", "horst", "player"),
+                   shapes=("normal", "gesture", "normal"))
+    act = last(g, "npc_act")
+    assert last_kind(g) == "npc"
+    r = c.post("/api/model_error", json={"event": act["event"], "explanation": "не так"})
+    assert r.status_code == 400 and g.eng.log.is_active(act["event"])
 
 
 def test_model_error_on_narration_rewrites_it_and_feeds_the_narrator():

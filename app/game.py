@@ -60,14 +60,26 @@ def explain(e: BaseException) -> str:
 _PLAYER_WORDS = re.compile(
     r"(?<!\w)(?:the\s+)?player(?:\s+character)?(?!\w)|(?<!\w)гравц(?:ем|еві|ю|я|і)(?!\w)"
     r"|(?<!\w)гравець(?!\w)", re.IGNORECASE)
+# the oblique cases of the player as «ви»: no name has to be declined
+_VY = {"ем": "вами", "еві": "вам", "ю": "вам", "я": "вас", "і": "вас"}
 
 
-def _as_the_character(text: str, name: str) -> str:
+def _as_the_character(text: str, name: str = "") -> str:
     """A record's wording for the player («гравцем», «Гравець», "the player") as the player
-    character's own name in what the people drawer shows; «ви» when there is no name."""
+    character in what the people drawer shows. The nominative («Гравець», "the player") becomes
+    the name, so the singular verb agrees («Рагнар бачив»); «ви» when there is no name. The
+    oblique cases become pronouns, which need no agreement (гравцем -> вами, гравцеві/гравцю ->
+    вам, гравця/на гравці -> вас)."""
     if not text:
         return text
-    out = _PLAYER_WORDS.sub(name or "ви", text)
+
+    def sub(m: "re.Match[str]") -> str:
+        w = m.group(0).lower()
+        if w.startswith("гравц") and not w.startswith("гравець"):
+            return _VY[w[5:]]
+        return name or "ви"
+
+    out = _PLAYER_WORDS.sub(sub, text)
     return out[:1].upper() + out[1:] if text[:1].isupper() else out
 
 
@@ -492,7 +504,7 @@ class Game:
             world = [en for en in self.transcript[last_player + 1:]
                      if en["kind"] in ("narr", "npc", "npc_act")]
             tail = world[-1] if world else None
-            if (tail is None or tail["kind"] == "npc_act" or tail.get("event") is None
+            if (tail is None or tail.get("event") is None
                     or (event is not None and tail.get("event") != event)
                     or (event is None and tail["kind"] != "narr")):  # null: the narration
                 raise Refused("Помилку моделі можна позначити лише на останньому, що сказав чи "
@@ -503,6 +515,8 @@ class Game:
             except ValueError as e:
                 raise Refused("Це вже не останнє, що сказав чи описав світ.") from e
             out = asdict(res)
+            if kind == "npc_act":  # the transcript shows the gesture as the player sees it
+                res.text = self.eng.ctx.mask(PLAYER, res.text).strip()
             self._apply_regen(res, event, kind)
             self.debug = {**self.debug, "model_error": out,
                           "notes": self.debug.get("notes", []) + self.eng.devlog[-3:]}
@@ -637,8 +651,9 @@ class Game:
                 act = eng.ctx.mask(PLAYER, str(ev.payload.get("text", ""))).strip()
                 if act:
                     tok = self._note_speaker(who)
-                    entries.append({"kind": "npc_act", "tok": tok, "label": label, "text": act})
-                    self._emit("npc_act", tok=tok, label=label, text=act)
+                    entries.append({"kind": "npc_act", "tok": tok, "label": label, "text": act,
+                                    "event": ev.id})
+                    self._emit("npc_act", tok=tok, label=label, text=act, event=ev.id)
                 cur["who"] = None
 
         def on_narration(narration: str) -> None:

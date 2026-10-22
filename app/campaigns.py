@@ -204,7 +204,7 @@ class Campaign:
                 text = (names.mask(PLAYER, str(e.payload.get("text", "")), before=e.id)
                         if names else str(e.payload.get("text", ""))).strip()
                 if text:
-                    out.append({"kind": "npc_act", "tok": self.tok(by), "text": text,
+                    out.append({"kind": "npc_act", "tok": self.tok(by), "text": text, "event": e.id,
                                 "label": self.engine.ctx.label(PLAYER, by, e.id)})
                 continue
             if e.type == ACTION and e.payload.get("actor") != PLAYER:
