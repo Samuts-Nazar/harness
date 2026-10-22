@@ -296,8 +296,12 @@ def test_instruction_examples_are_valid_and_the_full_one_is_the_example_file():
     for b in examples:
         assert parse(b).warnings == []
     # every canon start point is described in the document
-    for cid in newgame.start_points():
+    for cid, sp in newgame.start_points().items():
         assert f"`{cid}`" in doc
+        row = next(r for r in doc.splitlines() if r.startswith(f"| `{cid}`"))
+        assert f"день {sp['day']}, {sp['time']}" in row and sp["place"] in row  # the table row
+        assert " ".join(sp["summary"].split()) in row and sp["geralt"] in row
+        assert f"`{cid}` — {sp['pitch']}" in doc                               # the pick list
 
 
 # -- review fix round 1 ----------------------------------------------------------------------

@@ -1,16 +1,288 @@
 # Named canon start moments of the Witcher world, for game packages (`start: {canon: <id>}`).
-# Each id is built by code (`builder`), so only moments the engine can set up are listed here.
-# The texts are our own short summaries, never book text. Names in the forms of the Ukrainian
-# translation (worlds/witcher/glossary.json).
+# All are built by one code path (`builder: vizima`, harness/world/pilot.py `CanonStart`), so only
+# moments the engine can set up are listed here. The texts are our own short summaries, never book
+# text. Names in the forms of the Ukrainian translation (worlds/witcher/glossary.json).
+#
+# Fields: title, book, place (display), day, time ("HH:MM", the story clock: day 1 = the day the
+# witcher arrives in Vizima), canon_place (canon store place id), map_place (Vizima map id from
+# harness/world/places.py), here (canon people standing in the first scene), extras (seeded locals
+# made by npcgen; those whose `home` is the map place stand in the first scene, the rest live
+# elsewhere in the city), acquainted (pairs that know each other: slot or character id), who (the
+# default company, for the card), geralt (where the canon has the witcher then), geralt_here (true:
+# the canon brings him to this place within the hour), pitch (one line for the instruction),
+# summary (the longer card/instruction text), situation (the opening shown to the player; absent =
+# the built-in text of situation A). Nothing in `situation` names a person the newcomer has not met.
+
 vidmak_A_tavern:
   title: "Визім · корчма «Під Лисом»"
   book: "Останнє бажання · «Відьмак»"
   place: "корчма «Під Лисом»"
   day: 3
   time: "20:00"
-  builder: vizima_a
+  builder: vizima
+  canon_place: "place:pid-lysom"
+  map_place: tavern
+  here: ["char:innkeeper"]
+  extras:
+    - {slot: guard, occupation: "міський вартовий", home: tavern, look: "вартовий без шолома, з кухлем",
+       goal: "do his duty to the city guard and report anything dangerous to the sergeant"}
+    - {slot: drunk, occupation: "візник", home: tavern, look: "п'яний візник у кутку",
+       goal: "drink in peace and not be thrown out"}
+    - {slot: trader, occupation: "торговка тканиною", home: market,
+       look: "жінка з ринку, що продає тканину",
+       goal: "sell cloth at the market and hear every piece of news first"}
+    - {slot: sergeant, occupation: "сержант варти", home: guardhouse,
+       look: "кремезний сержант із кордегардії", goal: "keep order in Vizima and answer to Velerad"}
+  acquainted: [[guard, drunk], [innkeeper, guard], [innkeeper, drunk]]
+  who: "корчмар, вартовий, візник"
+  geralt: "у кордегардії біля палацу, під опікою двору; у корчмі його немає"
+  geralt_here: false
+  pitch: "Вечір третього дня: корчма гуде чутками про палац і білоголового чужинця."
   summary: >-
     Вечір третього дня у Визімі, столиці Темерії. Корчма «Під Лисом» біля брами повна возіїв,
     дрібних торговців і стражників. Місто переказує чутки про те, що сталося біля старого
     палацу, і про білоголового чужинця, якого нібито тримають у кордегардії. Поруч живуть свої
     люди: корчмар, вартовий, візник; далі в місті — ринок, варта, Велерад і король Фольтест.
+
+vidmak_B_gate:
+  title: "Визім · брама Линварів"
+  book: "Останнє бажання · «Відьмак»"
+  place: "брама"
+  day: 1
+  time: "14:40"
+  builder: vizima
+  canon_place: "place:lynvar-gate"
+  map_place: gate
+  here: []
+  extras:
+    - {slot: gatewarden, occupation: "вартовий біля брами", home: gate,
+       look: "вартовий у шоломі, що перепиняє кожного алебардою",
+       goal: "look over everyone who enters Vizima and stop trouble at the gate"}
+    - {slot: toller, occupation: "митник", home: gate,
+       look: "митник із табличкою для рахунків і важким гаманцем",
+       goal: "collect the toll from every cart and note strangers"}
+    - {slot: gatecarter, occupation: "візник", home: gate,
+       look: "візник, що чекає в черзі з навантаженим возом",
+       goal: "get the cart through the gate and unload before the market closes"}
+    - {slot: trader, occupation: "торговка тканиною", home: market,
+       look: "жінка з ринку, що продає тканину",
+       goal: "sell cloth at the market and hear every piece of news first"}
+    - {slot: sergeant, occupation: "сержант варти", home: guardhouse,
+       look: "кремезний сержант із кордегардії", goal: "keep order in Vizima and answer to Velerad"}
+  acquainted: [[gatewarden, toller]]
+  who: "вартовий, митник, візник у черзі"
+  geralt: "за двадцять хвилин прийде до брами пішки з півночі, ведучи коня, і попрямує до корчми «Під Лисом»"
+  geralt_here: true
+  pitch: "Перший день, по обіді: біля брами черга з возів, а до міста підходить чужинець із конем."
+  summary: >-
+    Перший день, по обіді, у Визімі. Брама Линварів пропускає возіїв, селян і мандрівників,
+    митник бере мито, вартові косяться на чужих. За двадцять хвилин до брами підійде самотній
+    чужинець, що веде коня, — той самий, про кого за кілька днів гомонітиме все місто. Ви
+    опиняєтесь у черзі чи біля неї ще до того, як щось почалося.
+  situation: >-
+    По обіді, ще далеко до вечора. Біля брами Линварів у Визімі стоїть черга: вози, кошики,
+    худоба, селяни з вузлами. Митник виводить цифри на табличці й не дивиться вам в очі, вартовий
+    із алебардою оглядає кожного, хто йде до міста, а позаду бурчить візник, у якого терпіння
+    стільки ж, скільки в його коня. Стіни Визіма високі й сірі. Ви стоїте біля самої брами
+    і чекаєте своєї черги.
+
+vidmak_C_tavern_morning:
+  title: "Визім · корчма «Під Лисом», наступного ранку"
+  book: "Останнє бажання · «Відьмак»"
+  place: "корчма «Під Лисом»"
+  day: 2
+  time: "09:00"
+  builder: vizima
+  canon_place: "place:pid-lysom"
+  map_place: tavern
+  here: ["char:innkeeper"]
+  extras:
+    - {slot: scullion, occupation: "наймичка", home: tavern,
+       look: "наймичка, що виполіскує ганчірку й не дивиться на підлогу біля одного зі столів",
+       goal: "get the floor clean before the guests come and keep out of trouble"}
+    - {slot: watchman, occupation: "міський вартовий", home: tavern,
+       look: "вартовий із воскованою дощечкою, що чекає на корчмаря",
+       goal: "write down what the keeper says and report it to the sergeant"}
+    - {slot: lodger, occupation: "візник", home: tavern,
+       look: "візник, що ночував у возі й хапає кухоль із пивом з похмілля",
+       goal: "find out what happened here yesterday without asking the keeper"}
+    - {slot: trader, occupation: "торговка тканиною", home: market,
+       look: "жінка з ринку, що продає тканину",
+       goal: "sell cloth at the market and hear every piece of news first"}
+    - {slot: sergeant, occupation: "сержант варти", home: guardhouse,
+       look: "кремезний сержант із кордегардії", goal: "keep order in Vizima and answer to Velerad"}
+  acquainted: [[innkeeper, scullion], [innkeeper, lodger], [innkeeper, watchman]]
+  who: "корчмар, наймичка, вартовий, візник"
+  geralt: "не тут: після вчорашнього його взяли під опіку варта й двір"
+  geralt_here: false
+  pitch: "Ранок після побоїща: корчмар мовчить, підлогу відмито, і всі шепочуться про вчорашнє."
+  summary: >-
+    Другий день, ранок. Корчма «Під Лисом» щойно прокинулась після важкого вчорашнього вечора:
+    на підлозі біля одного зі столів ще мокро, корчмар поглядає на двері, наймичка відводить очі,
+    а вартовий чекає, щоб записати показання. Ґеральта тут уже немає — його забрали до варти
+    й двору. Ви заходите першим, хто прийшов не по службі.
+  situation: >-
+    Ранок, ще не опівдні. У корчмі «Під Лисом» тихо, як після грози. Біля одного зі столів
+    свіжо вимита підлога, і дошки там темніші, ніж навколо; наймичка не підводить очей, а
+    корчмар так довго протирає одну й ту саму кварту, що давно протер би дірку. У кутку
+    сидить вартовий із воскованою дощечкою для запису, біля вікна мучиться з похмілля візник.
+    Тут явно щось сталося, і не з тих речей, про які розповідають першому зустрічному. Ви
+    стоїте на порозі.
+
+vidmak_D_market:
+  title: "Визім · ринок, поки розповідають про стриґу"
+  book: "Останнє бажання · «Відьмак»"
+  place: "ринок"
+  day: 2
+  time: "11:00"
+  builder: vizima
+  canon_place: "place:vizim"
+  map_place: market
+  here: []
+  extras:
+    - {slot: trader, occupation: "торговка тканиною", home: market,
+       look: "жінка з ринку, що продає тканину",
+       goal: "sell cloth at the market and hear every piece of news first"}
+    - {slot: hawker, occupation: "перекупник", home: market,
+       look: "перекупник, що голосно закликає й слухає чутки з-під прилавка",
+       goal: "sell what he can and pass on every rumour with a little added"}
+    - {slot: housemaid, occupation: "служниця", home: market,
+       look: "служниця з кошиком, що слухає й нічого не купує",
+       goal: "buy what the household needs and hear what the town is saying"}
+    - {slot: marketguard, occupation: "міський вартовий", home: market,
+       look: "вартовий, що повільно ходить між рядами",
+       goal: "keep the market quiet and break up any crowd before it grows"}
+    - {slot: sergeant, occupation: "сержант варти", home: guardhouse,
+       look: "кремезний сержант із кордегардії", goal: "keep order in Vizima and answer to Velerad"}
+  acquainted: [[trader, hawker], [trader, housemaid]]
+  who: "торговка, перекупник, служниця, вартовий"
+  geralt: "не тут: він у місті під опікою двору (кордегардія біля палацу)"
+  geralt_here: false
+  pitch: "Пізній ранок на ринку: говорять про королівську нагороду, стриґу й чужинця зі срібним мечем."
+  summary: >-
+    Другий день, пізній ранок, на головному ринку Визіма. Торговці, служниці й перекупники
+    збиваються групками й переказують одне одному про стриґу в старому палаці, королівську
+    нагороду й вчорашню бійку в корчмі, і кожна версія з доважком. Вартовий ходить між рядами
+    і не любить, коли людей збирається забагато. Це місце, де чутки йдуть швидше за людей.
+  situation: >-
+    Пізній ранок на ринку Визіма. Між рядами тісно: торговки хвалять полотно, перекупники
+    перекрикують одне одного, дітвора пролазить під возами. Але найгучніше тут не торг, а
+    півголоса: у кожній групці шепочуться про стриґу в старому палаці, про королівську
+    нагороду, яку ніхто не забирає, і про чужинця зі срібним мечем, якого бачили вчора. Вартовий
+    оглядає ряди й нікого не квапить. Ви стоїте посеред ринку.
+
+vidmak_E_velerad_office:
+  title: "Визім · перед кабінетом бургомістра"
+  book: "Останнє бажання · «Відьмак»"
+  place: "кабінет бургомістра"
+  day: 1
+  time: "18:30"
+  builder: vizima
+  canon_place: "place:кабінет-бургомістра"
+  map_place: office
+  here: []
+  extras:
+    - {slot: clerk, occupation: "писар", home: office,
+       look: "змучений писар за столиком біля дверей, із книгою записів",
+       goal: "write down who waits for the burgomaster and let nobody in out of turn"}
+    - {slot: petitioner, occupation: "купець", home: office,
+       look: "купець у доброму, але пом'ятому вбранні, зі згортком скарг",
+       goal: "be received by the burgomaster today and have the complaint heard"}
+    - {slot: doorman, occupation: "вартовий біля дверей", home: office,
+       look: "вартовий біля дверей кабінету",
+       goal: "keep the door and call the guard if the line starts to push"}
+    - {slot: sergeant, occupation: "сержант варти", home: guardhouse,
+       look: "кремезний сержант із кордегардії", goal: "keep order in Vizima and answer to Velerad"}
+  acquainted: [[clerk, doorman]]
+  who: "писар, купець зі скаргою, вартовий біля дверей"
+  geralt: "о 19:00 вартові приведуть його до кабінету бургомістра; зараз його ще немає"
+  geralt_here: true
+  pitch: "Передпокій бургомістра: черга скаржників, писар, за дверима людина, що вирішує справи міста."
+  summary: >-
+    Перший день, надвечір'я. У передпокої кабінету бургомістра сидять і стоять ті, у кого діло
+    до міської влади: купець зі скаргою, писар із книгою записів, вартовий біля дверей. За
+    дверима — Велерад, що вирішує міські справи. За півгодини стражники приведуть до кабінету
+    чужинця, якого щойно затримали після бійки в корчмі.
+  situation: >-
+    Надвечір'я. У передпокої міського управління Визіма довга лава, і сидять на ній ті, кому
+    цього дня не було чого робити вдома: купець зі згортком скарг, жінка в чорній хустці,
+    дрібний чиновник. Писар за столиком із книгою записів не підводить голови, вартовий біля
+    дверей кабінету стоїть так, ніби його приставили до дверей навічно. Якщо хтось і втрачає
+    терпіння, то мовчки. Ви чекаєте разом із ними.
+
+vidmak_F_palace_dusk:
+  title: "Визім · двір палацу надвечір"
+  book: "Останнє бажання · «Відьмак»"
+  place: "старий палац"
+  day: 2
+  time: "20:30"
+  builder: vizima
+  canon_place: "place:old-palace"
+  map_place: palace
+  here: []
+  extras:
+    - {slot: palacegate, occupation: "вартовий палацової брами", home: palace,
+       look: "вартовий біля брами палацу, що поглядає на небо",
+       goal: "hold the palace gate until the night watch takes over and let no one into the dark wing"}
+    - {slot: groom, occupation: "стайничий", home: palace,
+       look: "стайничий, що заводить коней до стайні",
+       goal: "get the horses in before dark and not go near the dark wing"}
+    - {slot: scullery, occupation: "служниця", home: palace,
+       look: "служниця, що з глеком поспіхом перетинає двір",
+       goal: "finish the evening chores before the night comes"}
+    - {slot: sergeant, occupation: "сержант варти", home: guardhouse,
+       look: "кремезний сержант із кордегардії", goal: "keep order in Vizima and answer to Velerad"}
+  acquainted: [[palacegate, groom], [groom, scullery]]
+  who: "вартовий брами, стайничий, служниця"
+  geralt: "не тут: він у кімнатці над кордегардією, до нього о 23:00 прийдуть гості"
+  geralt_here: false
+  pitch: "Двір палацу, смеркає: варта чекає нічної зміни, а темне крило палацу всі обходять."
+  summary: >-
+    Другий день, надвечір'я, у дворі палацу. Вікна де-не-де світяться, вартові на брамі чекають
+    нічної зміни, стайничий заводить коней, а одне крило будівлі стоїть без вогню, і прислуга
+    обходить його, не дивлячись. Ґеральт зараз у кордегардії неподалік, і ви його тут не побачите.
+  situation: >-
+    Смеркає. На подвір'ї палацу Визіма ще шумно: стайничий заводить коней до стайні, служниця
+    поспіхом тягне глек до кухні, вартові на брамі переминаються з ноги на ногу в очікуванні
+    нічної зміни. У вікнах де-не-де засвічено, але одне крило палацу стоїть чорне, з забитими
+    вікнами, і ніхто з прислуги не дивиться в його бік. Хтось клацає засувом, і всі трохи
+    здригаються від звуку. Ви стоїте на подвір'ї.
+
+vidmak_G_night_watch:
+  title: "Визім · кордегардія в ніч повного місяця"
+  book: "Останнє бажання · «Відьмак»"
+  place: "кордегардія біля палацу"
+  day: 7
+  time: "22:00"
+  builder: vizima
+  canon_place: "place:guardroom"
+  map_place: guardhouse
+  here: []
+  extras:
+    - {slot: sergeant, occupation: "сержант варти", home: guardhouse,
+       look: "кремезний сержант із кордегардії", goal: "keep order in Vizima and answer to Velerad"}
+    - {slot: nightguard, occupation: "нічний вартовий", home: guardhouse,
+       look: "вартовий із ліхтарем, що вдивляється в темряву",
+       goal: "keep watch till dawn and send word the moment something is wrong"}
+    - {slot: recruit, occupation: "молодий вартовий", home: guardhouse,
+       look: "молодий вартовий, що тримає спис обома руками",
+       goal: "get through the night without disgracing himself before the sergeant"}
+    - {slot: trader, occupation: "торговка тканиною", home: market,
+       look: "жінка з ринку, що продає тканину",
+       goal: "sell cloth at the market and hear every piece of news first"}
+  acquainted: [[sergeant, nightguard], [sergeant, recruit], [nightguard, recruit]]
+  who: "сержант, нічний вартовий, молодий вартовий"
+  geralt: "не тут: він у старому палаці, у зруйнованій кімнаті й на подвір'ї; це його ніч"
+  geralt_here: false
+  pitch: "Ніч повного місяця: двері на засувах, варта біля палацу не сідає, і всі чекають крику."
+  summary: >-
+    Сьомий день, пізня ніч, повний місяць. У Визімі зачинено віконниці, двері під засувами,
+    діти в хатах. Біля кордегардії під палацом стоїть нічна варта; ніхто не сидить і ніхто не
+    жартує. Ґеральт цієї ночі в палаці, не тут. Нічого з того, що буде далі, не обіцяє бути
+    тихим, і ви опинилися в самому серці міста. Це небезпечний старт.
+  situation: >-
+    Глибока ніч, місяць майже круглий і надто яскравий. Усі віконниці у Визімі зачинені, на
+    вулицях тихо, як у склепі, а в кордегардії біля палацу ніхто не сидить: сержант тримає
+    руку на руків'ї, нічний вартовий не випускає ліхтаря, а молодий вартовий стискає спис
+    так, що біліють пальці. У місті кажуть, що в такі ночі краще не ходити далі порога,
+    і ніхто з вартових не сміється. Ви в кордегардії, до світанку ще далеко.

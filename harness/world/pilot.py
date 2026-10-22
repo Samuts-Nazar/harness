@@ -3,6 +3,7 @@ tavern «Під Лисом», and a player character who is a demon without limi
 and available to the app. Records are English, names Ukrainian (task 10)."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from ..judge import Judge
@@ -10,7 +11,7 @@ from ..models import PLAYER, CharacterProfile, Scene
 from ..pipeline import Engine, ModelConfig
 from ..providers import Provider
 from .canon_adapter import CanonSource
-from .places import vizima
+from .places import VIZIMA_EXTRA, vizima
 from .world import World, pilot_collectives
 
 START_TIME = 2 * 24 * 60 + 20 * 60  # day 3, 20:00 (situation A, the evening)
@@ -65,6 +66,9 @@ CANON_PLACES = {
     "place:pid-lysom": "tavern", "place:old-palace": "palace", "place:new-palace": "palace",
     "place:crypt": "palace", "place:guardroom": "guardhouse", "place:lynvar-gate": "gate",
     "place:vizim": "market", "place:old-narakort": "market",
+    "place:кабінет-бургомістра": "office", "place:зал-де-король-приймає": "palace",
+    "place:головна-зала": "palace", "place:подвір-я-старого-палацу": "palace",
+    "place:зруйнована-кімната-старого-палацу": "palace",
 }
 CANON_GROUPS = {"coll:vizim-guards": "vizim_guards", "coll:vizim-townsfolk": "vizim_townsfolk",
                 "coll:vizim-officials": "vizim_guards"}
@@ -82,6 +86,51 @@ EXTRA_CAST = (  # (slot, occupation, home place, appearance, goal)
 CANON_PLAYER = CharacterProfile(
     PLAYER, "Демон", "A demon in human shape, a being without limits.",
     appearance="чорнявий чужинець із золотими очима")
+
+
+@dataclass(frozen=True)
+class CanonStart:
+    """A canon start moment of the Vizima arc: when (story minutes), where (canon place and map
+    place), which canon people stand in the scene and which seeded locals live where. Situation A
+    is the default; the others come from worlds/witcher/start_points.yaml (`from_dict`)."""
+    id: str = "vidmak_A_tavern"
+    t: int = START_TIME
+    canon_place: str = "place:pid-lysom"
+    place_id: str = "tavern"                  # the map place of the first scene
+    here: tuple[str, ...] = ("char:innkeeper",)   # canon people in the first scene
+    extras: tuple[tuple[str, str, str, str, str], ...] = EXTRA_CAST  # (slot, occupation, home, look, goal)
+    pairs: tuple[tuple[str, str], ...] = (("guard", "drunk"), ("innkeeper", "guard"),
+                                          ("innkeeper", "drunk"))  # who knows whom (slot or cid)
+    intro: str = ""
+
+    @classmethod
+    def from_dict(cls, cid: str, d: dict[str, Any]) -> "CanonStart":
+        h, m = str(d.get("time", "00:00")).split(":")
+        extras = tuple((str(x["slot"]), str(x["occupation"]), str(x.get("home", d["map_place"])),
+                        str(x["look"]), str(x["goal"])) for x in d.get("extras", []))
+        return cls(cid, (int(d["day"]) - 1) * 1440 + int(h) * 60 + int(m), str(d["canon_place"]),
+                   str(d["map_place"]), tuple(d.get("here", [])), extras,
+                   tuple((str(a), str(b)) for a, b in d.get("acquainted", [])),
+                   str(d.get("situation", "")))
+
+    @property
+    def map_extra(self) -> tuple[str, ...]:
+        """The extra Vizima map places this start needs (see `places.VIZIMA_EXTRA`)."""
+        return (self.place_id,) if self.place_id in VIZIMA_EXTRA else ()
+
+    def world_map(self) -> Any:
+        return vizima(*self.map_extra)
+
+    @property
+    def location(self) -> str:
+        return self.world_map().name(self.place_id)
+
+    def in_scene(self) -> list[str]:
+        """The seeded locals standing in the first scene (their home is the start place)."""
+        return [f"npc_{slot}" for slot, _o, home, _l, _g in self.extras if home == self.place_id]
+
+
+SITUATION_A = CanonStart()
 
 
 def canon_collectives(wmap: Any, canon: Any) -> list[Any]:
@@ -109,37 +158,38 @@ def canon_collectives(wmap: Any, canon: Any) -> list[Any]:
     ]
 
 
-def canon_extra_ids() -> dict[str, str]:
-    return {slot: f"npc_{slot}" for slot, *_ in EXTRA_CAST}
+def canon_extra_ids(start: CanonStart = SITUATION_A) -> dict[str, str]:
+    return {slot: f"npc_{slot}" for slot, *_ in start.extras}
 
 
-def populate_canon_campaign(eng: Engine, canon: Any) -> Any:
-    """A NEW campaign at situation A: the canon people made with what they knew, the code-made
-    extras, the tavern scene. Returns the CanonPlay."""
+def populate_canon_campaign(eng: Engine, canon: Any, start: CanonStart = SITUATION_A) -> Any:
+    """A NEW campaign at a canon start (situation A by default): the canon people made with what
+    they knew at that time, the code-made extras, the first scene. Returns the CanonPlay."""
     from ..canon.api import CanonCampaign
-    from ..canon.play import CanonPlay
+    from ..canon.play import CanonPlay, cid_of
 
-    play = CanonPlay(canon, CanonCampaign(start_t=START_TIME, place="place:pid-lysom", offset=0))
+    play = CanonPlay(canon, CanonCampaign(start_t=start.t, place=start.canon_place, offset=0))
     for ent, cid in (("char:innkeeper", "innkeeper"), ("char:velerad", "velerad"),
                      ("char:foltest", "foltest"), *CANON_GROUPS.items()):
         try:
             play.ensure_character(eng, ent, cid=cid)
         except Exception as e:  # noqa: BLE001 - a store without this person: the scene still runs
             eng._note("canon_person_missing", entity=ent, error=str(e)[:100])
-    for slot, occ, _home, look, _goal in EXTRA_CAST:
+    for slot, occ, _home, look, _goal in start.extras:
         eng.add_npc(eng.fresh_npc(slot, "northern", occupation=occ, appearance=look), appearance=look)
-    ids = canon_extra_ids()
-    keeper = "innkeeper" in eng.profiles
-    pairs = [(ids["guard"], ids["drunk"])] + ([("innkeeper", ids["guard"]),
-                                               ("innkeeper", ids["drunk"])] if keeper else [])
-    for a, b in pairs:
-        eng.acquaint(a, b)
-    for c in (*(["innkeeper"] if keeper else []), ids["guard"], ids["drunk"], PLAYER):
+    ids = canon_extra_ids(start)
+    here = [cid_of(e) for e in start.here if cid_of(e) in eng.profiles]
+    for a, b in start.pairs:
+        a, b = ids.get(a, a), ids.get(b, b)
+        if a in eng.profiles and b in eng.profiles:
+            eng.acquaint(a, b)
+    for c in (*here, *start.in_scene(), PLAYER):
         eng.enter_scene(c)
     return play
 
 
-def make_canon_world(eng: Engine, canon: Any, judge: Judge, *, play: Any = None) -> World:
+def make_canon_world(eng: Engine, canon: Any, judge: Judge, *, play: Any = None,
+                     start: CanonStart = SITUATION_A) -> World:
     """The world around an engine that was populated by `populate_canon_campaign` (also after a
     reopen: everything the world knows is derived from the log)."""
     from ..canon.api import CanonCampaign
@@ -147,15 +197,15 @@ def make_canon_world(eng: Engine, canon: Any, judge: Judge, *, play: Any = None)
     from .canon_adapter import PlayCanon
 
     if play is None:
-        play = CanonPlay(canon, CanonCampaign(start_t=START_TIME, place="place:pid-lysom", offset=0))
+        play = CanonPlay(canon, CanonCampaign(start_t=start.t, place=start.canon_place, offset=0))
         for ent in ("char:innkeeper", "char:velerad", "char:foltest", *CANON_GROUPS):
             cid = CANON_GROUPS.get(ent) or cid_of(ent)
             if cid in eng.profiles:
                 play.made[ent] = cid
-    wmap = vizima()
-    ids = canon_extra_ids()
-    cast = {"innkeeper": "tavern", **{ids[s]: home for s, _o, home, _l, _g in EXTRA_CAST}}
-    goals = {ids[s]: g for s, _o, _h, _l, g in EXTRA_CAST}
+    wmap = start.world_map()
+    ids = canon_extra_ids(start)
+    cast = {"innkeeper": "tavern", **{ids[s]: home for s, _o, home, _l, _g in start.extras}}
+    goals = {ids[s]: g for s, _o, _h, _l, g in start.extras}
     goals["innkeeper"] = "keep the tavern open and stay out of trouble with the guard"
     pc = PlayCanon(play, judge, places=CANON_PLACES, groups=CANON_GROUPS,
                    text_call=lambda prompt: eng._complete(

@@ -20,7 +20,7 @@ from harness.pipeline import Engine
 from harness.profile import load_profile
 from harness.style import Style
 from harness.world import pilot
-from harness.world.pilot import CANON_PLAYER, START_TIME
+from harness.world.pilot import CANON_PLAYER
 from harness.world.places import vizima
 from harness.world.world import World
 
@@ -71,14 +71,16 @@ def engine_kw(stack: Stack, dialogue: str | None = None) -> dict:
 def create_situation_a(rec: Recorder, root: Path, name: str, canon: Canon | None, kw: dict, *,
                        player: CharacterProfile = CANON_PLAYER, unbounded: bool = True,
                        seed: int | str | None = None, kind: str = KIND,
-                       setup: Callable[[Engine], None] | None = None) -> tuple[Engine, object]:
-    """A NEW campaign at situation A (the tavern «Під Лисом», day 3 evening): the canon people
-    when the store is there, the code-made extras always. Returns the engine and the CanonPlay
-    (None without canon). Also used by game packages (app/newgame.py) with their own player;
+                       setup: Callable[[Engine], None] | None = None,
+                       start: pilot.CanonStart = pilot.SITUATION_A) -> tuple[Engine, object]:
+    """A NEW campaign at a canon start (default situation A: the tavern «Під Лисом», day 3
+    evening; the others are in worlds/witcher/start_points.yaml): the canon people when the
+    store is there, the code-made extras always. Returns the engine and the CanonPlay (None
+    without canon). Also used by game packages (app/newgame.py) with their own player;
     `setup(eng)` runs before anyone enters the scene (the player's live state, so the people
     present perceive what is observable)."""
     eng = Engine.create_campaign(
-        name, rec, [player], Scene("корчма «Під Лисом»", (), START_TIME), root=root,
+        name, rec, [player], Scene(start.location, (), start.t), root=root,
         player_unlimited=unbounded, outcomes=True, seed=seed if seed is not None else name, **kw)
     with eng.conn:
         eng.conn.execute("INSERT OR REPLACE INTO campaign_meta (key, value) VALUES (?,?)",
@@ -86,17 +88,17 @@ def create_situation_a(rec: Recorder, root: Path, name: str, canon: Canon | None
     if setup is not None:
         setup(eng)
     if canon is not None:
-        return eng, pilot.populate_canon_campaign(eng, canon)
-    _populate_without_canon(eng)
+        return eng, pilot.populate_canon_campaign(eng, canon, start)
+    _populate_without_canon(eng, start)
     return eng, None
 
 
-def situation_a_world(eng: Engine, canon: Canon | None, judge: object, play: object = None
-                      ) -> World:
-    """The world around a situation A campaign (new or reopened)."""
+def situation_a_world(eng: Engine, canon: Canon | None, judge: object, play: object = None,
+                      start: pilot.CanonStart = pilot.SITUATION_A) -> World:
+    """The world around a canon-start campaign (new or reopened)."""
     if canon is not None:
-        return pilot.make_canon_world(eng, canon, judge, play=play)
-    return _world_without_canon(eng)
+        return pilot.make_canon_world(eng, canon, judge, play=play, start=start)
+    return _world_without_canon(eng, start)
 
 
 def open_vizima(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = False,
@@ -127,21 +129,24 @@ def open_vizima(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = False
                     world=world)
 
 
-def _populate_without_canon(eng: Engine) -> None:
-    """No canon store: the same tavern with the code-made people only."""
-    for slot, occ, _home, look, _goal in pilot.EXTRA_CAST:
+def _populate_without_canon(eng: Engine, start: pilot.CanonStart = pilot.SITUATION_A) -> None:
+    """No canon store: the same place with the code-made people only."""
+    for slot, occ, _home, look, _goal in start.extras:
         eng.add_npc(eng.fresh_npc(slot, "northern", occupation=occ, appearance=look), appearance=look)
-    ids = pilot.canon_extra_ids()
-    eng.acquaint(ids["guard"], ids["drunk"])
-    for c in (ids["guard"], ids["drunk"], "player"):
+    ids = pilot.canon_extra_ids(start)
+    for a, b in start.pairs:
+        a, b = ids.get(a, a), ids.get(b, b)
+        if a in eng.profiles and b in eng.profiles:
+            eng.acquaint(a, b)
+    for c in (*start.in_scene(), "player"):
         eng.enter_scene(c)
 
 
-def _world_without_canon(eng: Engine) -> World:
-    wmap = vizima()
-    ids = pilot.canon_extra_ids()
-    cast = {ids[s]: home for s, _o, home, _l, _g in pilot.EXTRA_CAST}
-    goals = {ids[s]: g for s, _o, _h, _l, g in pilot.EXTRA_CAST}
+def _world_without_canon(eng: Engine, start: pilot.CanonStart = pilot.SITUATION_A) -> World:
+    wmap = start.world_map()
+    ids = pilot.canon_extra_ids(start)
+    cast = {ids[s]: home for s, _o, home, _l, _g in start.extras}
+    goals = {ids[s]: g for s, _o, _h, _l, g in start.extras}
     return World(eng, wmap, collectives=pilot.canon_collectives(wmap, _NoNames()), cast=cast,
                  goals=goals)
 
