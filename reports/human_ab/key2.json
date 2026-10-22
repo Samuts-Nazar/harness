@@ -1,0 +1,304 @@
+{
+ "w0": {
+  "A": {
+   "model": "mistralai/mistral-large-4-0",
+   "sample": 0
+  },
+  "B": {
+   "model": "z-ai/glm-5.3",
+   "sample": 2
+  },
+  "C": {
+   "model": "mistralai/mistral-large-4-0",
+   "sample": 2
+  },
+  "D": {
+   "model": "xiaomi/mimo-v2.6-flash",
+   "sample": 1
+  },
+  "E": {
+   "model": "z-ai/glm-5.3-flash",
+   "sample": 2
+  },
+  "F": {
+   "model": "xiaomi/mimo-v2.6-pro",
+   "sample": 2
+  },
+  "G": {
+   "model": "xiaomi/mimo-v2.6-pro",
+   "sample": 1
+  },
+  "H": {
+   "model": "mistralai/mistral-large-4-0",
+   "sample": 1
+  },
+  "I": {
+   "model": "xiaomi/mimo-v2.6-flash",
+   "sample": 0
+  },
+  "J": {
+   "model": "z-ai/glm-5.3",
+   "sample": 0
+  },
+  "K": {
+   "model": "xiaomi/mimo-v2.6-flash",
+   "sample": 2
+  },
+  "L": {
+   "model": "z-ai/glm-5.3-flash",
+   "sample": 1
+  },
+  "M": {
+   "model": "z-ai/glm-5.3-flash",
+   "sample": 0
+  },
+  "N": {
+   "model": "z-ai/glm-5.3",
+   "sample": 1
+  },
+  "O": {
+   "model": "xiaomi/mimo-v2.6-pro",
+   "sample": 0
+  }
+ },
+ "w1": {
+  "A": {
+   "model": "z-ai/glm-5.3-flash",
+   "sample": 0
+  },
+  "B": {
+   "model": "z-ai/glm-5.3",
+   "sample": 0
+  },
+  "C": {
+   "model": "xiaomi/mimo-v2.6-pro",
+   "sample": 0
+  },
+  "D": {
+   "model": "xiaomi/mimo-v2.6-flash",
+   "sample": 1
+  },
+  "E": {
+   "model": "mistralai/mistral-large-4-0",
+   "sample": 0
+  },
+  "F": {
+   "model": "mistralai/mistral-large-4-0",
+   "sample": 1
+  },
+  "G": {
+   "model": "z-ai/glm-5.3-flash",
+   "sample": 1
+  },
+  "H": {
+   "model": "xiaomi/mimo-v2.6-pro",
+   "sample": 1
+  },
+  "I": {
+   "model": "xiaomi/mimo-v2.6-flash",
+   "sample": 0
+  },
+  "J": {
+   "model": "z-ai/glm-5.3",
+   "sample": 1
+  }
+ },
+ "w2": {
+  "A": {
+   "model": "z-ai/glm-5.3-flash",
+   "sample": 0
+  },
+  "B": {
+   "model": "xiaomi/mimo-v2.6-pro",
+   "sample": 0
+  },
+  "C": {
+   "model": "z-ai/glm-5.3",
+   "sample": 0
+  },
+  "D": {
+   "model": "mistralai/mistral-large-4-0",
+   "sample": 1
+  },
+  "E": {
+   "model": "z-ai/glm-5.3",
+   "sample": 1
+  },
+  "F": {
+   "model": "xiaomi/mimo-v2.6-flash",
+   "sample": 1
+  },
+  "G": {
+   "model": "mistralai/mistral-large-4-0",
+   "sample": 0
+  },
+  "H": {
+   "model": "xiaomi/mimo-v2.6-flash",
+   "sample": 0
+  },
+  "I": {
+   "model": "xiaomi/mimo-v2.6-pro",
+   "sample": 1
+  }
+ },
+ "w3": {
+  "A": {
+   "model": "mistralai/mistral-large-4-0",
+   "sample": 1
+  },
+  "B": {
+   "model": "z-ai/glm-5.3-flash",
+   "sample": 0
+  },
+  "C": {
+   "model": "z-ai/glm-5.3",
+   "sample": 1
+  },
+  "D": {
+   "model": "xiaomi/mimo-v2.6-pro",
+   "sample": 0
+  },
+  "E": {
+   "model": "xiaomi/mimo-v2.6-pro",
+   "sample": 1
+  },
+  "F": {
+   "model": "xiaomi/mimo-v2.6-flash",
+   "sample": 1
+  },
+  "G": {
+   "model": "mistralai/mistral-large-4-0",
+   "sample": 0
+  },
+  "H": {
+   "model": "z-ai/glm-5.3-flash",
+   "sample": 1
+  },
+  "I": {
+   "model": "z-ai/glm-5.3",
+   "sample": 0
+  },
+  "J": {
+   "model": "xiaomi/mimo-v2.6-flash",
+   "sample": 0
+  }
+ },
+ "w4": {
+  "A": {
+   "model": "xiaomi/mimo-v2.6-flash",
+   "sample": 1
+  },
+  "B": {
+   "model": "z-ai/glm-5.3",
+   "sample": 0
+  },
+  "C": {
+   "model": "z-ai/glm-5.3-flash",
+   "sample": 1
+  },
+  "D": {
+   "model": "z-ai/glm-5.3",
+   "sample": 1
+  },
+  "E": {
+   "model": "xiaomi/mimo-v2.6-flash",
+   "sample": 0
+  },
+  "F": {
+   "model": "mistralai/mistral-large-4-0",
+   "sample": 1
+  },
+  "G": {
+   "model": "mistralai/mistral-large-4-0",
+   "sample": 0
+  },
+  "H": {
+   "model": "xiaomi/mimo-v2.6-pro",
+   "sample": 0
+  },
+  "I": {
+   "model": "xiaomi/mimo-v2.6-pro",
+   "sample": 1
+  },
+  "J": {
+   "model": "z-ai/glm-5.3-flash",
+   "sample": 0
+  }
+ },
+ "w5": {
+  "A": {
+   "model": "z-ai/glm-5.3",
+   "sample": 1
+  },
+  "B": {
+   "model": "xiaomi/mimo-v2.6-flash",
+   "sample": 1
+  },
+  "C": {
+   "model": "xiaomi/mimo-v2.6-pro",
+   "sample": 0
+  },
+  "D": {
+   "model": "z-ai/glm-5.3",
+   "sample": 0
+  },
+  "E": {
+   "model": "mistralai/mistral-large-4-0",
+   "sample": 0
+  },
+  "F": {
+   "model": "xiaomi/mimo-v2.6-flash",
+   "sample": 0
+  },
+  "G": {
+   "model": "xiaomi/mimo-v2.6-pro",
+   "sample": 1
+  },
+  "H": {
+   "model": "z-ai/glm-5.3-flash",
+   "sample": 1
+  },
+  "I": {
+   "model": "z-ai/glm-5.3-flash",
+   "sample": 0
+  }
+ },
+ "w6": {
+  "A": {
+   "model": "z-ai/glm-5.3-flash",
+   "sample": 0
+  },
+  "B": {
+   "model": "mistralai/mistral-large-4-0",
+   "sample": 0
+  },
+  "C": {
+   "model": "mistralai/mistral-large-4-0",
+   "sample": 1
+  },
+  "D": {
+   "model": "xiaomi/mimo-v2.6-pro",
+   "sample": 0
+  },
+  "E": {
+   "model": "xiaomi/mimo-v2.6-flash",
+   "sample": 1
+  },
+  "F": {
+   "model": "z-ai/glm-5.3",
+   "sample": 0
+  },
+  "G": {
+   "model": "z-ai/glm-5.3-flash",
+   "sample": 1
+  },
+  "H": {
+   "model": "xiaomi/mimo-v2.6-pro",
+   "sample": 1
+  },
+  "I": {
+   "model": "xiaomi/mimo-v2.6-flash",
+   "sample": 0
+  }
+ }
+}
