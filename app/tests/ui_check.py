@@ -100,15 +100,15 @@ def page_signature(page):
     })""")
 
 
-def sheet_items(page, sel, i):
+def sheet_items(page, sel, i, rates=False):
     """Open the line menu on the i-th paragraph matching `sel` with a right click (desktop) and
-    return the actions it offers; close it again."""
+    return the actions it offers (the rating items only with `rates`); close it again."""
     page.locator(sel).nth(i).click(button="right")
     page.wait_for_selector("#sheet[open]")
     acts = page.eval_on_selector_all("#sheet [data-act]", "ns => ns.map(n => n.dataset.act)")
     page.keyboard.press("Escape")
     page.wait_for_selector("#sheet:not([open])", state="attached")
-    return acts
+    return acts if rates else [a for a in acts if not a.startswith("rate")]
 
 
 def long_press(page, sel, i=0):
@@ -303,6 +303,42 @@ def main() -> None:
         page.keyboard.press("Escape")
         ink_h = new_ink
 
+        # ratings: 👍/👎 on world lines only; 👎 asks for an optional note; one rating per line
+        assert sheet_items(page, hsel, 0, True)[-2:] == ["rate_up", "rate_down"]
+        assert sheet_items(page, ".narr", 0, True)[-2:] == ["rate_up", "rate_down"]
+        assert sheet_items(page, ACT, 0, True)[-2:] == ["rate_up", "rate_down"]
+        page.locator(".narr").first.click(button="right")
+        page.click("#sheet [data-act=rate_up]")
+        page.wait_for_selector(".narr[data-rating=up] .rmark")
+        page.locator(hsel).first.click(button="right")
+        page.wait_for_selector("#sheet[open]")
+        assert "Добре написано" in page.inner_text("#sheet [data-act=rate_up]")
+        shot(page, "05d2-rating-in-the-menu")
+        page.click("#sheet [data-act=rate_down]")
+        page.wait_for_selector(f"{hsel} .askbox textarea")
+        assert page.get_attribute(f"{hsel} .askbox textarea", "placeholder") == \
+            "Що не так? (можна пропустити)"
+        assert page.inner_text(f"{hsel} .askbox .btn.ghost") == "Пропустити"
+        no_hscroll(page, "rating note box")
+        shot(page, "05d3-rating-note")
+        page.fill(f"{hsel} .askbox textarea", "Надто гладко, як з газети.")
+        page.click(f"{hsel} .askbox .btn.primary")
+        page.wait_for_selector(f"{hsel}[data-rating=down] .rmark")
+        assert page.locator(f"{hsel} .askbox").count() == 0
+        assert page.inner_text(f"{hsel}[data-rating=down] .rmark").strip() == "👎"
+        mark_h = page.evaluate("(s) => { const p = document.querySelector(s); "
+                               "return p.getBoundingClientRect().height }", f"{hsel}[data-rating=down]")
+        # rating again replaces: up, then down (skipping the note) on the narration
+        page.locator(".narr").first.click(button="right")
+        page.click("#sheet [data-act=rate_down]")
+        page.click(".narr .askbox .btn.ghost")
+        page.wait_for_selector(".narr[data-rating=down] .rmark")
+        assert page.locator(".narr .rmark").count() == 1, "one mark per line"
+        rated = page.evaluate("fetch('/api/ratings').then(r => r.json())")
+        assert sorted(rated.values()) == ["down", "down"], rated
+        no_hscroll(page, "rated lines")
+        shot(page, "05d4-rated-lines")
+
         # turn 3: type while the NPCs talk: it cuts in, then runs the new text
         stack.judge.rules[NEXT_TAG] = ["horst", "elza", "horst", "player"]
         stack.judge.rules[SHAPE_TAG] = ["normal"]
@@ -384,6 +420,9 @@ def main() -> None:
                                ".getPropertyValue('--ink-' + t).trim() === c", arg=[horst, ink_h])
         after = page_signature(page)
         assert page.locator(".me").count() == 5
+        page.wait_for_function("document.querySelectorAll('.rmark').length === 2", timeout=10000)
+        assert page.locator("[data-rating=down]").count() == 2, "the rating marks survive a reload"
+        after = page_signature(page)
         assert before == after, json.dumps([b for b, a in zip(before, after) if b != a] or
                                            [len(before), len(after)], ensure_ascii=False)[:2000]
         assert page.locator(".who").count() > 0 and page.locator(".who:visible").count() == 0, "names stay off"
