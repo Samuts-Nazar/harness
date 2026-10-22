@@ -15,7 +15,36 @@ SC = Scene("Рінде", (PLAYER, "yen"), 0)
 def test_default_relationship_is_stranger():
     e = eng()
     r = Relations(e.log).get("yen", PLAYER)
-    assert (r.rung, r.warmth, r.trust, r.reason, r.event_id) == ("stranger", 0.0, 0.2, "", None)
+    assert (r.rung, r.warmth, r.trust, r.reason, r.event_id) == ("stranger", -0.2, 0.2, "", None)
+
+
+def test_no_event_default_follows_the_stored_seed_and_agrees_with_the_line():
+    e = eng()
+    e.bind_portrait("yen", "p_yen", rung="ally")
+    for ev in e.log.active(["relation"]):          # an old campaign: only rung_seeds remain
+        e.log.rollback(ev.id)
+    r = e.ctx.relations.get("yen", PLAYER)
+    assert (r.rung, r.warmth, r.trust, r.event_id) == ("ally", 0.5, 0.6, None)
+    assert "ally, warmth 0.5, trust 0.6" in e.ctx.relation_line("yen")
+
+
+def test_seed_values_cover_every_seedable_rung_and_unknown_raises():
+    from harness.relations import SEED_VALUES
+    assert SEED_VALUES["close"] == (0.7, 0.7) and SEED_VALUES["lover"] == (0.9, 0.85)
+    e = eng()
+    import pytest
+    with pytest.raises(ValueError):
+        Relations(e.log).seed("yen", PLAYER, "nonsense", SC)
+
+
+def test_bind_portrait_does_not_reseed_over_an_existing_relation():
+    e = eng()
+    e.bind_portrait("yen", "p_yen", rung="client")
+    Relations(e.log).set("yen", PLAYER, "close", 0.8, 0.7, "earned", SC, None)
+    n = len(e.log.active(["relation"]))
+    e.bind_portrait("yen", "p_yen", rung="stranger")
+    assert len(e.log.active(["relation"])) == n
+    assert e.ctx.rung_of("yen") == "close"
 
 
 def test_set_and_get_latest():
@@ -98,9 +127,14 @@ def test_director_and_outcome_see_relation_line():
 
 
 def test_relation_line_not_in_narrator_or_player_text():
+    import json
+    from harness import assistant
     e = eng()
     e.bind_portrait("yen", "p_yen")
     line = e.ctx.relation_line("yen", e.scene)
     assert "warmth" in prompt(e, "yen")                     # the NPC itself sees its standing
     assert "warmth" not in prompt(e, "inn")
-    assert "→ the player" not in line.split(":")[1]
+    narr = json.dumps(e.ctx.narrator(e.scene, "Привіт."), ensure_ascii=False)
+    assert "warmth" not in narr and "→ the player" not in narr and line not in narr
+    sug = json.dumps(assistant.context(e), ensure_ascii=False, default=str)
+    assert "warmth" not in sug and line not in sug

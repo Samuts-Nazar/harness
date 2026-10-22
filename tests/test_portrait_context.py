@@ -55,6 +55,7 @@ def test_portrait_replaces_core_and_manner():
     assert "Never begs." in text                 # the bans travel with the slice
     assert e.ctx.rung_of("yen") == "stranger"
     # a seeded rung picks another stance
+    e = eng()
     e.bind_portrait("yen", "p_yen", rung="close")
     assert "Teases and then helps." in prompt(e, "yen") and DOES not in prompt(e, "yen")
 

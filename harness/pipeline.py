@@ -25,6 +25,7 @@ from .director import (
     parse_actions,
 )
 from .eventlog import EventLog
+from .relations import SEED_VALUES
 from .extractor import Diff, DiffValidationError, parse_diff, validate_diff
 from .facts import FactStore
 from .glossary import Glossary
@@ -68,7 +69,7 @@ from .policy import (
 )
 from .providers import Provider, ProviderError
 from .stylehits import count_by_kind, style_hits
-from .portrait import RUNGS, PortraitError, copy_overlap, load_world_portraits
+from .portrait import PortraitError, copy_overlap, load_world_portraits
 from .repetition import WINDOW as REPETITION_WINDOW, measure_turn, sentences
 from .profile import WorldProfile, distance, profile_of_lines
 from .settings import (
@@ -381,7 +382,7 @@ class Engine:
         except (OSError, PortraitError) as e:
             self.ctx.portraits = {}
             self._note("portraits_failed", world=world, error=str(e)[:300])
-        self.ctx.rung_seeds = dict(rung_seeds or {})
+        self.ctx.rung_seeds.update(rung_seeds or {})  # in place: Relations shares the dict
         self.memory = (MemoryWriter(self.campaign_dir / "memory", self.deriver, self.log,
                                     self.profiles, self.agents) if self.campaign_dir else None)
         self._save_scene()
@@ -2423,11 +2424,12 @@ class Engine:
         """`npc` plays the world portrait `portrait` and starts on `rung` toward the player."""
         if portrait not in self.ctx.portraits:
             raise ValueError(f"no portrait {portrait!r} in world {self.world!r}")
-        if rung not in RUNGS:
-            raise ValueError(f"unknown rung {rung!r}")
+        if rung not in SEED_VALUES:
+            raise ValueError(f"unknown or unseedable rung {rung!r}")
         self.profiles[npc] = replace(self.profiles[npc], portrait=portrait)
         self.ctx.rung_seeds[npc] = rung
-        self.ctx.relations.seed(npc, PLAYER, rung, self.scene)  # the store; seeds only back old campaigns
+        if self.ctx.relations.get(npc, PLAYER).event_id is None:  # never re-seed over play
+            self.ctx.relations.seed(npc, PLAYER, rung, self.scene)
         if self._owns_conn:
             self._save_setup()
 

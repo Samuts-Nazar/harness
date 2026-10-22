@@ -21,7 +21,7 @@ from .models import (
     Scene, format_time,
 )
 from .names import Names
-from .relations import SEED_VALUES, Relations
+from .relations import Relations
 from .portrait import MAX_WORDS, Portrait, Situation, Stance, select_stance, slice_text
 from .providers import Messages
 from .shape import Shape, shape_instruction
@@ -142,7 +142,7 @@ class ContextBuilder:
         self.portraits: dict[str, Portrait] = {}
         # the rung each NPC starts on toward the player (a game package's person), by NPC id
         self.rung_seeds: dict[str, str] = {}
-        self.relations = Relations(log)
+        self.relations = Relations(log, self.rung_seeds)
 
     # -- names ------------------------------------------------------------------------------
     def name(self, cid: str) -> str:
@@ -292,11 +292,8 @@ class ContextBuilder:
             parts.append(core)
         if portrait:  # the NPC's own standing toward the player (never the narrator's)
             rel = self.relations.get(character, PLAYER)
-            rung = self.rung_of(character)
-            w, t = (rel.warmth, rel.trust) if rel.event_id is not None else SEED_VALUES.get(
-                rung, (rel.warmth, rel.trust))
-            parts.append(f"Your standing toward {self.ref(character, PLAYER)}: {rung}, "
-                         f"warmth {w:g}, trust {t:g}.")
+            parts.append(f"Your standing toward {self.ref(character, PLAYER)}: {rel.rung}, "
+                         f"warmth {rel.warmth:g}, trust {rel.trust:g}.")
         if mem.knows:
             parts.append("What you know:\n" + "\n".join(self.knowledge_lines(mem)))
         if mem.state:
@@ -349,11 +346,8 @@ class ContextBuilder:
         """The rung of the relationship ladder `character` stands on toward `toward`: the latest
         RELATION event; without one, toward the player the package seed (campaigns made before
         the store), else stranger; toward another NPC the portrait's static relations."""
-        rel = self.relations.get(character, toward)
-        if rel.event_id is not None:
-            return rel.rung
         if toward == PLAYER:
-            return self.rung_seeds.get(character, "stranger")
+            return self.relations.get(character, PLAYER).rung  # event, else the stored seed
         p = self.portrait_of(character)
         return p.relations.get(toward, "stranger") if p is not None else "stranger"
 
@@ -361,10 +355,9 @@ class ContextBuilder:
         """The NPC's standing toward the player for the omniscient judges (real names). With a
         scene and a portrait, the stance that standing selects."""
         rel = self.relations.get(npc, PLAYER)
-        rung = self.rung_of(npc)
-        w, t = (rel.warmth, rel.trust) if rel.event_id is not None else (
-            SEED_VALUES.get(rung, (rel.warmth, rel.trust)))
-        line = f"{self.name(npc)} → the player: {rung}, warmth {w:g}, trust {t:g}"
+        rung = rel.rung
+        line = (f"{self.name(npc)} → the player: {rung}, warmth {rel.warmth:g}, "
+                f"trust {rel.trust:g}")
         p = self.portrait_of(npc)
         if p is not None and scene is not None:
             line += f"; stance: {select_stance(p, rung, self.situation(npc, scene)).id}"

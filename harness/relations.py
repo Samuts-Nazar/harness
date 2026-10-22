@@ -9,11 +9,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .eventlog import EventLog
-from .models import RELATION, Event, Scene
+from .models import PLAYER, RELATION, Event, Scene
 from .portrait import RUNGS
 
 # warmth / trust a seeded rung starts with (a stranger is slightly cold and unsure)
-SEED_VALUES = {"stranger": (-0.2, 0.2), "client": (0.0, 0.4), "ally": (0.5, 0.6)}
+SEED_VALUES = {"stranger": (-0.2, 0.2), "client": (0.0, 0.4), "ally": (0.5, 0.6),
+               "close": (0.7, 0.7), "lover": (0.9, 0.85)}
 
 
 @dataclass(frozen=True)
@@ -28,16 +29,26 @@ class Relationship:
 
 
 class Relations:
-    def __init__(self, log: EventLog) -> None:
+    """NPC -> other relationships. Only NPC -> player is stored and changes; NPC -> NPC rungs stay
+    the portrait's static `relations` in this version (ContextBuilder.rung_of)."""
+
+    def __init__(self, log: EventLog, seeds: dict[str, str] | None = None) -> None:
+        # `seeds`: npc -> rung toward the player stored in the campaign settings (campaigns made
+        # before the store have no RELATION event); the dict is shared, not copied
         self.log = log
+        self.seeds = seeds if seeds is not None else {}
 
     def get(self, npc: str, other: str) -> Relationship:
+        """The latest active relationship; with no event, the seeded rung (else stranger) at its
+        SEED_VALUES, event_id None. The one source of truth for the numbers."""
         for e in reversed(self.log.active([RELATION])):
             p = e.payload
             if p["npc"] == npc and p["other"] == other:
                 return Relationship(npc, other, p["rung"], p["warmth"], p["trust"],
                                     p.get("reason", ""), e.id)
-        return Relationship(npc, other, "stranger", 0.0, 0.2, "", None)
+        rung = self.seeds.get(npc, "stranger") if other == PLAYER else "stranger"
+        w, t = SEED_VALUES.get(rung, SEED_VALUES["stranger"])
+        return Relationship(npc, other, rung, w, t, "", None)
 
     def set(self, npc: str, other: str, rung: str, warmth: float, trust: float, reason: str,
             scene: Scene, cause_id: int | None = None) -> Event:
@@ -52,5 +63,7 @@ class Relations:
 
     def seed(self, npc: str, other: str, rung: str, scene: Scene) -> Event:
         """The starting state from a package or a portrait (no cause: it is never rolled back)."""
-        w, t = SEED_VALUES.get(rung, (0.0, 0.3))
+        if rung not in SEED_VALUES:
+            raise ValueError(f"cannot seed rung {rung!r}")
+        w, t = SEED_VALUES[rung]
         return self.set(npc, other, rung, w, t, "seed", scene, None)
