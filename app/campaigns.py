@@ -7,6 +7,7 @@ translated for display (`Translator`).
 """
 from __future__ import annotations
 
+import difflib
 import json
 import re
 import time
@@ -124,6 +125,40 @@ def _english(text: str) -> bool:
     return len(re.findall(r"(?<![\w'])[A-Za-z]{2,}(?![\w'])", text)) >= 3
 
 
+def _phonetic(word: str) -> str:
+    """A rough Ukrainian spelling-insensitive key: Олдріх and Ольдрих are one name."""
+    w = word.lower().replace("ї", "и").replace("і", "и").replace("є", "е")
+    return re.sub(r"[ьʼ'’]", "", w)
+
+
+def pin_names(text: str, names: list[str]) -> str:
+    """One spelling per character: a capitalised word that is a variant spelling (transliteration
+    drift, a case ending kept) of a character's name is written as that name, so the panel does
+    not say Ольдрих in one line and Олдріх in the next."""
+    if not names or not text:
+        return text
+    keys = [(n, _phonetic(n)) for n in names if len(n) >= 4 and n[:1].isupper()]
+
+    def fix(m: re.Match[str]) -> str:
+        word = m.group(0)
+        for name, key in keys:
+            for cut in (0, 1, 2):
+                stem = word[: len(word) - cut] if cut else word
+                if len(stem) < 3:
+                    break
+                if stem == name:
+                    return word  # already the pinned spelling
+                if _phonetic(stem) == key:
+                    return name + word[len(stem):]
+        for name, key in keys:
+            if len(key) >= 5 and difflib.SequenceMatcher(None, _phonetic(word), key).ratio() >= 0.9:
+                if word != name:
+                    return name
+        return word
+
+    return re.sub(r"(?<![\w'])[А-ЯІЇЄҐ][а-яіїєґ'’ʼ-]{3,}", fix, text)
+
+
 class Translator:
     """English record text to Ukrainian for the player's panel only (the records stay English).
     One batched call for the strings not yet translated; the cache is kept in the campaign folder.
@@ -141,13 +176,24 @@ class Translator:
     def __init__(self, provider: Provider, model: str, path: Path | None) -> None:
         self.provider, self.model, self.path = provider, model, path
         self.cache: dict[str, str] = {}
+        self.names = []
+        self.labels = []
         try:
             if path is not None:
                 self.cache = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             pass
 
+    labels: list[str]  # how the player sees each stranger (their look): one wording each
+    names: list[str]  # the campaign's character names, set by the game: one spelling each
+
     def _ask(self, system: str, todo: list[str]) -> dict[str, str]:
+        if self.names:
+            system += (" Spell these character names exactly like this, in every case form "
+                       "(Ukrainian declension is fine): " + ", ".join(self.names) + ".")
+        if self.labels:
+            system += (" When a line refers to one of these people by role or look, use exactly "
+                       "this wording: " + "; ".join(self.labels) + ".")
         raw = self.provider.complete(self.model, [
             {"role": "system", "content": system},
             {"role": "user", "content": json.dumps(todo, ensure_ascii=False)}])
@@ -179,7 +225,7 @@ class Translator:
             done = {a: b for a, b in done.items() if _english(b)}
         else:
             done = {}
-        return [self.cache.get(t) or done.get(t, t) for t in texts]
+        return [pin_names(self.cache.get(t) or done.get(t, t), self.names) for t in texts]
 
 
 @dataclass

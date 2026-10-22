@@ -298,6 +298,9 @@ class Game:
                     facts.append(shown)
             out[c["tok"]] = facts[-4:]
         tr = camp.translate
+        if tr is not None:
+            tr.names = [p.name for p in eng.profiles.values() if p.name]  # one spelling each
+            tr.labels = [p.appearance for p in eng.profiles.values() if 0 < len(p.appearance) <= 60]
         flat = [f for facts in out.values() for f in facts]
         if tr is not None and flat:
             done = iter(eng.ctx.mask(PLAYER, t) for t in tr(flat))  # again: see _compute_panel
@@ -327,6 +330,8 @@ class Game:
                  for it in mem.knows[-4:]]
         tr = camp.translate  # records are English; the panel is shown in Ukrainian
         if tr is not None:
+            tr.names = [p.name for p in eng.profiles.values() if p.name]  # one spelling each
+            tr.labels = [p.appearance for p in eng.profiles.values() if 0 < len(p.appearance) <= 60]
             both = tr(items + prose)
             # the records may spell a name in Latin, which the mask does not know; the translator
             # turns it into the Ukrainian one: mask the translated text again

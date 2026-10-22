@@ -37,3 +37,29 @@ def test_a_cached_english_leftover_is_translated_again(tmp_path):
     fixed = "вартовий без шолома двічі поставив кухоль на стіл."
     prov = FakeProvider(script={"tr": [json.dumps([fixed])]})
     assert Translator(prov, "tr", path)([MIXED]) == [fixed]
+
+
+# -- one spelling per character name in the panel (smoke item 12) ---------------------------------
+def test_pin_names_unifies_variant_spellings_of_a_character_name():
+    from app.campaigns import pin_names
+    names = ["Ольдрих", "Вацлав"]
+    assert pin_names("Олдріх мовчить, а Ольдрих киває.", names) == "Ольдрих мовчить, а Ольдрих киває."
+    assert pin_names("Брат Олдріха служить.", names) == "Брат Ольдриха служить."
+    assert pin_names("Ванда глянула на Вацлава.", names) == "Ванда глянула на Вацлава."
+    assert pin_names("Ольдрих", []) == "Ольдрих"
+
+
+def test_translator_pins_names_and_tells_the_model_the_spellings(tmp_path):
+    prov = FakeProvider(script={"tr": [json.dumps(["Олдріх прийшов.", "Ольдрих пішов."])]})
+    tr = Translator(prov, "tr", tmp_path / "t.json")
+    tr.names = ["Ольдрих"]
+    assert tr(["Oldrich came.", "Oldrich left."]) == ["Ольдрих прийшов.", "Ольдрих пішов."]
+    assert "Ольдрих" in prov.calls[0][1][0]["content"]
+
+
+def test_translator_tells_the_model_the_wording_of_each_stranger(tmp_path):
+    prov = FakeProvider(script={"tr": [json.dumps(["Корчмар кивнув."])]})
+    tr = Translator(prov, "tr", tmp_path / "t.json")
+    tr.labels = ["корчмар"]
+    tr(["The innkeeper nodded."])
+    assert "корчмар" in prov.calls[0][1][0]["content"]
