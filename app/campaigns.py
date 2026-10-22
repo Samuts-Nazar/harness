@@ -8,6 +8,7 @@ translated for display (`Translator`).
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -118,13 +119,24 @@ class Recorder:
         yield from self.inner.stream(model, messages)
 
 
+def _english(text: str) -> bool:
+    """A leftover English run: three or more Latin-letter words (names in Latin are not that)."""
+    return len(re.findall(r"(?<![\w'])[A-Za-z]{2,}(?![\w'])", text)) >= 3
+
+
 class Translator:
     """English record text to Ukrainian for the player's panel only (the records stay English).
-    One batched call for the strings not yet translated; the cache is kept in the campaign folder."""
+    One batched call for the strings not yet translated; the cache is kept in the campaign folder.
+    A line that comes back still English (a line that mixes Ukrainian fragments with English looks
+    already translated to a model) is asked once more with a stricter instruction, and if it is
+    still English it is shown but not cached."""
 
     SYSTEM = ("You translate short game-record lines into natural Ukrainian. Keep names, places "
               "and titles exactly as written. Reply with a JSON array of strings, same length "
               "and order as the input.")
+    STRICT = (SYSTEM + " Some lines MIX Ukrainian fragments (descriptions, names) with English "
+              "words: keep the Ukrainian fragments and translate every English word, so that no "
+              "English remains. Never return a line unchanged when it contains English.")
 
     def __init__(self, provider: Provider, model: str, path: Path | None) -> None:
         self.provider, self.model, self.path = provider, model, path
@@ -135,22 +147,39 @@ class Translator:
         except (OSError, ValueError):
             pass
 
+    def _ask(self, system: str, todo: list[str]) -> dict[str, str]:
+        raw = self.provider.complete(self.model, [
+            {"role": "system", "content": system},
+            {"role": "user", "content": json.dumps(todo, ensure_ascii=False)}])
+        got = json.loads(raw[raw.index("["): raw.rindex("]") + 1])
+        if isinstance(got, list) and len(got) == len(todo):
+            return {a: str(b) for a, b in zip(todo, got)}
+        return {}
+
     def __call__(self, texts: list[str]) -> list[str]:
-        todo = [t for t in dict.fromkeys(texts) if t not in self.cache]
+        todo = [t for t in dict.fromkeys(texts)
+                if t not in self.cache or (_english(self.cache[t]) and _english(t))]
         if todo:
-            try:
-                raw = self.provider.complete(self.model, [
-                    {"role": "system", "content": self.SYSTEM},
-                    {"role": "user", "content": json.dumps(todo, ensure_ascii=False)}])
-                got = json.loads(raw[raw.index("["): raw.rindex("]") + 1])
-                if isinstance(got, list) and len(got) == len(todo):
-                    self.cache.update({a: str(b) for a, b in zip(todo, got)})
-                    if self.path is not None:
-                        self.path.write_text(json.dumps(self.cache, ensure_ascii=False),
-                                             encoding="utf-8")
-            except Exception:  # noqa: BLE001 - a display nicety must never break the game
-                pass
-        return [self.cache.get(t, t) for t in texts]
+            done: dict[str, str] = {}
+            for system in (self.SYSTEM, self.STRICT):
+                try:
+                    done.update(self._ask(system, todo))
+                except Exception:  # noqa: BLE001 - a display nicety must never break the game
+                    break
+                todo = [t for t in todo if _english(done.get(t, t))]
+                if not todo:
+                    break
+            self.cache.update({a: b for a, b in done.items() if not _english(b)})
+            if self.path is not None and any(not _english(b) for b in done.values()):
+                try:
+                    self.path.write_text(json.dumps(self.cache, ensure_ascii=False),
+                                         encoding="utf-8")
+                except OSError:
+                    pass
+            done = {a: b for a, b in done.items() if _english(b)}
+        else:
+            done = {}
+        return [self.cache.get(t) or done.get(t, t) for t in texts]
 
 
 @dataclass

@@ -763,7 +763,7 @@ def open_package(stack: Stack, pkg: Package, *, root: Path | str = CAMPAIGNS,
         """Before anyone enters: the player's live state and what the character knows."""
         for fact in d["player"].get("knows", []):
             # what the character believes from their own life: a claim, not world truth
-            eng.facts.add_canon(f"{pname} believes (from own life, may be wrong): {fact}",
+            eng.facts.add_canon(f"{pname} вважає (з власного життя, може помилятися): {fact}",
                                 game_time=eng.scene.time,
                                 knowers=[(PLAYER, "told", "own life")])
         seed_player_state(eng, traits, base=())
