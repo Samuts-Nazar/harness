@@ -149,3 +149,59 @@
 
   Write `reports/ui/SUMMARY.md` (readable on a phone).
 - [ ] **Step 4: Run the full suite five times in a row** (all exit 0), **then commit.**
+
+---
+
+## Amendment 2026-10-22: Task 5 — new game from a file, plus the instruction document for any AI
+
+The user's request: a document they can give to any AI chat, together with their idea for a game. That AI interviews them briefly and outputs one file. The user loads the file into the app and starts a new game exactly as they wanted, with the best possible experience. What the user fixes and what they leave to the world differs per idea, so almost every field is optional. A missing field means "the world decides", and the engine fills it sensibly.
+
+### Task 5: Game package format, importer, "Нова гра з файлу", and `docs/new_game_instruction.md`
+
+**Files:**
+- Create: `app/newgame.py` (parse, validate, build a campaign), `worlds/witcher/start_points.yaml` (named canon start moments), `docs/new_game_instruction.md` (in Ukrainian, written for an external AI), `docs/game_package_example.yaml`.
+- Modify: `app/server.py`, `app/game.py`, `app/campaigns.py`, `app/vizima.py` (reuse the builders; no duplication), `app/static/*` (a "Нова гра" screen in the ☰ drawer: paste or upload, a summary, then start).
+- Tests: `app/tests/test_newgame.py`, extend `app/tests/ui_check.py`.
+
+**Package (YAML, UTF-8, Ukrainian values)**
+- Required: `version: 1`, `world` (`witcher` for now), and `player.description` (free text).
+- Everything else is optional. A missing field means the world decides.
+  - `player`:
+    - `name`; `appearance`; `traits`; `knows` (what the character knows at the start);
+    - `unbounded: true|false` (the pilot demon);
+    - `hidden` (traits nobody sees).
+  - `start`: one of the following:
+    - `canon: <id from start_points.yaml>` (for example `vidmak_A_tavern`);
+    - free text `{place, day, time, situation}`.
+
+    Plus `who_is_here` (optional people, each with an optional `role`, `attitude` and `knows_player: false`).
+  - `canon`: `follow` (the books as gravity, the default) or `loose` (canon only as background).
+  - `tone`: free text, default "як у Сапковського". `pace`: `slow|normal|fast` (narration density).
+  - `limits`: `{avoid: [...], veil: [...]}`, the content limits (decisions.md session zero).
+  - `outcomes`: `real` (the default) or `unbounded` (overrides `player.unbounded`).
+  - `dialogue`: `living` (the default) or `classic`. `assistant`: `on` (the default) or `off`.
+  - `inks: {<label or name>: "#rrggbb"}`, optional colour presets.
+  - `notes`: free text for anything else. It is stored and shown to the narrator as campaign intent; it never overrides the rules in decisions.md.
+
+**Importer**
+- It validates with clear Ukrainian errors (field, problem, how to fix) and never crashes on unknown fields: they are kept in `notes`, with a warning.
+- It shows a summary card before starting: what was set, and what the world will decide.
+- It builds the campaign through the existing builders. A canon start uses the canon store when present; a free start uses `npcgen` and the world map. The player sheet is used like `data/Ragnar.md`, giving looks through `derive_traits`.
+- Missing fields are filled at start: one cheap call at most, recorded.
+
+**`docs/new_game_instruction.md`**, written for any AI, in Ukrainian, ready to paste:
+- the AI's role (game-start assistant);
+- the interview: a few short questions; ask only what changes the game; skip what the user leaves to the world; propose concrete options when the user is stuck;
+- what makes the experience good: a strong start situation with a hook; a player character with a want and a limit; people present with their own goals; tone; and limits asked tactfully;
+- the exact output: one YAML block in the package format above, with comments;
+- rules: never write the player character's feelings or decisions beyond what the user said; no copyrighted book text; names in Ukrainian forms;
+- a full example (`docs/game_package_example.yaml`): a Vizima start with a free-form player character.
+
+**Tests**
+- Valid minimal and full packages.
+- An unknown field leads to a warning.
+- Bad values lead to readable errors.
+- A canon start and a free start each build a playable campaign with the fake provider.
+- A UI check: paste the example, see the summary, start, see the first narration.
+
+**Budget:** under 0.10 USD for one live start check.
