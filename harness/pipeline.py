@@ -32,7 +32,7 @@ from .glossary import Glossary
 from .judge import (
     Judge, JudgeError, JudgmentLog, LoggingJudge, choice_q, default_fake_judge, score_q, yes_no_q,
 )
-from . import knowledge
+from . import knowledge, relations
 from .memory import CharacterMemory, MemoryDeriver, MemoryWriter
 from .names import INTRODUCED, OVERHEARD, PLAYER_SAID, TOLD as NAME_TOLD, Names
 from .player_guard import PLAYER_ACT_Q, flag_player_acts, split_sentences, strip_player_quotes
@@ -45,6 +45,7 @@ from .models import (
     INTERRUPTION,
     NARRATION,
     PLAYER,
+    RELATION,
     SCENE_ENTRY,
     SCRIPTED,
     STATE_CHANGE,
@@ -376,6 +377,7 @@ class Engine:
                                   narration=narration, names=self.names, style=style,
                                   player_unlimited=player_unlimited)
         self.ctx.outcomes = outcomes
+        self.ctx.devlog, self.ctx.note = self.devlog, self._note  # portrait leaks are noted here
         self.world = world
         try:  # a broken portrait file must not stop a campaign from opening
             self.ctx.portraits = load_world_portraits(world) if world else {}
@@ -1943,6 +1945,7 @@ class Engine:
                 diff = self._extract(slow.segments, slow.outcomes, messages=slow.messages,
                                      first_raw=first)
                 slow.result.fact_ids = self._commit(diff, slow.sources)
+                self._apply_switches(slow)
                 self._turn_report(slow.player_event.id, slow.result)
                 for u in slow.result.utterances:
                     self.agents.promote(u.payload["speaker"], sc)
@@ -1972,6 +1975,88 @@ class Engine:
                                     "slow_s": round(time.monotonic() - t0, 3),
                                     "waited_s": 0.0, "needed": False})
             return True
+
+    # -- portrait switches: the relationship moves on the slow lane --------------------------
+    def _switch_npcs(self, slow: _Slow) -> list[str]:
+        """Present portrait NPCs with switches the player dealt with this turn: those who spoke
+        or gestured, or the only NPC in the scene."""
+        others = [c for c in self.scene.present if c != PLAYER]
+        acted = ({u.payload["speaker"] for u in slow.result.utterances}
+                 | {n for kind, n, _ in slow.result.exchange if kind in ("line", "gesture")})
+        out = []
+        for c in others:
+            p = self.ctx.portrait_of(c)
+            if p is not None and p.switches and (c in acted or len(others) == 1):
+                out.append(c)
+        return out
+
+    def _switch_state(self, npc: str, slow: _Slow) -> tuple[list[str], list[int]]:
+        """The judge's state for one NPC's switch questions (real names: the judge is
+        omniscient): the NPC's last line before the turn, then the turn as it stands. Also the
+        ids of the world's events in it (NPC lines, gestures), kept on the relation event."""
+        name = self.ctx.name(npc)
+
+        def who(c: str | None) -> str:
+            return "The player" if c == PLAYER else self.ctx.name(c) if c else "Narration"
+
+        lines: list[str] = []
+        ids: list[int] = []
+        before = [e for e in self.log.active([UTTERANCE])
+                  if e.id < slow.player_event.id and e.payload.get("speaker") == npc]
+        if before:
+            lines.append(f"(just before) {name}: {before[-1].payload['text']}")
+        for e in sorted(slow.turn_events, key=lambda e: e.id):
+            if e.type not in (UTTERANCE, ACTION_EVENT, NARRATION) or not self.log.is_active(e.id):
+                continue
+            p = e.payload
+            c = p.get("speaker") or p.get("actor") or p.get("by")
+            if e.type == NARRATION:
+                c = None
+            mark = " (does)" if e.type == ACTION_EVENT and c else ""
+            lines.append(f"{who(c)}{mark}: {p.get('text', '')}")
+            if c not in (None, PLAYER):
+                ids.append(e.id)
+        state = [f"The questions are about what the player did or said to {name} in this turn; "
+                 f"\"she\", \"he\", \"her\" or \"him\" mean {name}.", "This turn:\n" + "\n".join(lines)]
+        return state, ids
+
+    def _apply_switches(self, slow: _Slow) -> None:
+        """One batched yes/no judgment per portrait NPC (a question per switch trigger); the
+        hits move the relationship (harness/relations.py `apply`). The RELATION event is caused
+        by the player's input of the turn and lists the NPC lines it was judged on."""
+        npcs = self._switch_npcs(slow)
+        if not npcs:
+            return
+        jobs = []
+        for npc in npcs:
+            p = self.ctx.portrait_of(npc)
+            assert p is not None
+            state, ids = self._switch_state(npc, slow)
+            qs = {sw.id: yes_no_q(sw.trigger, tag="portrait_switch") for sw in p.switches}
+            jobs.append(_Job(lambda st=state, q=qs: self._ask_safe(st, q),
+                             {"npc": npc, "portrait": p, "ids": ids}))
+        for job, got in zip(jobs, self._map([j.ask for j in jobs])):
+            npc, p = job.meta["npc"], job.meta["portrait"]
+            if isinstance(got, JudgeError):
+                self._note("switches_unavailable", npc=npc, error=str(got)[:200])
+                continue
+            hits = [sw for sw in p.switches if sw.id in got and got[sw.id].answer]
+            if not hits:
+                continue
+            old = self.ctx.relations.get(npc, PLAYER)
+            new = relations.apply(old, hits)
+            self.ctx.relations.set(npc, PLAYER, new.rung, new.warmth, new.trust, new.reason,
+                                   self.scene, slow.player_event.id, lines=job.meta["ids"])
+            self._note("relation_changed", npc=npc, **{"from": old.rung}, to=new.rung,
+                       switches=[sw.id for sw in hits], warmth=new.warmth, trust=new.trust)
+
+    def _revert_relations(self, line_id: int) -> None:
+        """A model error or challenge replaced the world's line `line_id`: relationship changes
+        judged on it return to the earlier state (their switches are not asked again)."""
+        for e in self.log.active([RELATION]):
+            if line_id in e.payload.get("lines", ()):
+                self.log.rollback(e.id, "its line was replaced")
+                self._note("relation_reverted", npc=e.payload["npc"], event=e.id, line=line_id)
 
     def _prefetch(self) -> None:
         """Work for the next turn that does not depend on what the player will write: the manner
@@ -2336,6 +2421,7 @@ class Engine:
         generating fails the old text is put back (the log is append-only, so as a new event)."""
         npc = old.payload["speaker"]
         self.log.rollback(old.id, "model error: no channel")
+        self._revert_relations(old.id)
         try:
             text = self._regenerate_text(npc, old, explanation)
         except Exception:
@@ -2361,6 +2447,7 @@ class Engine:
         context. Failing (or no action coming back) puts the old gesture back."""
         npc = old.payload["by"]
         self.log.rollback(old.id, "model error: gesture")
+        self._revert_relations(old.id)
         try:
             prep = self._prep_npc(npc)
             text = self._shaped_line(prep, Shape.GESTURE,

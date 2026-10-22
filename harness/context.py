@@ -53,6 +53,7 @@ OUTCOME_EVENT = "outcome"  # harness/outcome.py (not imported: it imports the ju
 # observable live state that means danger in the room (a drawn blade, a raised crossbow)
 DANGER = re.compile(r"\b(?:drawn|оголен\w*|витягнут\w*|наставлен\w*|націлен\w*)", re.IGNORECASE)
 # counted in the slice budget (MAX_WORDS for the whole section)
+LEAK_TRUST = 0.4  # a hidden-layer leak goes into a portrait NPC's prompt only from this trust on
 PORTRAIT_HEAD = "Who you are now (never quote it; example lines show only the voice):"
 
 
@@ -143,6 +144,11 @@ class ContextBuilder:
         # the rung each NPC starts on toward the player (a game package's person), by NPC id
         self.rung_seeds: dict[str, str] = {}
         self.relations = Relations(log, self.rung_seeds)
+        # the engine's debug log and its note function (the engine shares its own); a used
+        # hidden-layer leak is a `portrait_leak` note there, keyed by scene entry
+        self.devlog: list[dict[str, Any]] = []
+        self.note: Callable[..., None] = lambda kind, **info: self.devlog.append(
+            {"kind": kind, **info})
 
     # -- names ------------------------------------------------------------------------------
     def name(self, cid: str) -> str:
@@ -399,17 +405,41 @@ class ContextBuilder:
         if p is None:
             return "", ()
         st = select_stance(p, self.rung_of(character), self.situation(character, scene))
-        text = self.portrait_text(p, st, character)
+        leak = self._leak_for(p, character, scene)
+        text = self.portrait_text(p, st, character, leak)
+        if leak and self.mask(character, leak) in text:  # the slice had room for it: used
+            self.note("portrait_leak", npc=character, scene=self.scene_key(character, scene),
+                      leak=leak[:120])
         # the copy check compares the reply with the example lines as the NPC saw them (masked)
         shown = tuple(m for m in (self.mask(character, x) for x in st.examples) if m in text)
         return text, shown
 
-    def portrait_text(self, p: Portrait, stance: Stance, viewer: str) -> str:
+    def scene_key(self, character: str, scene: Scene) -> str:
+        """One scene for `character`: the location and its latest entry (0: there from the
+        start)."""
+        entries = [e.id for e in self.log.active([SCENE_ENTRY])
+                   if e.payload.get("character") == character]
+        return f"{scene.location}#{entries[-1] if entries else 0}"
+
+    def _leak_for(self, p: Portrait, character: str, scene: Scene) -> str | None:
+        """A hidden-layer leak for this prompt: only with trust >= LEAK_TRUST and none used for
+        this NPC in this scene yet; the portrait's leaks in turn."""
+        if not p.leaks or self.relations.get(character, PLAYER).trust < LEAK_TRUST:
+            return None
+        key = self.scene_key(character, scene)
+        used = [n for n in self.devlog
+                if n.get("kind") == "portrait_leak" and n.get("npc") == character]
+        if any(n.get("scene") == key for n in used):
+            return None
+        return p.leaks[len(used) % len(p.leaks)]
+
+    def portrait_text(self, p: Portrait, stance: Stance, viewer: str,
+                      leak: str | None = None) -> str:
         """Header plus slice, at most MAX_WORDS words in all, masked for `viewer`."""
         budget = MAX_WORDS - len(PORTRAIT_HEAD.split())
         while True:  # masking a name with an appearance can add words: shrink until it fits
-            out = PORTRAIT_HEAD + "\n" + self.mask(viewer, slice_text(p, stance, None, budget))
-            over = len(out.split()) - MAX_WORDS  # leaks: rationed later (task 4)
+            out = PORTRAIT_HEAD + "\n" + self.mask(viewer, slice_text(p, stance, leak, budget))
+            over = len(out.split()) - MAX_WORDS
             if over <= 0 or budget <= 1:
                 return out
             budget -= over

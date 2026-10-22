@@ -140,7 +140,7 @@ switches:
     trust: -0.4
     note: Hot anger shows as a spell or an order at once; cold anger follows.
   - id: wound
-    trigger: Did the player touch on children, her body's limits or her looks and origins, or call someone she cares for «мутант»?
+    trigger: Did the player touch on her own childlessness or wish for a child (not someone else's child in need), her body's limits, or her looks and origins, or call someone she cares for «мутант»?
     warmth: -0.5
     trust: -0.3
     note: She goes pale and polite; revenge is promised quietly, if at all.
