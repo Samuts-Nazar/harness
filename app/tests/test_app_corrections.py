@@ -115,7 +115,8 @@ def test_model_error_only_on_the_last_world_output(monkeypatch):
     narr = last(g, "narr")
     for ev in (None, narr["event"]):      # the narration is not the last output any more
         r = c.post("/api/model_error", json={"event": ev, "explanation": "не так"})
-        assert r.status_code == 400 and "останньому" in r.json()["error"]
+        assert r.status_code == 400
+        assert ("event" if ev is None else "останньому") in r.json()["error"]
     assert g.transcript == before and not g.eng.log.active([CORRECTION])
     # an older NPC line too
     g.start_turn("Ще одне.")
