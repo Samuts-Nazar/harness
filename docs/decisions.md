@@ -79,6 +79,9 @@ Status: closed decisions only. Anything not listed here is undecided. Do not des
 - Each element is either observable or hidden. A state element persists until an event changes it (a drawn sword stays drawn until sheathed).
 - When characters share a scene, each perceives the others' observable state. Whether a given observer reacts is a salience judgment per observer. Hidden state is not perceived until it becomes observable.
 - The player's panel shows the player character's state as the character perceives it (the same epistemic filter applied to the own body), as short chips plus a few sentences of prose.
+- Character portraits: an NPC who matters has a portrait (core, stances by relationship rung, switches, a hidden thing and its leaks, voice, bans). Canon people have hand-written portraits in the world folder, bound per start point; invented NPCs who become named or recurring, and package people with free-text `portrait_text`, get a short generated portrait (one cheap call, cached in the campaign, never remade). Background extras keep the cheap profile.
+- Each NPC call gets a slice of the portrait, at most 260 words, passed through the speaker's knowledge mask; a portrait never adds facts the NPC has not learned. Stance choice is code on the fast lane.
+- Relationship with the player: a ladder stranger → client → ally → close → lover (and enemy), with warmth and trust, stored as events in the log (rolls back with its cause). Switches are yes/no questions judged on the slow lane; code supplies the size, with pacing so closeness is earned (caps per turn, repeat dampening, scene changes required for close and lover, slow decay, grudges that last). Hidden things leak only at enough trust, rationed per scene.
 
 ## Canon
 
