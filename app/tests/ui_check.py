@@ -166,7 +166,7 @@ def main() -> None:
         assert ink_h.lower() in PALETTE, ink_h
         assert color(page, f"{hsel} .q") == rgb(ink_h), "speech is in the character's ink"
         assert color(page, "#btnInterrupt") == rgb(ink_h), "✋ is tinted with the speaker's ink"
-        assert page.text_content(f"{hsel} .who").strip(), "the speaker is named, not only coloured"
+        assert page.text_content(f"{hsel} .who").strip().rstrip(":"), "a new speaker is named once"
         shot(page, "03-npc-speaking")
         wait_idle(page)
         assert not page.is_visible("#btnInterrupt") and page.is_visible("#btnIdea"), "💡 when idle"
@@ -253,6 +253,11 @@ def main() -> None:
         assert page.locator(esel).count() >= 2, "the same speaker twice is two paragraphs"
         assert page.locator(".cut").count() == 0, "a skip is not an interrupt"
         assert color(page, f"{ACT} .act-text") != rgb(ink_h), "a gesture stays in the base ink"
+        # mockup B, pure prose: a quiet name only where the speaker changes; none on gestures
+        assert page.locator(f"{ACT} .who").count() == 0, "a gesture names its actor in its text"
+        assert page.locator(f"{esel} .who").count() == 1, "Ельза named on her first line only"
+        assert page.locator(esel).first.locator(".who").count() == 1
+        assert page.locator(f"{hsel} .who").count() == 1
         no_hscroll(page, "after the exchange")
         shot(page, "05b-exchange-with-gesture")
 

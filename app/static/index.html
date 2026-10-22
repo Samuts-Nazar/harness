@@ -8,7 +8,7 @@
 <title>Harness</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400;0,700;1,400&family=Alegreya+SC:wght@500&subset=cyrillic&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400;0,700;1,400&subset=cyrillic&display=swap">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body data-phase="loading">
@@ -23,7 +23,7 @@
     <button id="btnMenu" class="ic menu" type="button" aria-label="Меню" aria-haspopup="dialog">☰</button>
   </header>
 
-  <main id="feed" class="page" aria-live="polite"></main>
+  <main id="feed" class="page" role="log" aria-live="polite" aria-busy="false"></main>
 
   <div id="errbar" role="alert" hidden></div>
 

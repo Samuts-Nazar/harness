@@ -16,7 +16,6 @@
   --danger: #e8887c;
   --ink-none: var(--ink); /* a character whose ink has not arrived yet */
   --serif: "Alegreya", "Noto Serif", "DejaVu Serif", "Liberation Serif", Georgia, serif;
-  --sc: "Alegreya SC", "Alegreya", "Noto Serif", Georgia, serif;
   --mono: ui-monospace, "DejaVu Sans Mono", monospace;
   --col: 38rem;          /* the text column: about 32-36 em of the body font, under 40 em */
   --tap: 44px;
@@ -64,11 +63,11 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 .page > :first-child { margin-top: 6px; }
 .intro, .narr { color: var(--ink); }
 .me { font-style: italic; color: var(--you); }
-.npc { -webkit-touch-callout: none; border-radius: 6px; }
+.npc { border-radius: 6px; }
+#feed [data-line] { -webkit-touch-callout: none; }   /* a long press opens the line menu, not the callout */
 .npc .q { color: var(--c); }
 .npc .beat { color: var(--tag); font-style: italic; }
-.who { font-family: var(--sc); font-size: 0.72em; letter-spacing: .03em; color: var(--tag); white-space: nowrap; }
-.who .dot { width: 7px; height: 7px; margin-right: 5px; vertical-align: 0.12em; }
+.who { font-style: italic; color: var(--muted); }   /* a quiet name, only where the speaker changes */
 .act { color: var(--ink); }
 .act .act-text { font-style: italic; }
 .cut::after { content: " ✋ перебито"; font-size: 0.75em; font-style: italic; color: var(--danger); white-space: nowrap; }

@@ -1,6 +1,7 @@
 // Runs app/static/app.js against a minimal DOM stub (used by test_app_client.py).
 //   node client_harness.js app.js '<events JSON>'            replay events, print the feed
-//   node client_harness.js app.js '{"state": …, "events": […], "eval": "<expr>"}'
+//   node client_harness.js app.js '{"state"|"load": …, "events": […], "eval": "<expr>"}'
+//     ("load": as a page reload does, events then pass the reload's replay filter)
 //     render a /api/state body first, then replay events; "eval" is evaluated in the app's
 //     scope and its value is printed as "value".
 "use strict";
@@ -30,11 +31,13 @@ ctx.EventSource.CLOSED = 2;
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(process.argv[2], "utf8") +
   "\nthis.__h = handlers; this.__state = () => ({ busy }); this.__render = render;" +
+  "\nthis.__load = (st) => { render(st); turnEls = {}; cur = null; beginReplay(st); }; this.__dispatch = dispatch;" +
   "\nthis.__eval = (s) => eval(s);", ctx);
 let job = JSON.parse(process.argv[3]);
 if (Array.isArray(job)) job = { events: job };
 if (job.state) ctx.__render(job.state);
-for (const e of job.events || []) ctx.__h[e.type](e);
+if (job.load) ctx.__load(job.load);   // as after a reload: events go through the replay filter
+for (const e of job.events || []) (job.load ? ctx.__dispatch : (t, ev) => ctx.__h[t](ev))(e.type, e);
 const feed = ids.feed;
 const text = (n) => (n.textContent || "") + (n.children || []).map(text).join("");
 console.log(JSON.stringify({ feed: feed.children.map((n) => ({ cls: n.className, line: n.dataset.line,

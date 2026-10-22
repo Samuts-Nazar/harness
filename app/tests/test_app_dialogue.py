@@ -316,3 +316,19 @@ def test_late_retract_of_a_cut_in_turn_names_that_turn():
     assert evs.index(starts[-1]) < evs.index(retract)
     assert all(e["turn"] == 2 for e in evs if e["type"] in ("turn_done", "speaker", "word"))
     assert [t["text"] for t in g.transcript if t["kind"] == "player"] == ["Друга."]
+
+
+def test_a_cut_in_keeps_the_interrupted_turns_turn_done_in_the_stream():
+    """Book UI review: start_turn used to clear the event list, so a client polling the stream
+    could miss turn 1's turn_done (and its cut marks) when the player cut in with turn 2."""
+    g = make(pace=0.02, floors=["horst", "elza", "horst", "player"])
+    g.start_turn("Перша.")
+    first_start = g.turn_start_seq
+    wait_phase(g, "speaking")
+    wait_event(g, "word")
+    g.start_turn("Друга.")
+    g.wait_idle(30)
+    done = [e for e in g.events_after(first_start) if e["type"] == "turn_done"]
+    assert [e["turn"] for e in done] == [1, 2]
+    assert done[0]["cut_lines"], "the interrupted line is marked for a client that polls late"
+    assert g.events_after(g.turn_start_seq)[0]["type"] == "turn_start"  # replay still starts there

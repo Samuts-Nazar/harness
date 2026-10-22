@@ -16,7 +16,10 @@ let cast = {};            // tok -> {tok, label, ink, present}: who the player c
 let actions = [];         // optional line actions the server offers ("model_error", "cut")
 let speakingTok = null;   // whose words stream now (tints ✋)
 let sugg = { turn: null, items: [] };
-let skipReplay = false;   // a reload during the slow lane: the turn is already in the transcript
+// a reload during a turn's slow lane: that turn is already in the transcript, so its replayed feed
+// events are skipped (only events of that turn id), and its rendered paragraphs are tracked under
+// that id so a late retract still removes them
+let replay = null, lastTurnNodes = [];
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -72,10 +75,18 @@ function segments(text) {
   });
   return out;
 }
+// a speech paragraph names its speaker (subtly) only when the speaker changed from the previous
+// speech paragraph and no beat of the line names them; otherwise colour, dash and legend carry it
+function needsTag(p, segs) {
+  if (p._prevTok === p.dataset.tok) return false;
+  const label = String(p.dataset.label || "").toLowerCase();
+  return !segs.some((s) => s.beat && label && s.text.toLowerCase().includes(label));
+}
 function fillBody(p, text) {
   p._raw = text;
   const body = el("span", "body");
   const segs = segments(text);
+  if (p.dataset.line === "say" && needsTag(p, segs)) body.append(el("span", "who", p.dataset.label + ":"), document.createTextNode(" "));
   segs.forEach((s, i) => {
     if (i) body.appendChild(document.createTextNode(" "));
     if (!s.beat) { body.appendChild(el("span", "q", "— " + s.text)); return; }
@@ -87,17 +98,20 @@ function fillBody(p, text) {
   p._body = body;
   if (old) old.replaceWith(body); else p.appendChild(body);   // keeps an open ask box after it
 }
-function who(p, tok, label) {
+function who(p, tok, label) {   // no visible tag: gesture text names the actor itself
   p.dataset.tok = tok;
+  p.dataset.label = label || "";
   p.style.setProperty("--c", inkVar(tok));
-  const w = el("span", "who");
-  w.append(el("i", "dot"), el("span", "", label));
-  p.appendChild(w);
-  p.appendChild(document.createTextNode(" "));
+}
+function prevSpeaker() {   // the speaker of the last speech paragraph on the page so far
+  const ls = lines();
+  for (let i = ls.length - 1; i >= 0; i--) if (ls[i].dataset.line === "say") return ls[i].dataset.tok;
+  return null;
 }
 function sayBlock(tok, label, text, cut, event) {
   const p = el("p", "npc"); p.dataset.line = "say"; p.tabIndex = 0;
   who(p, tok, label);
+  p._prevTok = prevSpeaker();
   fillBody(p, text || "");
   if (cut) p.classList.add("cut");
   if (event != null) p.dataset.event = event;
@@ -109,7 +123,11 @@ function actBlock(tok, label, text) {
   p.appendChild(el("span", "act-text", text));
   return p;
 }
-function narrBlock(text, cls = "narr") { const p = el("p", cls, text); p.dataset.line = cls === "intro" ? "intro" : "narr"; return p; }
+function narrBlock(text, cls = "narr") {
+  const p = el("p", cls, text); p.dataset.line = cls === "intro" ? "intro" : "narr";
+  if (cls === "narr") p.tabIndex = 0;   // the line menu (model error) is reachable by keyboard
+  return p;
+}
 function meBlock(text) { const p = el("p", "me", text); p.dataset.line = "me"; return p; }
 function streaming(p) {
   for (const n of Array.from(feed.children)) if (n !== p && n.classList) n.classList.remove("streaming");
@@ -145,7 +163,7 @@ const ITEM_TEXT = {
   cut: "✂ Перебити тут (заднім числом)", ink: "🎨 Чорнило цього персонажа",
 };
 let sheetLine = null;
-function labelOf(p) { const w = p.querySelector(".who"); return w ? w.textContent.trim() : ""; }
+function labelOf(p) { return p.dataset.label || ""; }
 function openSheet(p) {
   const sheet = $("sheet");
   if (sheet.open) return;
@@ -414,6 +432,8 @@ function setBusy(on, ph) {
   document.body.dataset.phase = phase;
   feed.classList.toggle("busy", on);
   const talk = phase === "narrating" || phase === "speaking";
+  // screen readers wait while words stream in, then read the finished paragraphs once
+  feed.setAttribute("aria-busy", String(talk));
   $("btnInterrupt").hidden = !talk;
   $("btnInterrupt").style.setProperty("--c", phase === "speaking" && speakingTok ? inkVar(speakingTok) : "var(--pen)");
   $("btnIdea").hidden = on;
@@ -444,12 +464,17 @@ function render(state) {
   tag = state.live ? "" : " · офлайн";
   $("clock").textContent = state.clock + tag;
   actions = Array.isArray(state.actions) ? state.actions : [];
+  lastTurnNodes = [];   // the paragraphs since the last player paragraph (the last turn)
   for (const t of state.transcript) {
-    if (t.kind === "intro") add(narrBlock(t.text, "intro"), false);
-    else if (t.kind === "player") add(meBlock(t.text), false);
-    else if (t.kind === "narr") { if (t.text && t.text.trim()) add(narrBlock(t.text), false); }
-    else if (t.kind === "npc_act") add(actBlock(t.tok, t.label, t.text), false);
-    else add(sayBlock(t.tok, t.label, t.text, t.cut, t.event), false);
+    let n = null;
+    if (t.kind === "intro") n = narrBlock(t.text, "intro");
+    else if (t.kind === "player") { n = meBlock(t.text); lastTurnNodes = []; }
+    else if (t.kind === "narr") { if (t.text && t.text.trim()) n = narrBlock(t.text); }
+    else if (t.kind === "npc_act") n = actBlock(t.tok, t.label, t.text);
+    else n = sayBlock(t.tok, t.label, t.text, t.cut, t.event);
+    if (!n) continue;
+    add(n, false);
+    if (t.kind !== "intro") lastTurnNodes.push(n);
   }
   setPanel(state.panel);
   feed.scrollTop = feed.scrollHeight;
@@ -560,6 +585,27 @@ function showFinale(lines) {
   $("sugg").hidden = true;
 }
 
+function beginReplay(state) {
+  const players = (state.transcript || []).filter((t) => t.kind === "player");
+  // the transcript holds the running turn only once its fast part is done (not after an error)
+  const holds = state.running && state.phase === "idle" && players.length > 0 &&
+    players[players.length - 1].text === state.pending_turn;
+  replay = holds ? { turn: null } : null;
+}
+function dispatch(type, e) {
+  if (replay && FEED_EVENTS.has(type)) {
+    if (replay.turn == null && type === "turn_start") {
+      replay.turn = e.turn; curTurn = e.turn;
+      turnEls[e.turn] = lastTurnNodes.slice();
+      return;
+    }
+    if (replay.turn != null && e.turn === replay.turn) {
+      if (type === "turn_done") sugg.turn = e.turn;
+      return;
+    }
+  }
+  handlers[type](e);
+}
 function connect(after) {
   if (es) es.close();
   lastSeq = after;
@@ -569,12 +615,7 @@ function connect(after) {
       const e = JSON.parse(m.data);
       if (e.seq <= lastSeq) return;      // replay after a reconnect: already shown
       lastSeq = e.seq;
-      if (skipReplay && FEED_EVENTS.has(type)) {
-        if (type === "turn_start") curTurn = e.turn;
-        if (type === "turn_done") skipReplay = false;
-        return;
-      }
-      handlers[type](e);
+      dispatch(type, e);
     });
   }
 }
@@ -583,7 +624,7 @@ async function load() {
   const state = await (await fetch("/api/state")).json();
   render(state);
   turnEls = {}; cur = null;
-  skipReplay = Boolean(state.running && state.phase === "idle");
+  beginReplay(state);
   setBusy(state.phase !== "idle", state.phase);
   showError("");
   connect(state.resume_after);
