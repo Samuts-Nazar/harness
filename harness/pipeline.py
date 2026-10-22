@@ -334,6 +334,7 @@ class Engine:
         self._slow_lock = threading.RLock()
         self.slow_failure: BaseException | None = None
         self.after_settle: list[Callable[[], None]] = []  # run after the slow lane (the world)
+        self.assistant_calls: list[str] = []  # turn assistant calls: never inside a turn's counts
         self.llm_calls: list[str] = []  # role of every model call attempt (harness/decisions.py)
         self.last_decisions: DecisionCount | None = None  # of the last settled turn, failed or not
         self.lane_stats: list[dict[str, Any]] = []  # per turn: fast, slow and wait seconds

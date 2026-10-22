@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Sequence
 
 from .models import PLAYER
+from .providers import ProviderError
 
 if TYPE_CHECKING:
     from .pipeline import Engine
@@ -27,6 +28,10 @@ SYSTEM = (
     "You are the turn assistant of a text role-playing game. You suggest what the player's "
     "character could do or say next. You know only what the player's character knows, given "
     "below; never use anything else. "
+    "Rules: suggest only the character's own deliberate actions and words. Never feelings, "
+    "thoughts or inner states (not \"*відчуває страх*\"): only the player decides what the "
+    "character feels. Never outcomes or other characters' reactions (not \"*вбиває Горста*\", "
+    "not \"він погоджується\"): the world decides results. Write the attempt, not its result. "
     "Write {n} different options, each one short (at most about 20 words), in Ukrainian, in the "
     "first person as the character, one per line, no numbering and no comments. "
     "An action is written between asterisks, like *дістає меч*; speech is written plainly, "
@@ -91,8 +96,20 @@ def ask(engine: "Engine", ctx: Context, n: int = 3, avoid: Sequence[str] = ()) -
     if avoid:
         user += "\n\nAlready offered (give different ones):\n" + "\n".join(f"- {a}" for a in avoid)
     user += f"\n\nWrite {n} options now."
-    raw = engine._complete(ROLE, [{"role": "system", "content": ctx.system.replace("{n}", str(n))},
-                                  {"role": "user", "content": user}])
+    messages = [{"role": "system", "content": ctx.system.replace("{n}", str(n))},
+                {"role": "user", "content": user}]
+    # Not Engine._complete: that counts into the turn's shared llm_calls/devlog, and this runs on
+    # a thread that may overlap the next turn. Assistant calls are counted on their own.
+    models = engine.models
+    engine.assistant_calls.append(ROLE)
+    try:
+        raw = engine.provider.complete(models.assistant, messages)
+    except ProviderError:
+        fallback = models.assistant_fallback
+        if not fallback:
+            raise
+        engine.assistant_calls.append(ROLE)
+        raw = engine.provider.complete(fallback, messages)
     return parse(raw, n, avoid)
 
 

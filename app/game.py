@@ -605,11 +605,17 @@ class Game:
             "dialogue": eng.dialogue_report(),
             "names": (report or {}).get("names"),
             "parallel": eng.parallel,
+            "assistant_calls": len(eng.assistant_calls),  # session total, apart from decisions
             "decisions": self._decisions(
                 count_since(eng, 0, marks["judg"], marks["llm"], marks["dev"]), marks["where"]),
         }
 
     def wait_idle(self, timeout: float = 30.0) -> None:
         """Until the turn and its slow lane are done."""
-        for t in list(self.threads) or ([self.thread] if self.thread else []):
-            t.join(timeout)
+        end = time.monotonic() + timeout
+        while True:  # a finishing turn starts its suggestion thread: look again after each join
+            alive = [t for t in (list(self.threads) or ([self.thread] if self.thread else []))
+                     if t.is_alive()]
+            if not alive or time.monotonic() > end:
+                return
+            alive[0].join(max(end - time.monotonic(), 0.01))

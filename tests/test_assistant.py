@@ -48,7 +48,30 @@ def test_suggest_counts_as_an_assistant_call_and_writes_nothing():
     mark = len(eng.llm_calls)
     assistant.suggest(eng, 3)
     assert len(eng.log.active()) == before_events, "drafts are not part of the log"
-    assert count_since(eng, 0, 0, mark).llm_calls_by_role == {"assistant": 1}
+    assert eng.assistant_calls == ["assistant"]
+    assert count_since(eng, 0, 0, mark).llm_calls_by_role == {}, "never inside a turn's counts"
+    assert eng.devlog == [] or all(n["kind"] != "model_fallback" for n in eng.devlog)
+
+
+def test_prompt_forbids_feelings_and_outcomes():
+    eng, _ = make({})
+    spy = Spy(eng.provider)
+    eng.provider = spy
+    assistant.suggest(eng, 3)
+    text = spy.prompts[-1]
+    assert "Never feelings" in text and "Never outcomes" in text
+    assert "*відчуває страх*" in text and "feels" in text  # the unknown name is masked, fine
+    assert "*вбиває Горста*" in assistant.SYSTEM
+
+
+def test_assistant_call_after_the_marks_does_not_change_the_turn_decisions():
+    eng, _ = make({})
+    spy = Spy(eng.provider)
+    eng.provider = spy
+    marks = (len(eng.judgments.entries), len(eng.llm_calls), len(eng.devlog))
+    assistant.suggest(eng, 3)  # lands after the next turn took its marks
+    d = count_since(eng, 0, *marks[:2], marks[2])
+    assert d.total == 0 and d.llm_calls_by_role == {}
 
 
 def test_avoid_is_in_the_prompt_and_filtered_from_the_answer():
