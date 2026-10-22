@@ -57,12 +57,7 @@ You are the lead ("brain") for the harness project. The user talks to you; Sonne
   - research reports `reports/research/18A/18B/21A/21B`;
   - the human-writing bake-off (`reports/human_ab/`);
   - the model switch: narrator `xiaomi/mimo-v2.6-pro`, NPC `xiaomi/mimo-v2.6-flash`, temperature 0.8. The user's blind grading was mimo-pro 4.0, mimo-flash 3.6, luna 3.0.
-- **In progress: the interactive book UI.**
-  - Spec: `docs/superpowers/specs/2026-10-22-interactive-book-ui-design.md` (approved). Plan: `docs/superpowers/plans/2026-10-22-interactive-book-ui.md`. Mockups: `docs/design/ui-mockups/`.
-  - Branch `book-ui`, worktree `.claude/worktrees/book-ui`, ledger `.claude/worktrees/book-ui/.superpowers/sdd/2026-10-22-interactive-book-ui/progress.md`.
-  - Task 1 is complete (tokens, inks, `/api/cast`, `/api/people`).
-  - Task 2, the turn assistant, is implemented (f96f3f2) but NOT yet reviewed. Next step: its task review (package 625cb29..f96f3f2, built with the skill's `review-package` script), then Task 3.
-  - Tasks 3 (client page) and 4 (places and a live check) remain, then the final review and the merge.
+- **Interactive book UI: merged 2026-10-22** (spec `docs/superpowers/specs/2026-10-22-interactive-book-ui-design.md`, plan `docs/superpowers/plans/2026-10-22-interactive-book-ui.md`, live report `reports/ui/SUMMARY.md`, rulings `reports/ui/deferred_and_rulings.md`). New game from a file: `docs/new_game_instruction.md` + `docs/game_package_example.yaml`.
 - **Next, after the UI:** active play tests by the user on the Vizima pilot (`docs/pilot_vizima_test_plan.md`, `app/static/checklist.html`). Start: `nix develop --command python -m app --live --host 0.0.0.0 --budget 0.5`; phone at `http://192.168.1.109:8765/`.
 - **Later projects agreed with the user:**
   - project 2, a decision layer against averaging (`reports/research/21A_decisions.md`);
