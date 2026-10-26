@@ -325,7 +325,8 @@ class Game:
 
     def _compute_panel(self, camp: Campaign | None = None) -> dict[str, Any]:
         """The player character's state as the character perceives it: chips for live state
-        (own body is perceived, hidden or not) and a few sentences from what the character knows.
+        (own body and pack are perceived, hidden from others or not; what the
+        character is not aware of is not here) and a few sentences from what the character knows.
         Nothing the character did not perceive can appear: it is read from the character's own
         derived memory. Reads the database and may call a model: never under the game's lock."""
         camp = camp or self.camp

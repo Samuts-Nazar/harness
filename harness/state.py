@@ -153,9 +153,14 @@ class LiveState:
                 until=p.get("until"), channel=p.get("channel", "sight")))
         return state
 
-    def of(self, character: str) -> list[Element]:
-        elems = self.snapshot().get(character, {})
-        return list(elems.values())
+    def of(self, character: str, viewer: str | None = None,
+           debug: bool = False) -> list[Element]:
+        """The character's elements. Seen by the character itself (viewer == character, not the
+        debug view), what the character is not aware of is dropped; every other call sees all."""
+        elems = list(self.snapshot().get(character, {}).values())
+        if viewer == character and not debug:
+            elems = [e for e in elems if e.aware]
+        return elems
 
     def observable(self, character: str) -> list[Element]:
         from . import items

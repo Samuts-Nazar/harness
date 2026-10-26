@@ -512,7 +512,8 @@ class ContextBuilder:
             f"({'observable' if items.is_observable(el, snap) else 'hidden'})"
             for c in scene.present
             for (cat, item), el in snap.get(c, {}).items()
-        ]
+            if el.aware or c != PLAYER  # the player's narrator does not see what the player's
+        ]                               # character is not aware of (the world judge does)
         if state_lines:
             parts.append("Character state:\n" + "\n".join(state_lines))
         if recent:

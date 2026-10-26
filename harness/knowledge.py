@@ -46,7 +46,7 @@ def items_for(eng: "Engine", character: str, before: int | None = None) -> list[
             event: int | None, fact_id: int | None = None, canon: bool = False) -> None:
         out.append(Item(str(len(out) + 1), kind, text, how, source, when, event, fact_id, canon))
 
-    mem = eng.deriver.derive(character, eng.scene.time)
+    mem = eng.deriver.derive(character, eng.scene.time, debug=True)
     for it in mem.knows:
         f, k = it.fact, it.knower
         if before is not None and k.event_id is not None and k.event_id >= before:

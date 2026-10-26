@@ -45,7 +45,7 @@ class MemoryDeriver:
         self.facts, self.intents, self.live = facts, intents, live
         self.attitudes, self.notices, self.belief = attitudes, notices, belief
 
-    def derive(self, character: str, at_time: int) -> CharacterMemory:
+    def derive(self, character: str, at_time: int, debug: bool = False) -> CharacterMemory:
         mem = CharacterMemory(character)
         for f in self.facts.visible_to(character, at_time):
             k = next(k for k in f.knowers if k.character == character)
@@ -55,8 +55,9 @@ class MemoryDeriver:
             if f is not None:
                 mem.attitudes.append((a, f))
         snap = self.live.snapshot()  # observability is derived (a closed container hides)
+        # the character's own view: what it is not aware of is absent (the debug view keeps it)
         mem.state = [replace(e, observable=items.is_observable(e, snap))
-                     for e in snap.get(character, {}).values()]
+                     for e in self.live.of(character, viewer=character, debug=debug)]
         mem.intents = self.intents.pending(character)
         for ev, fid in self.notices.pending(character):
             f = self.facts.get(fid)
@@ -96,7 +97,7 @@ class MemoryWriter:
         event_ids: set[int] = set()
         places: set[str] = set()
         for cid in self.profiles:
-            mem = self.deriver.derive(cid, at_time)
+            mem = self.deriver.derive(cid, at_time, debug=True)  # dev files: all
             text = self._character_md(mem, event_ids, places)
             p = self.root / "characters" / f"{slug(cid)}.md"
             p.write_text(text)
