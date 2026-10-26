@@ -21,7 +21,7 @@ No stats, no dice, no success tables; one judgment per situation. Code owns stat
 
 Goals: the campaign above is playable end to end: start, backpack, reading the saga file, Yennefer noticing his Source, devices with charge, recorded data, growth from practice.
 Non-goals: local models for devices (deferred, the provider stays swappable); images; voice; ingesting the whole saga; new rules for combat or magic power.
-Anti-goals: any number that decides an outcome; devices voiced by the narrator; the character knowing anything from the file before he reads it; any sexual content involving Цірі or any other minor, even by drift.
+Anti-goals: any number that decides an outcome; devices voiced by the narrator; the character knowing anything from the file before he reads it; any feature the user did not ask for (no content-check machinery).
 
 ## What the code looks like today (verified 2026-10-26)
 
@@ -42,7 +42,6 @@ Anti-goals: any number that decides an outcome; devices voiced by the narrator; 
 2. **Location as state.** A state element may have `location`: `worn`, `in_hand`, `in:<container id>`, `on:<place>`. New op `move`. Observability is derived, not stored: worn and in-hand items are observable; an item inside a closed container is hidden from everyone but the owner; opening a container (an event) makes its contents observable under normal perception and runs the usual `_observe`.
 3. **Self-awareness.** Each element has `aware` (default true). The player panel and the player-character context show only aware elements. Unaware elements stay in the engine and in other characters' perception. An event `realize` flips `aware` (the channel is recorded: told by someone, instrument reading, spontaneous manifestation). Debug view shows everything.
 4. **Timed effects.** An element may carry `until` (in-world time). `World.tick` and time skips remove or change expired elements by an ordinary state event, so rollback works. Used by charge, wear, spells, and the Source's manifestations.
-5. **Minors rule (hard).** Characters can carry `minor: true` (set for Цірі in her canon portrait and for any generated character the judge marks under 18). Any player-visible text composed while a minor character is present or mentioned (narration, NPC lines, outcome prose, assistant suggestions) passes one yes/no judgment, "does this contain sexual content involving a minor", before delivery; a "yes" is rejected and regenerated; if every retry fails the text is replaced by a neutral fallback sentence. This is code, not a prompt rule, and applies to every campaign. It is added next to `canon_guard.check` in `_narrate` and in `_npc_line`, and in the other composers listed in the code map.
 
 ### D1. Explicit starting inventory (brief item 1)
 
@@ -88,9 +87,9 @@ Practice records: what was trained, with whom, how long, how hard, in-world time
 
 ### D7. Canon coverage and the start (brief item 8; scope per the user: what main characters and events need)
 
-- **Ingest** the part of «Кров ельфів» (lines 15505–22101 of `data/witcher_books.txt`) that main characters and events need: Yennefer's journey to Ellander, the temple, Неннеке, Цірі at the temple. The builder reads the table of chapters, proposes the exact line range and shows it to the user before the run. The existing ingestor takes a line range and chapter list (`harness/canon/ingest.py:29`) and gets them as arguments. The run is paid through OpenRouter on a cheap model; the cost estimate comes from the pilot reports and the user confirms before it runs.
+- **Ingest** the part of «Кров ельфів» (lines 15505–22101 of `data/witcher_books.txt`) that main characters and events need: Yennefer's journey to Ellander, the temple, Неннеке, Цірі at the temple. The builder reads the table of chapters, proposes the exact line range and shows it to the user before the run. The existing ingestor takes a line range and chapter list (`harness/canon/ingest.py:29`) and gets them as arguments. The extraction is done by Claude Code subagents in development, not by API calls: each reads a window of the text and writes the records as JSON in the same schema the ingestor uses; the existing code validates against the closed vocabularies, drops what fails and loads the store. No OpenRouter spend. Work stops at about 90% of the 5-hour usage window.
 - **Glossary** entries for Неннеке, Мелітеле, Елландер.
-- **Portraits** (hand-written, in `worlds/witcher/portraits/`): `yennefer_temple` (the existing one is Rinde), `nenneke`, `ciri_temple` (with `minor: true`), temple people as needed.
+- **Portraits** (hand-written, in `worlds/witcher/portraits/`): `yennefer_temple` (the existing one is Rinde), `nenneke`, `ciri_temple`, temple people as needed.
 - **Places:** the road to Ellander, the temple and its grounds, in the places data for this start.
 - **Start point** `ellander_road` in `worlds/witcher/start_points.yaml`: Yennefer on the road, the stranger falling at her feet. `builder: vizima` is generalised to a builder that takes any canon place; the package supplies the player. Canon follows by the existing rule: canon events happen while their preconditions hold and are re-judged when he changes them.
 
@@ -98,7 +97,7 @@ Practice records: what was trained, with whom, how long, how hard, in-world time
 
 The campaign cannot start without D0, D1, D2 and D7, so:
 
-- **Plan 1:** D0, D1, D2, D7, plus the magic-sense observation path of D5 (so Yennefer notices the Source in the first scene). After it the campaign is playable; devices are items without a log. The D7 ingestion is the last task of the plan and waits for the user's cost OK; every other task runs unattended.
+- **Plan 1:** D0, D1, D2, D7, plus the magic-sense observation path of D5 (so Yennefer notices the Source in the first scene). After it the campaign is playable; devices are items without a log. The D7 ingestion is the last task of the plan.
 - **Plan 2:** the rest of D5 (manifestation, masking, medallion), D3 (log, output, charge, wear).
 - **Plan 3:** D4, D6.
 
@@ -107,19 +106,17 @@ Each plan follows the usual workflow: worktree, tasks with reviewers, final revi
 ## Rulings after the builder check (lead's calls unless marked)
 
 - **Old saves replay unchanged.** New fields (`id`, `location`, `aware`, `until`) are optional in the existing `STATE_CHANGE` payload with defaults (no id, no location, aware true, no expiry). A test replays a recorded session before and after.
-- **Minors check trigger.** It runs only when a minor character is in the scene or a minor's name or alias appears in the text (match from canon aliases and the `minor` flag, no model call for the match), then one yes/no judgment. Retries use the existing `check_retries`; on failure a neutral fallback sentence replaces the text. Composers covered: `_narrate`, `_npc_line`, `_narrate_empty`, `_resolution_paragraph`, the assistant, device output. It does not check the player's own input. It applies to all campaigns.
 - **New items.** Code mints ids. An extractor `add` of new text creates an item with a fresh id; the dropped-when-unresolved rule applies only to `remove`, `move`, `reveal`, `hide`. Crafted items, datasets, recordings and trained models are created the same way.
 - **The self-awareness filter lives at retrieval**, in the one function that renders the character's state for any composer (`LiveState.of` with a viewer), so the panel, the character context, the assistant and outcome prose all get the filtered view. Only the debug view asks for everything.
 - **`until` changes run in `World.tick`**, which also drives time skips. A change to an element another character can perceive goes through the ordinary observation path.
 - **The saga file** is the whole `witcher_books.txt`, spoilers included, by the user's intent: the engine tracks only what he has read. A read result is shown to the player as what he read; each stored record is capped at 600 characters and one read returns at most 2 000, so records stay summaries close to the text rather than copies of chapters. `data/` stays out of git.
 - **Builder generalisation** of `builder: vizima` keeps the old builder working and adds a general one beside it.
-- **Ingestion cost ceiling:** the user's decision, pending.
+- **Ingestion costs no API money** (user's decision 2026-10-26): see D7.
 
 ## Calls made by the lead (not by the user)
 
 - Item ids and the `move` op; the cap of 80 items.
 - Charge as five closed words.
-- The minors rule applies to every campaign, as a code check, not a prompt line.
 - Reader model and term expansion are cheap typed calls; models chosen by a bake-off from the live catalog at build time and recorded in `docs/tools.md`.
 - Glossary spellings win over the user's spellings.
 
