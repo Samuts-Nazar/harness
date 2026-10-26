@@ -118,11 +118,15 @@ class Ingestor:
             return json.loads((self.raw_dir / f"{name}.json").read_text())
         return None
 
-    def _read_json(self, name: str) -> dict[str, Any] | None:
-        """A subagent-written file in json_dir; None (and counted) when it is unreadable or not an object."""
+    def _read_json(self, name: str, lists: tuple[str, ...]) -> dict[str, Any] | None:
+        """A subagent-written file in json_dir; None (and counted) when it is unreadable, not an object, or
+        one of its top-level `lists` fields is present but not a list (null counts as absent)."""
         assert self.json_dir is not None
         try:
             obj = extract.parse_json((self.json_dir / name).read_text(encoding="utf-8"))
+            bad = [k for k in lists if obj.get(k) is not None and not isinstance(obj[k], list)]
+            if bad:
+                raise ValueError(f"field(s) {', '.join(bad)} must be lists")
         except (OSError, ValueError) as e:  # JSONDecodeError is a ValueError
             self.json_files["invalid"].append(name)
             self._drop("file", "invalid json", file=name, err=str(e)[:160])
@@ -155,7 +159,7 @@ class Ingestor:
             if not names:
                 self.json_files["missing"].append("entities*.json")
             for n in names:
-                for e in (self._read_json(n) or {}).get("entities") or []:
+                for e in (self._read_json(n, ("entities",)) or {}).get("entities") or []:
                     self._take_entity(e, n)
             return
         text = "\n".join(f"[L{p.line}] {p.text}" for p in paras)
@@ -172,7 +176,7 @@ class Ingestor:
         if self.json_dir:
             obj = {}
             if (self.json_dir / "timeline.json").exists():
-                obj = self._read_json("timeline.json") or {}
+                obj = self._read_json("timeline.json", ("scenes",)) or {}
             else:
                 self.json_files["missing"].append("timeline.json")
         else:
@@ -246,7 +250,7 @@ class Ingestor:
         out: list[dict[str, Any]] = []
         prior: list[str] = []
         for wi, (a, b, name) in enumerate(files):
-            obj = self._read_json(name)
+            obj = self._read_json(name, ("new_entities", "events"))
             if obj is None:
                 self.stats["window_failures"] += 1
                 continue

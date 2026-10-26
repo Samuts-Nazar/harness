@@ -39,6 +39,8 @@ commas.
   `uncovered_lines`.
 - All `entities*.json` files are merged, and so are all `new_entities`. When the same id appears
   twice, the first one loaded wins, and only its `aliases` are merged.
+- `entities`, `new_entities`, `events` and `scenes` must be JSON arrays. Any other type makes the
+  whole file invalid.
 - A missing file or a file that does not parse is listed in the report (`json_files.missing` /
   `json_files.invalid`). The loader does not crash, but everything in that file is lost.
 
@@ -67,8 +69,10 @@ people.
  "member_of": [], "first_line": 102}
 ```
 
-- `type`: `person | collective | place | item | creature`. It must match the prefix; if it does
-  not, the prefix wins.
+- `type`: `person | collective | place | item | creature`. Keep it consistent with the prefix
+  (`char`→person, `coll`→collective, `place`→place, `item`→item, `creature`→creature) or omit it.
+  The loader derives the type from the prefix, **but a valid declared `type` overrides it**: a
+  `char:` id with `"type": "place"` is stored as a place. A mismatch is never what you want.
 - `name`: nominative case. If the name is in `worlds/witcher/glossary.json`, use its `canonical`
   form (for example `Ґеральт` with Ґ, `Йеннефер`, `Цірі`). Otherwise use the spelling in the text.
   For an unnamed entity, give a short Ukrainian description (`перевізник`).

@@ -129,3 +129,25 @@ def test_parse_lines_and_chapters():
     assert ingest.parse_chapters("15505:Кров, 16000:Розділ 2") == [(15505, "Кров"), (16000, "Розділ 2")]
     with pytest.raises(ValueError):
         ingest.parse_lines("9-3")
+
+
+def test_from_json_wrong_field_types_count_as_invalid(tmp_path, monkeypatch):
+    src = tmp_path / "book.txt"
+    src.write_text(TEXT, encoding="utf-8")
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    (raw / "entities.json").write_text(json.dumps({"entities": 5}), encoding="utf-8")
+    (raw / "entities_3-5.json").write_text(json.dumps(ENT, ensure_ascii=False), encoding="utf-8")
+    (raw / "window_3-5.json").write_text(json.dumps({"new_entities": [], "events": {}}), encoding="utf-8")
+    (raw / "window_6-9.json").write_text(json.dumps({"new_entities": "x", "events": []}), encoding="utf-8")
+    (raw / "window_10-12.json").write_text(json.dumps([1, 2]), encoding="utf-8")   # not an object
+    (raw / "timeline.json").write_text(json.dumps({"scenes": "nope"}), encoding="utf-8")
+    monkeypatch.setattr(extract, "ask_json", _no_model)
+    ing = ingest.Ingestor(None, "subagent-json", src, tmp_path / "x.db", first=3, last=9,
+                          chapters=[(3, "Перша"), (7, "Друга")], json_dir=raw, v2=True, log=lambda *_: None)
+    rep = ing.run()
+    assert sorted(rep["json_files"]["invalid"]) == ["entities.json", "timeline.json", "window_10-12.json",
+                                                    "window_3-5.json", "window_6-9.json"]
+    assert rep["json_files"]["read"] == 1
+    assert rep["dropped_by_reason"]["file: invalid json"] == 5
+    assert rep["counts"]["entity"] == 3 and rep["counts"]["canon_event"] == 0
