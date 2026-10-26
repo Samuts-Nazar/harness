@@ -31,7 +31,8 @@ from typing import Any, Callable
 import yaml
 
 from harness.glossary import Glossary
-from harness.models import EQUIPMENT, INVENTORY, PLAYER, CharacterProfile, Scene
+from harness.state import StateChange
+from harness.models import EQUIPMENT, INTERNAL, INVENTORY, PLAYER, CharacterProfile, Scene
 from harness.npcgen import NORTHERN, infer_sex, pick_name
 from harness.pipeline import Engine
 from harness.world import pilot
@@ -79,13 +80,14 @@ CHOICE_UK = {
 TOP = ("version", "world", "player", "start", "canon", "tone", "pace", "limits", "outcomes",
        "dialogue", "assistant", "inks", "notes", "title", "pitch")
 PLAYER_KEYS = ("name", "description", "appearance", "traits", "knows", "unbounded", "hidden",
-               "inventory")
+               "inventory", "latent")
 ITEM_KEYS = ("name", "where", "condition", "notes", "container", "open", "hidden", "content",
-             "power")
+             "power", "grants_sense")
+SENSES = ("magic",)  # what an item may grant, and a person may have besides sight
 MAX_ITEMS, MAX_ITEM_NAME, MAX_ITEM_NOTES, MAX_ITEM_CONTENT = 80, 80, 400, 4_000
 START_KEYS = ("canon", "place", "day", "time", "situation", "who_is_here")
 PERSON_KEYS = ("name", "role", "appearance", "attitude", "goal", "knows_player", "portrait",
-               "portrait_text")
+               "portrait_text", "senses")
 PACKAGES = ROOT / "worlds" / "witcher" / "packages"  # bundled game packages (the new-game list)
 # an `attitude` that reads as friendly: a person who knows the player starts as an ally
 # whole words only, so «другий», «подруга», «порада», «недружня», «невірна» do not count
@@ -348,6 +350,14 @@ def _people(c: _Checker, v: Any) -> list[dict[str, Any]] | None:
                 "цю людину, доки не дізнається ім'я.",
                 "Скоротіть до 3–7 слів (наприклад, «жінка в червоній хустці»); решту можна "
                 "перенести в attitude або notes."))
+        got = c.texts(f"{pf}.senses", p.get("senses")) or []
+        senses = [s.casefold() for s in got]
+        for s in senses:
+            if s not in SENSES:
+                c.err(f"{pf}.senses", f"Невідоме чуття «{_show(s)}».",
+                      "Можна лише senses: [magic] (зір є в усіх).")
+        if senses and all(s in SENSES for s in senses):
+            person["senses"] = list(dict.fromkeys(senses))
         kp = c.flag(f"{pf}.knows_player", p.get("knows_player"))
         person["knows_player"] = bool(kp)
         pid = c.text(f"{pf}.portrait", p.get("portrait"))
@@ -416,6 +426,12 @@ def _inventory(c: "_Checker", v: Any) -> list[dict[str, Any]] | None:
             c.err(f"{f}.notes", f"Нотатки задовгі ({len(e['notes'])} знаків; можна до "
                   f"{MAX_ITEM_NOTES}).", "Скоротіть; великий текст винесіть у content.")
         e["power"] = c.text(f"{f}.power", raw.get("power"))
+        gs = c.text(f"{f}.grants_sense", raw.get("grants_sense"))
+        if gs and gs.casefold() not in SENSES:
+            c.err(f"{f}.grants_sense", f"Невідоме чуття «{_show(gs)}».",
+                  "Річ може дати лише чуття magic (grants_sense: magic) тому, хто її носить.")
+            gs = None
+        e["grants_sense"] = gs.casefold() if gs else None
         for k in ("container", "open", "hidden"):
             e[k] = c.flag(f"{f}.{k}", raw.get(k))
         e["container"], e["open"] = bool(e["container"]), bool(e["open"])
@@ -544,7 +560,7 @@ def parse(text: str) -> Package:
                                     "Скоротіть опис або винесіть найважливіше на початок."))
         for k in ("name", "appearance"):
             player[k] = c.text(f"player.{k}", pl.get(k))
-        for k in ("traits", "knows", "hidden"):
+        for k in ("traits", "knows", "hidden", "latent"):
             player[k] = c.texts(f"player.{k}", pl.get(k))
         player["unbounded"] = c.flag("player.unbounded", pl.get("unbounded"))
         inv = _inventory(c, pl.get("inventory"))
@@ -865,6 +881,11 @@ def _build_people(eng: Engine, people: list[dict[str, Any]]) -> tuple[list[str],
             f"{spec.name.split()[0]}, {spec.occupation}{age}.", q.get("attitude") and f"Toward the newcomer: {q['attitude']}.",
             q.get("goal") and f"Wants: {q['goal']}.") if x)
         eng.add_npc(spec, description=desc, appearance=look)
+        if q.get("senses"):  # stored with the profile: survives reopen and replay
+            eng.profiles[spec.id] = replace(eng.profiles[spec.id],
+                                            senses=("sight", *q["senses"]))
+            if eng._owns_conn:
+                eng._save_setup()
         ids.append(spec.id)
         goals[spec.id] = q.get("goal") or q.get("attitude") or f"go about the day as a {spec.occupation}"
         if q.get("knows_player"):
@@ -972,6 +993,10 @@ def open_package(stack: Stack, pkg: Package, *, root: Path | str = CAMPAIGNS,
             seed_player_inventory(eng, inventory)
         else:
             seed_player_state(eng, traits, base=())
+        for text in d["player"].get("latent", []):
+            # a power the character does not know of: only the magic sense perceives it
+            eng.apply_state_change(StateChange(PLAYER, INTERNAL, "add", text, True, aware=False,
+                                               channel="magic"))
 
     filled = {"name": pname} if not d["player"].get("name") else {}
     if not free:

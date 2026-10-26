@@ -102,6 +102,14 @@ _OBSERVED = {  # how an observer sees a newly observable element
     "internal": "{who} visibly shows {item}",
     "appearance": "{who} has {item}",
 }
+# the same for an element only the magic sense perceives (an aura, a spell, a Source)
+_OBSERVED_MAGIC = "With the magic sense, {who} is perceived to carry {item}"
+
+
+def _observed_text(el: Element, who: str, cat: str | None = None, item: str | None = None) -> str:
+    channel = getattr(el, "channel", "sight")
+    tpl = _OBSERVED_MAGIC if channel != "sight" else _OBSERVED[cat or el.category]
+    return tpl.format(who=who, item=item or el.item)
 
 
 @dataclass
@@ -1171,11 +1179,34 @@ class Engine:
         # decides what is perceived: whatever became observable is observed once
         if ch.op in ("add", "reveal", "move", "open"):
             for el in items.newly_observable(before, after, ch.character):
-                self._observe(_OBSERVED[el.category].format(who=who, item=el.item), observers, ev,
+                self._observe(_observed_text(el, who), self._perceivers(el, observers), ev,
                               defer=defer)
         elif ch.op == "remove" and was and items.is_observable(was, before):
             self._observe(f"{who} no longer has {ch.item}", observers, ev, defer=defer)
         return ev
+
+    def senses_of(self, character: str) -> frozenset[str]:
+        """What the character perceives with: the profile's senses (sight by default), the
+        portrait's, and any sense granted by an item they wear (`grants_sense` in inventory_meta)."""
+        prof = self.profiles.get(character)
+        got = set(prof.senses if prof else ("sight",))
+        port = self.ctx.portraits.get(prof.portrait) if prof and prof.portrait else None
+        got |= set(getattr(port, "senses", ()))
+        worn = [e.id for e in self.live.snapshot().get(character, {}).values()
+                if isinstance(e, Element) and e.id and e.location == "worn"]
+        if worn:
+            meta = readable.inventory_meta(self)
+            got |= {m["grants_sense"] for i in worn
+                    if isinstance(m := meta.get(i) or {}, dict) and m.get("grants_sense")}
+        return frozenset(got)
+
+    def _perceivers(self, el: Any, observers: Sequence[str]) -> list[str]:
+        """The observers who can perceive the element: a sight element is perceived as ever, a
+        magic one only by those with the magic sense."""
+        channel = getattr(el, "channel", "sight")
+        if channel == "sight":
+            return list(observers)
+        return [o for o in observers if channel in self.senses_of(o)]
 
     def _observe(self, text: str, observers: Sequence[str], cause: Event, *,
                  defer: list[_Job] | None = None) -> int | None:
@@ -1271,13 +1302,13 @@ class Engine:
         snap = self.live.snapshot()
         for (cat, item), obs in snap.get(character, {}).items():
             if items.is_observable(obs, snap):
-                self._observe(_OBSERVED[cat].format(who=self.ctx.name(character), item=item),
-                              others, ev)
+                self._observe(_observed_text(obs, self.ctx.name(character), cat, item),
+                              self._perceivers(obs, others), ev)
         for other in others:
             for (cat, item), obs in snap.get(other, {}).items():
                 if items.is_observable(obs, snap):
-                    self._observe(_OBSERVED[cat].format(who=self.ctx.name(other), item=item),
-                                  [character], ev)
+                    self._observe(_observed_text(obs, self.ctx.name(other), cat, item),
+                                  self._perceivers(obs, [character]), ev)
         self.refresh_memory()
         return ev
 
@@ -2856,7 +2887,7 @@ class Engine:
         with self.conn:
             for k, v in {
                 "profiles": [[p.id, p.name, p.description, p.manner, p.appearance, p.core, p.sex,
-                              p.portrait] for p in self.profiles.values()],
+                              p.portrait, list(p.senses)] for p in self.profiles.values()],
                 "settings": {"output_language": self.output_language,
                              "record_language": self.record_language,
                              "narration": self.narration,
@@ -2908,7 +2939,8 @@ class Engine:
             raise ValueError(f"campaign {name!r} has no saved setup")
         sc = meta["scene"]
         scene = Scene(sc["location"], tuple(sc["present"]), sc["time"], tuple(sc["outside"]))
-        profiles = [CharacterProfile(*p) for p in meta["profiles"]]
+        profiles = [CharacterProfile(*p[:8], *([tuple(p[8])] if len(p) > 8 else []))
+                    for p in meta["profiles"]]
         for k, v in meta.get("settings", {}).items():
             kw.setdefault(k, v)
         eng = cls(provider, kw.pop("profiles", profiles), scene, conn=conn, campaign_dir=d, **kw)

@@ -67,6 +67,7 @@ class Portrait:
     voice: str
     never: str
     relations: dict[str, str]  # other character id -> rung (static NPC->NPC)
+    senses: tuple[str, ...] = ("sight",)  # `senses: [magic]` adds the magic sense to whoever plays it
 
 
 def _req(path, d, key, types, where=""):
@@ -144,6 +145,13 @@ def parse_portrait(d: object, path: Path | str = "<portrait>") -> Portrait:
         raise PortraitError(path, "relations", "must be a mapping")
     for k, r in rel.items():
         _rung(path, r, f"relations.{k}")
+    senses = ("sight",)
+    if d.get("senses") is not None:
+        got = _str_list(path, d["senses"], "senses")
+        bad = [x for x in got if x not in ("sight", "magic")]
+        if bad:
+            raise PortraitError(path, "senses", f"unknown sense {bad[0]!r}")
+        senses = tuple(dict.fromkeys(("sight", *got)))
     return Portrait(
         id=_req(path, d, "id", str), character=_req(path, d, "character", str),
         name=_req(path, d, "name", str), phase=_req(path, d, "phase", str),
@@ -153,7 +161,7 @@ def parse_portrait(d: object, path: Path | str = "<portrait>") -> Portrait:
         hidden=_req(path, d, "hidden", str),
         leaks=_str_list(path, _req(path, d, "leaks", list), "leaks"),
         voice=_req(path, d, "voice", str), never=_req(path, d, "never", str),
-        relations=dict(rel),
+        relations=dict(rel), senses=senses,
     )
 
 

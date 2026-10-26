@@ -405,8 +405,8 @@ def seed_player_inventory(eng: Engine, items_: list[dict[str, Any]]) -> dict[str
     for i, e in enumerate(items_):
         if e.get("container") and e.get("open"):
             eng.apply_state_change(StateChange(PLAYER, EQUIPMENT, "open", e["name"]))
-    meta = {ids[i]: {k: e[k] for k in ("condition", "notes", "content", "power") if e.get(k)}
-            for i, e in enumerate(items_)}
+    keys = ("condition", "notes", "content", "power", "grants_sense")
+    meta = {ids[i]: {k: e[k] for k in keys if e.get(k)} for i, e in enumerate(items_)}
     with eng.conn:
         eng.conn.execute("INSERT OR REPLACE INTO campaign_meta (key, value) VALUES (?,?)",
                          ("inventory_meta", json.dumps(meta, ensure_ascii=False)))
