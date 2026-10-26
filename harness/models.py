@@ -29,7 +29,7 @@ PORTRAIT_LEAK = "portrait_leak"  # a hidden-layer leak a portrait NPC's line car
 INJURY, CLOTHING, INVENTORY, EQUIPMENT, INTERNAL, APPEARANCE = (
     "injury", "clothing", "inventory", "equipment", "internal", "appearance")
 STATE_CATEGORIES = (INJURY, CLOTHING, INVENTORY, EQUIPMENT, INTERNAL, APPEARANCE)
-OPS = ("add", "remove", "reveal", "hide")
+OPS = ("add", "remove", "reveal", "hide", "move", "realize")
 
 # How a character came to know a fact
 WITNESSED = "witnessed"
