@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator
 
+from harness import items
 from harness.decisions import full_role
 from harness.glossary import Glossary
 from harness.models import (
@@ -304,17 +305,18 @@ INN_STATE = ((EQUIPMENT, "steel sword", True), (INJURY, "old scar under the shir
 
 
 def seed_player_state(eng: Engine, traits: Traits | None,
-                      base: tuple[tuple[str, str, bool], ...] = INN_STATE
-                      ) -> list[tuple[str, str, bool]]:
+                      base: tuple[tuple[str, str, bool], ...] = INN_STATE,
+                      skip: tuple[str, ...] = ()) -> list[tuple[str, str, bool]]:
     """The player character's live state at the start: `base` (the inn scene's sword and scar;
     a game package gives none), plus what the character file says (observable and hidden).
     Observable items are perceived by the NPCs present when the character enters the scene
     (`enter_scene`); whether one reacts is the salience judgment's call. Returns what was
-    applied."""
+    applied. `skip` drops those categories of the character file's items (a package with an
+    explicit inventory gives its own equipment and inventory)."""
     wanted: list[tuple[str, str, bool]] = list(base)
     if traits:
-        wanted += [(c, i, c != INTERNAL) for c, i in traits.observable]
-        wanted += [(c, i, False) for c, i in traits.hidden]
+        wanted += [(c, i, c != INTERNAL) for c, i in traits.observable if c not in skip]
+        wanted += [(c, i, False) for c, i in traits.hidden if c not in skip]
     done: list[tuple[str, str, bool]] = []
     for cat, item, obs in wanted:
         try:
@@ -323,6 +325,87 @@ def seed_player_state(eng: Engine, traits: Traits | None,
             continue  # the same item twice
         done.append((cat, item, obs))
     return done
+
+
+# -- an explicit starting inventory (game packages) -------------------------------------------
+
+_WORN = {"worn", "на тілі", "одягнене", "одягнено"}
+_HAND = {"in hand", "in_hand", "в руці", "у руці", "в руках", "у руках"}
+_POCKET = {"pocket", "кишеня", "в кишені", "у кишені"}
+
+
+def classify_where(where: str) -> str | None:
+    """`worn`, `in_hand` or `pocket` for the built-in places of an inventory entry, else None
+    (then it must name a container entry)."""
+    w = " ".join((where or "worn").casefold().split())
+    if w in _WORN:
+        return "worn"
+    if w in _HAND:
+        return "in_hand"
+    if w in _POCKET:
+        return "pocket"
+    return None
+
+
+def _find_container(where: str, entries: list[dict]) -> int | None:
+    """Index of the container entry that `where` names (exact name, else the one container whose
+    name contains it or is contained in it), or None."""
+    w = " ".join(where.casefold().split())
+    boxes = [(i, " ".join(e["name"].casefold().split())) for i, e in enumerate(entries)
+             if e.get("container")]
+    for i, n in boxes:
+        if n == w:
+            return i
+    part = [i for i, n in boxes if w and (w in n or n in w)]
+    return part[0] if len(part) == 1 else None
+
+
+def seed_player_inventory(eng: Engine, items_: list[dict[str, Any]]) -> dict[str, str]:
+    """Give the player the package's explicit inventory: mint ids, set locations, add through
+    `apply_state_change` (containers before what is inside them), then open the open containers.
+    Condition, notes, content and power are owner-known: they are not part of the item text
+    (so nobody perceives them) but stored in campaign_meta `inventory_meta` by item id.
+    Returns name -> id."""
+    taken = items.all_ids(eng.live.snapshot())
+    ids: list[str] = []
+    for e in items_:
+        ids.append(items.mint_id(e["name"], taken))
+        taken.add(ids[-1])
+    parent: dict[int, int | None] = {}
+    place: dict[int, str] = {}
+    for i, e in enumerate(items_):
+        kind = classify_where(e.get("where", ""))
+        box = None if kind else _find_container(e.get("where", ""), items_)
+        if kind is None and box is None:
+            raise StateError(f"unknown place {e.get('where')!r} for {e['name']!r}")
+        parent[i] = box
+        place[i] = {"worn": "worn", "in_hand": "in_hand", "pocket": "worn"}.get(kind or "", "")
+        if box is not None:
+            place[i] = items.IN + ids[box]
+
+    def depth(i: int) -> int:
+        n, seen = 0, set()
+        while parent[i] is not None and i not in seen:
+            seen.add(i)
+            i, n = parent[i], n + 1
+        return n
+
+    for i in sorted(range(len(items_)), key=lambda k: (depth(k), k)):
+        e = items_[i]
+        hidden = e.get("hidden")
+        if hidden is None:
+            hidden = classify_where(e.get("where", "")) == "pocket"
+        eng.apply_state_change(StateChange(PLAYER, EQUIPMENT, "add", e["name"], not hidden,
+                                           id=ids[i], location=place[i]))
+    for i, e in enumerate(items_):
+        if e.get("container") and e.get("open"):
+            eng.apply_state_change(StateChange(PLAYER, EQUIPMENT, "open", e["name"]))
+    meta = {ids[i]: {k: e[k] for k in ("condition", "notes", "content", "power") if e.get(k)}
+            for i, e in enumerate(items_)}
+    with eng.conn:
+        eng.conn.execute("INSERT OR REPLACE INTO campaign_meta (key, value) VALUES (?,?)",
+                         ("inventory_meta", json.dumps(meta, ensure_ascii=False)))
+    return {e["name"]: ids[i] for i, e in enumerate(items_)}
 
 
 def _pointer(root: Path) -> Path:

@@ -31,7 +31,7 @@ from typing import Any, Callable
 import yaml
 
 from harness.glossary import Glossary
-from harness.models import PLAYER, CharacterProfile, Scene
+from harness.models import EQUIPMENT, INVENTORY, PLAYER, CharacterProfile, Scene
 from harness.npcgen import NORTHERN, infer_sex, pick_name
 from harness.pipeline import Engine
 from harness.world import pilot
@@ -40,7 +40,8 @@ from harness.world.world import World
 
 from . import vizima as viz
 from .campaigns import (
-    CAMPAIGNS, Campaign, Recorder, Stack, Translator, _pointer, seed_player_state,
+    CAMPAIGNS, Campaign, Recorder, Stack, Translator, _pointer, seed_player_inventory,
+    seed_player_state,
 )
 from .character import MAX_FILE, derive_traits
 from .inks import INK_RE
@@ -77,7 +78,11 @@ CHOICE_UK = {
 }
 TOP = ("version", "world", "player", "start", "canon", "tone", "pace", "limits", "outcomes",
        "dialogue", "assistant", "inks", "notes", "title", "pitch")
-PLAYER_KEYS = ("name", "description", "appearance", "traits", "knows", "unbounded", "hidden")
+PLAYER_KEYS = ("name", "description", "appearance", "traits", "knows", "unbounded", "hidden",
+               "inventory")
+ITEM_KEYS = ("name", "where", "condition", "notes", "container", "open", "hidden", "content",
+             "power")
+MAX_ITEMS, MAX_ITEM_NAME, MAX_ITEM_NOTES, MAX_ITEM_CONTENT = 80, 80, 400, 4_000
 START_KEYS = ("canon", "place", "day", "time", "situation", "who_is_here")
 PERSON_KEYS = ("name", "role", "appearance", "attitude", "goal", "knows_player", "portrait",
                "portrait_text")
@@ -377,6 +382,104 @@ def _people(c: _Checker, v: Any) -> list[dict[str, Any]] | None:
     return out
 
 
+def _inventory(c: "_Checker", v: Any) -> list[dict[str, Any]] | None:
+    """The explicit starting inventory: a list of entries, validated (Ukrainian issues)."""
+    if v is None:
+        return None
+    if not isinstance(v, list):
+        c.err("player.inventory", "inventory має бути списком речей.",
+              "Запишіть кожну річ окремим пунктом «- name: ...» (див. інструкцію).")
+        return None
+    if len(v) > MAX_ITEMS:
+        c.err("player.inventory", f"Забагато речей ({len(v)}): можна до {MAX_ITEMS}.",
+              "Залиште найважливіше; дрібниці об'єднайте («набір інструментів»).")
+        return None
+    from .campaigns import _find_container, classify_where
+    out: list[dict[str, Any]] = []
+    for n, raw in enumerate(v, 1):
+        f = f"player.inventory[{n}]"
+        if not isinstance(raw, dict):
+            c.err(f, "Річ має бути набором полів (name, where...).",
+                  "Запишіть: - name: ліхтарик")
+            continue
+        raw = {str(k): x for k, x in raw.items()}
+        c.unknown(f, raw, ITEM_KEYS)
+        e: dict[str, Any] = {}
+        e["name"] = c.text(f"{f}.name", raw.get("name"), required=True)
+        if e["name"] and len(e["name"]) > MAX_ITEM_NAME:
+            c.err(f"{f}.name", f"Назва задовга ({len(e['name'])} знаків; можна до "
+                  f"{MAX_ITEM_NAME}).", "Залиште коротку назву, подробиці — в notes.")
+        e["where"] = c.text(f"{f}.where", raw.get("where")) or "worn"
+        e["condition"] = c.text(f"{f}.condition", raw.get("condition"))
+        e["notes"] = c.text(f"{f}.notes", raw.get("notes"))
+        if e["notes"] and len(e["notes"]) > MAX_ITEM_NOTES:
+            c.err(f"{f}.notes", f"Нотатки задовгі ({len(e['notes'])} знаків; можна до "
+                  f"{MAX_ITEM_NOTES}).", "Скоротіть; великий текст винесіть у content.")
+        e["power"] = c.text(f"{f}.power", raw.get("power"))
+        for k in ("container", "open", "hidden"):
+            e[k] = c.flag(f"{f}.{k}", raw.get(k))
+        e["container"], e["open"] = bool(e["container"]), bool(e["open"])
+        if e["open"] and not e["container"]:
+            c.warnings.append(Issue(f"{f}.open", "open має сенс лише для контейнера.",
+                                    "Додайте container: true або приберіть open."))
+        content = raw.get("content")
+        if isinstance(content, dict):
+            content = {str(k): x for k, x in content.items()}
+            path = c.text(f"{f}.content.file", content.get("file"), required=True)
+            if path and (path.startswith(("/", "~")) or ".." in path.replace("\\", "/").split("/")):
+                c.err(f"{f}.content.file", "Шлях до файлу має бути відносним, без «..».",
+                      "Запишіть, наприклад: content: {file: notes/diary.txt}")
+                path = None
+            e["content"] = {"file": path} if path else None
+        else:
+            e["content"] = c.text(f"{f}.content", content)
+            if e["content"] and len(e["content"]) > MAX_ITEM_CONTENT:
+                c.err(f"{f}.content", f"Вміст задовгий ({len(e['content'])} знаків; можна до "
+                      f"{MAX_ITEM_CONTENT}).", "Скоротіть або винесіть у файл: content: {file: ...}")
+        out.append({k: x for k, x in e.items() if x is not None and x != ""})
+    names: dict[str, int] = {}
+    for n, e in enumerate(out, 1):
+        key = " ".join(str(e.get("name", "")).casefold().split())
+        if key in names:
+            c.err(f"player.inventory[{n}].name", f"Назва «{e['name']}» повторюється.",
+                  "Дайте речам різні назви (наприклад, «кабель USB-C» і «кабель живлення»): "
+                  "на назву посилається where.")
+        names[key] = n
+    boxes = [e for e in out if e.get("container") and e.get("name")]
+    parent: dict[int, int | None] = {}
+    for i, e in enumerate(out):
+        if not e.get("name"):
+            continue
+        where = e.get("where", "worn")
+        if classify_where(where):
+            parent[i] = None
+            continue
+        j = _find_container(where, out)
+        if j is None:
+            hint = ("; контейнери: " + ", ".join(b["name"] for b in boxes)) if boxes else ""
+            c.err(f"player.inventory[{i + 1}].where",
+                  f"Невідоме місце «{where}»: це не «worn», «in hand», «pocket» і не назва "
+                  "контейнера з цього списку.",
+                  "Напишіть worn (на тілі), in hand (в руці), pocket (кишеня) або точну назву "
+                  "речі з container: true" + hint + ".")
+        elif j == i:
+            c.err(f"player.inventory[{i + 1}].where", "Річ не може лежати сама в собі.",
+                  "Вкажіть інше місце.")
+        else:
+            parent[i] = j
+    for i in parent:
+        seen, cur = set(), i
+        while parent.get(cur) is not None:
+            if cur in seen:
+                c.err(f"player.inventory[{i + 1}].where",
+                      "Контейнери лежать один в одному по колу.", "Розірвіть коло: "
+                      "один із них має бути worn або in hand.")
+                break
+            seen.add(cur)
+            cur = parent[cur]
+    return out
+
+
 def parse(text: str) -> Package:
     """Validate a package. Raises PackageError with every problem found (Ukrainian)."""
     c = _Checker()
@@ -444,6 +547,9 @@ def parse(text: str) -> Package:
         for k in ("traits", "knows", "hidden"):
             player[k] = c.texts(f"player.{k}", pl.get(k))
         player["unbounded"] = c.flag("player.unbounded", pl.get("unbounded"))
+        inv = _inventory(c, pl.get("inventory"))
+        if inv:
+            player["inventory"] = inv
     d["player"] = {k: x for k, x in player.items() if x is not None}
 
     st = raw.get("start")
@@ -849,6 +955,9 @@ def open_package(stack: Stack, pkg: Package, *, root: Path | str = CAMPAIGNS,
         d["player"].get("appearance", ""), 60)
     player = _player_profile(pkg, pname, label)
     kw = viz.engine_kw(stack, d.get("dialogue"))
+    inventory = d["player"].get("inventory")
+    if inventory:
+        kw["item_ids"] = True  # an explicit inventory has ids, locations and containers
     free = "canon" not in st
 
     def setup(eng: Engine) -> None:
@@ -858,7 +967,11 @@ def open_package(stack: Stack, pkg: Package, *, root: Path | str = CAMPAIGNS,
             eng.facts.add_canon(f"{pname} вважає (з власного життя, може помилятися): {fact}",
                                 game_time=eng.scene.time,
                                 knowers=[(PLAYER, "told", "own life")])
-        seed_player_state(eng, traits, base=())
+        if inventory:  # the package's own list replaces the equipment/inventory of the sheet
+            seed_player_state(eng, traits, base=(), skip=(EQUIPMENT, INVENTORY))
+            seed_player_inventory(eng, inventory)
+        else:
+            seed_player_state(eng, traits, base=())
 
     filled = {"name": pname} if not d["player"].get("name") else {}
     if not free:
