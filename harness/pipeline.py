@@ -81,7 +81,7 @@ from .settings import (
 from .shape import (SPEECH_SHAPES, Shape, beat_wanted, fit_to_shape, sample_shape, shape_prior,
                     shape_weights, word_bounds)
 from . import items
-from .state import LiveState, StateChange, check_change, payload as change_payload
+from .state import Element, LiveState, StateChange, check_change, payload as change_payload
 from .streaming import InterruptHandle, StreamResult, run_stream
 from .style import (Style, beat_as_action, cut_foreign, foreign_runs, foreign_voice,
                     manner_messages, parse_manner, split_npc_output, tidy_speaker)
@@ -1228,6 +1228,29 @@ class Engine:
         ev = self._apply_change(ch, cause)
         self.refresh_memory()
         return ev
+
+    def expire_state(self, now: int) -> list[StateChange]:
+        """Remove every element whose `until` has passed (`until <= now`) as an ordinary
+        `remove` event, caused by the event that added it (so rolling back the add takes the
+        removal with it) and perceived like any other removal. Elements without `until` never
+        expire."""
+        due = [(c, el) for c, elems in self.live.snapshot().items() for el in elems.values()
+               if isinstance(el, Element) and el.until is not None and el.until <= now]
+        if not due:
+            return []
+        adds = self.log.active([STATE_CHANGE])
+        out: list[StateChange] = []
+        for c, el in sorted(due, key=lambda d: (d[1].until, d[0], d[1].category, d[1].item)):
+            cause = next((e for e in reversed(adds) if e.payload["op"] == "add"
+                          and (e.payload["character"], e.payload["category"],
+                               e.payload["item"]) == (c, el.category, el.item)), None)
+            ch = StateChange(c, el.category, "remove", el.item, el.observable)
+            if cause is None:  # cannot happen for logged state; never invent an orphan removal
+                continue
+            self._apply_change(ch, cause)
+            out.append(ch)
+        self.refresh_memory()
+        return out
 
     def enter_scene(self, character: str) -> Event:
         """A character walks in: the room perceives their observable state, and they perceive
@@ -2741,6 +2764,7 @@ class Engine:
     def advance_offscreen(self, minutes: int) -> None:
         start = self.scene.time
         self.scene.time += minutes
+        self.expire_state(self.scene.time)
         for a in self.agents.agents():
             if a not in self.scene.present:
                 self.updater.update(a, start, self.scene.time)

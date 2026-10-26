@@ -25,6 +25,7 @@ from . import clock as clk
 from . import news as nw
 from .canon_adapter import CanonSource, NullCanon, ScheduledEvent
 from .places import UNLINKED_MINUTES, Place, WorldMap
+from ..state import StateChange
 
 RECENT_NEWS, RECENT_NEWS_DAYS = 6, 2  # news items offered to the "is this new" judgment
 ROUTINE_HOURS = 8  # an agent with a goal and no news gets one judgment this often
@@ -688,6 +689,10 @@ class World:
         return out
 
     # -- advancing time ---------------------------------------------------------------------------
+    def expire_state(self, now: int) -> list[StateChange]:
+        """Timed effects whose `until` has passed are removed (ordinary `remove` events)."""
+        return self.eng.expire_state(now)
+
     def tick(self, to: int, *, interruptible: bool = False) -> str | None:
         """Catch the world up to `to` in steps. The clock ends at `to`. Returns why it stopped
         early (an authority's men arrived where the player is), else None."""
@@ -702,6 +707,7 @@ class World:
         while t < to:
             end = min(t + size, to)
             eng.scene.time = end
+            self.expire_state(end)
             self.run_canon(t, end)
             self.resolve(end, kinds=("authority",))
             jobs = [(c, j) for c in self._eligible(end) if (j := self._agent_job(c, t, end))]
