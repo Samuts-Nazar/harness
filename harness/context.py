@@ -16,6 +16,7 @@ from . import items
 from .eventlog import EventLog
 from .facts import FactStore
 from .glossary import Glossary
+from .knowledge import OWN_LIFE, OWN_LIFE_OTHER_WORLD, read_item
 from .memory import CharacterMemory, MemoryDeriver
 from .models import (
     ACTION, CORRECTION, PLAYER, PORTRAIT_LEAK, SCENE_ENTRY, UTTERANCE, WITNESSED, CharacterProfile,
@@ -225,22 +226,19 @@ class ContextBuilder:
     def _known(self, f: Fact, k: Knower, viewer: str) -> str:
         """A knowledge line; second-hand knowledge carries its source."""
         text = self.mask(viewer, f.content)
-        if k.source == "own life":  # old saves and canon backgrounds
+        if k.source == OWN_LIFE:  # old saves and canon backgrounds
             return f"- {text} (from your own life)"
-        if k.source == "own life, from another world":  # the outsider's own past (player.knows)
+        if k.source == OWN_LIFE_OTHER_WORLD:  # the outsider's own past (player.knows)
             return f"- {text} (з власного життя, з іншого світу)"
-        if k.source is not None and k.source.startswith("read: "):
-            return f"- {text} (read in {self._item_name(k.source[6:])})"
+        if (item := read_item(k.source)) is not None:
+            return f"- {text} (read in {self._item_name(item)})"
         if k.source is not None:
             return f"- {text} (heard from {self.ref(viewer, k.source)})"
         return f"- {text}"
 
     def _item_name(self, item_id: str) -> str:
-        for elems in self.live.snapshot().values():
-            for el in elems.values():
-                if getattr(el, "id", None) == item_id:
-                    return el.item
-        return item_id.removeprefix("item:")
+        from .readable import item_name_in  # readable imports the engine side lazily
+        return item_name_in(self.live.snapshot(), item_id)
 
     def _seen(self, e: Event, viewer: str | None = None) -> str:
         if e.type == ACTION:

@@ -294,3 +294,23 @@ def test_reset_event_reloads_the_page():
     expr = ("(() => { let n = 0; fetch = () => { n++; return new Promise(() => {}); };"
             " handlers.reset({}); return n; })()")
     assert run({"events": [], "eval": expr})["value"] >= 1
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_read_block_from_stream_and_from_transcript():
+    """What the player read: its own block, labelled with the item, the same live and reloaded."""
+    text = "У листі сказано: джин живе в лампі."
+    live = run([
+        {"type": "turn_start", "turn": 1, "text": "*читаю лист*"},
+        {"type": "read", "turn": 1, "label": "лист", "text": text, "found": True, "event": 5},
+        {"type": "turn_done", "turn": 1, "clock": "x", "panel": PANEL, "lines": [],
+         "cut_lines": []},
+    ])
+    state = {"title": "t", "live": False, "clock": "x", "panel": PANEL, "transcript": [
+        {"kind": "player", "text": "*читаю лист*"},
+        {"kind": "read", "label": "лист", "text": text, "found": True, "event": 5}]}
+    loaded = run({"state": state})
+    for got in (live, loaded):
+        blocks = [b for b in got["feed"] if "read" in (b["cls"] or "")]
+        assert len(blocks) == 1, got["feed"]
+        assert blocks[0]["text"] == "Прочитано · лист" + text

@@ -174,7 +174,7 @@ def detail(eng: "Engine", item: Item) -> str:
     """The full event behind the channel (the spoiler): what, how, from whom, when."""
     iid = read_item(item.source)
     if iid is not None:
-        from .readable import item_name  # readable imports this module's constants lazily
+        from .readable import item_name  # readable imports this module
         src = f", in {item_name(eng, iid)} ({iid})"
     else:
         src = f", from {eng.names.real(item.source)}" if item.source else ""

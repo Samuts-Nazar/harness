@@ -14,7 +14,7 @@ import threading
 import time
 from typing import Any, Callable
 
-from harness import assistant
+from harness import assistant, readable
 from harness.decisions import DecisionCount, aggregate, count_since
 from harness.models import ACTION, NARRATION, PLAYER, UTTERANCE, format_time
 from harness.streaming import InterruptHandle
@@ -40,6 +40,13 @@ class Refused(ValueError):
 
 class Ended(RuntimeError):
     """The player character is dead: the campaign is read-only."""
+
+
+def read_entry(ev: Any) -> dict[str, Any]:
+    """A transcript entry for a read (`item_read` event): the item's name and what was read."""
+    p = ev.payload
+    return {"kind": "read", "label": str(p.get("item_name") or p.get("item", "")),
+            "text": str(p.get("text", "")), "found": bool(p.get("found")), "event": ev.id}
 
 
 def clock(t: int) -> str:
@@ -724,6 +731,14 @@ class Game:
                                "payload": ev.payload, "participants": list(ev.participants)})
             if ev.type == NARRATION and str(ev.payload.get("text", "")).strip():
                 narr_ids.append(ev.id)
+            if ev.type == readable.READ_EVENT and ev.payload.get("reader") == PLAYER:
+                # what he read, as its own block before the narration (shown in the output
+                # language: the reader writes it so; the English records are never shown)
+                en = read_entry(ev)
+                entries.append(en)
+                self._emit("read", label=en["label"], text=en["text"], found=en["found"],
+                           event=ev.id)
+                cur["who"] = None
             if ev.type == UTTERANCE:
                 cur["who"] = None  # the line is over: the next word starts a new block
             elif ev.type == ACTION and ev.payload.get("gesture"):

@@ -289,6 +289,57 @@ def test_turn_reads_when_read_intent_yes(tmp_path):
     assert "read_intent" in asked
 
 
+def test_read_turn_keeps_the_content_private(tmp_path):
+    """Only the narrator learns what was read, with the instruction that it is private; judges,
+    the director and the NPCs only learn that he is reading; the records have one knower."""
+    book(tmp_path)
+    shown = "У лампі торговця живе джин"
+    eng, prov = engine(tmp_path, _turn_script(TERMS, READER_OK), {"read_intent": True})
+    give(eng, content={"file": "book.txt"})
+    director_input = []  # what the scene director (speakers, observable actions) is given
+    launch = eng._launch
+
+    def spy(out, player_text, *a, **kw):
+        director_input.append(player_text)
+        return launch(out, player_text, *a, **kw)
+
+    eng._launch = spy
+    eng.turn("Гляну в нотатник, що там про джинів.", speakers=["innkeeper"])
+    assert director_input and all(shown not in t and "reads нотатник to himself" in t
+                                  for t in director_input)
+    narr = [m for model, m in prov.calls if model == "narrator"][-1][-1]["content"]
+    assert shown in narr and "private to him" in narr and "reads it aloud" in narr
+    for model, msgs in prov.calls:
+        if model not in ("narrator", "reader"):
+            assert shown not in json.dumps(msgs, ensure_ascii=False), model
+    for state, _ in eng.judge.inner.asked:
+        assert shown not in " ".join(map(str, state))
+    knowers = [r[0] for r in eng.conn.execute(
+        "SELECT DISTINCT k.character FROM fact_knowers k WHERE k.source LIKE 'read:%'")]
+    assert knowers == [PLAYER]
+    assert read_facts(eng, "innkeeper") == [] and read_facts(eng, "bard") == []
+
+
+def test_read_failure_leaves_no_knowledge_and_no_time(tmp_path):
+    from harness.judge import JudgeError
+
+    book(tmp_path)
+
+    def broken(q, state):
+        raise JudgeError("no judge")
+
+    eng, prov = engine(tmp_path, _turn_script(TERMS, READER_OK),
+                       {"read_intent": True, "read_duration": broken})
+    give(eng, content={"file": "book.txt"})
+    t0 = eng.scene.time
+    res = eng.turn("*читаю нотатник про джинів*", speakers=["innkeeper"])
+    assert res.read is not None and not res.read.found and res.read.records == []
+    assert res.read.text == readable.COULD_NOT_READ
+    assert read_facts(eng) == []
+    assert eng.scene.time == t0 + eng.minutes_per_turn  # only the turn's own minutes
+    assert any(n.get("kind") == "read_failed" for n in eng.devlog)
+
+
 def test_turn_skips_read_intent_without_content_items(tmp_path):
     eng, prov = engine(tmp_path, _turn_script(), {"read_intent": True})
     give(eng)  # an item without content

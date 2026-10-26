@@ -1829,7 +1829,18 @@ class Engine:
             return None
         if item is None:
             return None
-        res = readable.read(self, PLAYER, item, model_text)
+        t0, mark = self.scene.time, max((e.id for e in self.log.active()), default=0)
+        try:
+            res = readable.read(self, PLAYER, item, model_text)
+        except (JudgeError, ProviderError) as e:  # nothing read: no knowledge, no time
+            for ev in self.log.active([readable.READ_EVENT]):
+                if ev.id > mark:
+                    self.log.rollback(ev.id, "read failed")
+            self.scene.time = t0
+            self._note("read_failed", item=item, error=str(e))
+            res = readable.failed(self, PLAYER, item, model_text)
+            self.refresh_memory()
+            return res
         self._note("item_read", item=item, found=res.found, minutes=res.minutes,
                    terms=res.terms, chars=res.chars)
         return res
@@ -1837,9 +1848,18 @@ class Engine:
     def _read_note(self, res: "readable.ReadResult") -> str:
         """What the narrator is told about the reading: the text read, or that nothing was found
         (so nothing is invented in its place)."""
+        private = (" This is private to him: he reads it to himself on his own page or screen, "
+                   "and nobody else sees or hears it unless he reads it aloud. Do not write any of "
+                   "it as something the others see or hear, nor as an observable action.")
         if res.found:
-            return f"[What the player character read: {res.text}]"
-        return f"[The player character looked it up and found nothing: {res.text}]"
+            return f"[What the player character read in {res.item}: {res.text}.{private}]"
+        return f"[The player character looked in {res.item} and found nothing: {res.text}]"
+
+    @staticmethod
+    def _reading_mark(res: "readable.ReadResult") -> str:
+        """What everybody but the narrator gets: that he reads, never what."""
+        return (f"[The player character reads {res.item} to himself; what he reads is private "
+                "to him.]")
 
     def turn(
         self,
@@ -1890,10 +1910,13 @@ class Engine:
             player_ev = player_pairs[0][1]
             turn_events.extend(ev for _, ev in player_pairs)
             self._learn_from_player(player_pairs)
+            narr_text = model_text  # the narrator alone also gets what was read
             read_res = self._read_turn(model_text)  # the player reads an item with content
             if read_res is not None:
                 read_minutes = read_res.minutes
-                model_text += "\n" + self._read_note(read_res)
+                narr_text = model_text + "\n" + self._read_note(read_res)
+                # the others (judges, director) only learn that he is reading, not what
+                model_text += "\n" + self._reading_mark(read_res)
                 if read_res.event_id is not None:
                     turn_events.append(self.log.get(read_res.event_id))
             outcome: Outcome | None = None
@@ -1924,11 +1947,11 @@ class Engine:
                     launch = cand
                     return True
 
-                out = self._narrate(model_text, on_candidate, outcome)
+                out = self._narrate(narr_text, on_candidate, outcome)
                 if launch is None:  # speech stripped after the retries: nothing left to check
                     launch = self._launch(out, model_text, speakers, turn_events, check=False)
             else:
-                out = self._narrate(model_text, outcome=outcome)
+                out = self._narrate(narr_text, outcome=outcome)
                 launch = self._launch(out, model_text, speakers, turn_events, check=False)
 
             turn_events.extend(ev for ev, _, _ in self._admitted)  # undone with the turn
@@ -1942,7 +1965,7 @@ class Engine:
                 if (first_step is not None and not result.interrupted
                         and not any(u.payload.get("text", "").strip() for u in result.utterances)
                         and not any(k == "gesture" for k, _, _ in result.exchange)):
-                    out = self._narrate_empty(model_text, turn_events, sources, segments, result)
+                    out = self._narrate_empty(narr_text, turn_events, sources, segments, result)
                     if on_narration is not None:
                         on_narration(out.description)
             for npc in launch.speakers:  # classic, or a fixed list of speakers
@@ -2457,6 +2480,12 @@ class Engine:
             first = last
         raw = str(first.payload.get("raw", first.payload["text"]))
         model_text = render_for_model(split_input(raw), raw)
+        reads = [e for e in self.log.active([readable.READ_EVENT])
+                 if first.id < e.id < old.id and e.payload.get("reader") == PLAYER]
+        if reads:  # a regenerated narration is told what was read, privately, as the first was
+            p = reads[-1].payload
+            model_text += "\n" + self._read_note(readable.ReadResult(
+                p.get("text", ""), found=bool(p.get("found")), item=p.get("item_name", "")))
         judged = [e for e in self.log.active([OUTCOME])
                   if first.id < e.id < old.id and e.payload.get("actor", PLAYER) == PLAYER]
         return model_text, (self._outcome_of(judged[-1]) if judged else None)

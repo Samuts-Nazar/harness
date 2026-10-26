@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any, Callable, Sequence
 
 from .glossary import ENDINGS
 from .judge import choice_q, yes_no_q
+from .knowledge import READ_PREFIX
 from .models import TOLD
 from .world import clock as clk
 
@@ -41,7 +42,6 @@ if TYPE_CHECKING:
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data"
 READ_EVENT = "item_read"
-READ_PREFIX = "read: "
 READ_DURATION_TAG, READ_INTENT_TAG = "read_duration", "read_intent"
 MAX_TERMS = 12
 CAP_CHARS = 2000  # one read returns at most this much text
@@ -52,6 +52,7 @@ COMMON_HITS = 300  # a term with more hit lines than this only fills what the ot
 NO_CONTENT = "У цій речі нема чого читати."
 NO_FILE = "Файл не знайдено: нічого прочитати не вдалося."
 NOTHING_FOUND = "Нічого про це не знайдено."
+COULD_NOT_READ = "Прочитати не вдалося."
 
 # The glossary's name endings plus the soft-stem and plural endings common nouns also take
 # («стихій» / «стихію», «бажання» / «бажанню»), longest first, without the empty one.
@@ -77,6 +78,7 @@ class ReadResult:
     terms: list[str] = field(default_factory=list)
     chars: int = 0  # characters of the passages read
     event_id: int | None = None
+    item: str = ""  # the item's name, as the player knows it
 
 
 # -- content ------------------------------------------------------------------------------------
@@ -106,12 +108,17 @@ def readable_held(eng: "Engine", character: str) -> dict[str, str]:
     return out
 
 
-def item_name(eng: "Engine", item_id: str) -> str:
-    for elems in eng.live.snapshot().values():
+def item_name_in(snapshot: Any, item_id: str) -> str:
+    """The name of the item with this id in a live-state snapshot (the bare id when gone)."""
+    for elems in snapshot.values():
         for el in elems.values():
             if getattr(el, "id", None) == item_id:
                 return el.item
     return item_id.removeprefix("item:")
+
+
+def item_name(eng: "Engine", item_id: str) -> str:
+    return item_name_in(eng.live.snapshot(), item_id)
 
 
 def resolve_file(eng: "Engine", rel: str) -> Path | None:
@@ -336,7 +343,9 @@ def _reader(eng: "Engine", request: str, passages: Sequence[Passage]) -> tuple[b
         return False, "", []
     recs = [_cut(r, RECORD_CHARS) for r in (got.get("records") or []) if isinstance(r, str) and r.strip()]
     text = _cut(got.get("text") or "", CAP_CHARS)
-    return bool(text or recs), text, recs[:MAX_RECORDS]
+    # the text shown to the player is the reader's own text in the output language; records
+    # (record language) are never shown in its place, so a read without text found nothing
+    return bool(text), text, recs[:MAX_RECORDS]
 
 
 def read_minutes(eng: "Engine", character: str, item: str, request: str, chars: int) -> int:
@@ -353,12 +362,32 @@ def read_minutes(eng: "Engine", character: str, item: str, request: str, chars: 
     return clk.minutes_of(bucket) if bucket in clk.DURATION_BUCKETS else clk.minutes_of("minutes")
 
 
+def _log(eng: "Engine", character: str, item_id: str, request: str, res: ReadResult,
+         **extra: Any) -> ReadResult:
+    """The read as an event (also when nothing was found, so the player sees the result and a
+    reopened campaign shows it again). Witness: the reader only."""
+    ev = eng._event(READ_EVENT, [character], {
+        "reader": character, "item": item_id, "item_name": res.item, "request": request,
+        "terms": res.terms, "chars": res.chars, "minutes": res.minutes, "found": res.found,
+        "text": res.text, "records": res.records, **extra}, witnesses=[character],
+        notability=0.3)
+    res.event_id = ev.id
+    return res
+
+
+def failed(eng: "Engine", character: str, item_id: str, request: str) -> ReadResult:
+    """A read that could not run (no judge or model answered): logged, nothing learned."""
+    return _log(eng, character, item_id, request,
+                ReadResult(COULD_NOT_READ, item=item_name(eng, item_id)))
+
+
 def read(engine: "Engine", character: str, item_id: str, request: str) -> ReadResult:
     """`character` reads item `item_id` looking for `request`. See the module docstring."""
     eng = engine
     content = content_of(eng, item_id)
     if content is None:
         return ReadResult(NO_CONTENT)
+    name = item_name(eng, item_id)
     terms: list[str] = []
     if isinstance(content, str):  # inline text: a letter, a note
         lines = content.splitlines() or [content]
@@ -371,30 +400,30 @@ def read(engine: "Engine", character: str, item_id: str, request: str) -> ReadRe
         path = resolve_file(eng, str(content.get("file", "")))
         if path is None or not path.is_file():
             eng._note("read_no_file", item=item_id, file=str(content.get("file", "")))
-            return ReadResult(NO_FILE)
+            return _log(eng, character, item_id, request, ReadResult(NO_FILE, item=name))
         terms = expand_terms(eng, request)
         passages = grep_file(path, terms)
     if not passages:
         eng._note("read_nothing_found", item=item_id, terms=terms)
-        return ReadResult(NOTHING_FOUND, terms=terms)
+        return _log(eng, character, item_id, request,
+                    ReadResult(NOTHING_FOUND, terms=terms, item=name))
     chars = sum(len(p.text) for p in passages)
     found, text, recs = _reader(eng, request, passages)
     if not found:
         eng._note("read_nothing_found", item=item_id, terms=terms, chars=chars)
-        return ReadResult(NOTHING_FOUND, terms=terms, chars=chars)
-    name = item_name(eng, item_id)
+        return _log(eng, character, item_id, request,
+                    ReadResult(NOTHING_FOUND, terms=terms, chars=chars, item=name))
     minutes = read_minutes(eng, character, name, request, chars)
+    res = ReadResult(text, minutes, recs, True, terms, chars, item=name)
     eng.scene.time += minutes
-    ev = eng._event(READ_EVENT, [character], {
-        "reader": character, "item": item_id, "request": request, "terms": terms,
-        "lines": [[p.start, p.end] for p in passages], "chars": chars, "minutes": minutes,
-        "text": text, "records": recs}, witnesses=[character], notability=0.3)
+    _log(eng, character, item_id, request, res,
+         lines=[[p.start, p.end] for p in passages])
     for r in recs:
-        eng.facts.add_campaign(r, source_event_id=ev.id, game_time=eng.scene.time,
+        eng.facts.add_campaign(r, source_event_id=res.event_id, game_time=eng.scene.time,
                                location=eng.scene.location, notability=0.4,
                                knowers=[(character, TOLD, READ_PREFIX + item_id)])
     eng.refresh_memory()
-    return ReadResult(text or "\n".join(recs), minutes, recs, True, terms, chars, ev.id)
+    return res
 
 
 def read_intent(eng: "Engine", player_text: str, held: dict[str, str]) -> str | None:

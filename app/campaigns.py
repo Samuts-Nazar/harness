@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator
 
-from harness import items
+from harness import items, readable
 from harness.decisions import full_role
 from harness.glossary import Glossary
 from harness.models import (
@@ -269,7 +269,12 @@ class Campaign:
     def transcript(self) -> list[dict[str, Any]]:
         """What the player has seen so far, rebuilt from the event log (a reopened campaign)."""
         out: list[dict[str, Any]] = [{"kind": "intro", "text": self.intro}]
-        for e in self.engine.log.active([NARRATION, UTTERANCE, ACTION]):
+        for e in self.engine.log.active([NARRATION, UTTERANCE, ACTION, readable.READ_EVENT]):
+            if e.type == readable.READ_EVENT:  # what the player read, as he saw it
+                if e.payload.get("reader") == PLAYER:
+                    from .game import read_entry  # game imports this module
+                    out.append(read_entry(e))
+                continue
             if e.type == NARRATION:
                 out.append({"kind": "narr", "text": e.payload["text"], "event": e.id})
                 continue

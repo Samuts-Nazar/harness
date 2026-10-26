@@ -18,6 +18,7 @@ from .attitudes import Attitude, Attitudes, Notices
 from .belief import BeliefFn
 from .eventlog import EventLog
 from .facts import FactStore
+from .knowledge import read_item
 from .models import CharacterProfile, Event, Fact, Knower, format_time
 from .state import Element, LiveState
 
@@ -130,8 +131,8 @@ class MemoryWriter:
                 places.add(f.location)
             if f.source_event_id is not None:
                 event_ids.add(f.source_event_id)
-            if k.source is not None and k.source.startswith("read: "):
-                how = f"read in {k.source[6:]}"
+            if (item := read_item(k.source)) is not None:
+                how = f"read in {item}"
             elif k.source is not None:
                 how = f"{'told by' if k.how == 'told' else 'heard from'} {self._who(k.source)}"
             else:
