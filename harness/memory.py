@@ -8,10 +8,11 @@ and after any rollback, so they can never disagree with the log.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Mapping
 
+from . import items
 from .agents import AgentRegistry, Intents
 from .attitudes import Attitude, Attitudes, Notices
 from .belief import BeliefFn
@@ -53,7 +54,9 @@ class MemoryDeriver:
             f = self.facts.get(a.fact_id)
             if f is not None:
                 mem.attitudes.append((a, f))
-        mem.state = self.live.of(character)
+        snap = self.live.snapshot()  # observability is derived (a closed container hides)
+        mem.state = [replace(e, observable=items.is_observable(e, snap))
+                     for e in snap.get(character, {}).values()]
         mem.intents = self.intents.pending(character)
         for ev, fid in self.notices.pending(character):
             f = self.facts.get(fid)

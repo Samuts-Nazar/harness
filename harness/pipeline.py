@@ -1094,7 +1094,7 @@ class Engine:
                 diff = validate_diff(self._ids_for_names(self._fix_tree(parse_diff(raw))),
                                      present=sc.present, sources=sources,
                                      state=self.live.snapshot(), characters=everyone,
-                                     texts=dict(segments))
+                                     texts=dict(segments), fuzzy=self.ctx.item_ids)
                 for d in diff.dropped:
                     self._note("state_change_dropped", **d)
                 return diff

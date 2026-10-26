@@ -400,8 +400,8 @@ class ContextBuilder:
                 power = "self"
         if stakes == "low":
             snap = self.live.snapshot()
-            if any(obs and DANGER.search(item)
-                   for c in scene.present for (_, item), obs in snap.get(c, {}).items()):
+            if any(items.is_observable(el, snap) and DANGER.search(item)
+                   for c in scene.present for (_, item), el in snap.get(c, {}).items()):
                 stakes = "high"
         return Situation(power, audience, stakes)
 

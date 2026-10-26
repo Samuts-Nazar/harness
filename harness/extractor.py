@@ -78,6 +78,7 @@ def validate_diff(
     state: State | None = None,
     characters: Collection[str] | None = None,
     texts: dict[str, str] | None = None,
+    fuzzy: bool = False,
 ) -> Diff:
     """Accept only `new_facts` and `state_changes`.
 
@@ -131,7 +132,7 @@ def validate_diff(
         where = f"state_changes[{i}]"
         try:
             change = _parse_change(c, where, who, sources)
-            change = _bind_item(c, change, where, sim)
+            change = _bind_item(c, change, where, sim, fuzzy)
             check_change(sim, change)
             why = literal_reading(change.category, change.op, change.item,
                                   (texts or {}).get(change.source, ""))
@@ -170,7 +171,8 @@ def _parse_change(c: Any, where: str, who: set[str], sources: Collection[str]) -
     return StateChange(ch, cat, op, item.strip(), obs, src, location=loc.strip() if loc else None)
 
 
-def _bind_item(c: dict[str, Any], change: StateChange, where: str, sim: State) -> StateChange:
+def _bind_item(c: dict[str, Any], change: StateChange, where: str, sim: State,
+                fuzzy: bool) -> StateChange:
     """Tie the change to an item. `add` of new text mints an id in code (a model-proposed id is
     ignored). remove/move/reveal/hide/realize/open refer to an item by `id`, else by its text;
     an id that matches nothing, or text that only matches an id-less item exactly, is left for
@@ -186,7 +188,7 @@ def _bind_item(c: dict[str, Any], change: StateChange, where: str, sim: State) -
         if el is None:
             raise DiffValidationError(f"{where}: unknown item id {mid!r}")
         return replace(change, category=el.category, item=el.item)
-    if (change.category, change.item) not in elems:
+    if fuzzy and (change.category, change.item) not in elems:  # only with item_ids on
         rid = items.resolve(change.item, change.character, sim)
         if rid is not None:
             el = next(e for e in elems.values() if e.id == rid)

@@ -71,11 +71,11 @@ def test_container_cycle_rejected():
         eng.apply_state_change(StateChange(PLAYER, INVENTORY, "move", "lantern"))
 
 
-def _validate(eng, changes, texts=None):
+def _validate(eng, changes, texts=None, fuzzy=True):
     srcs = {"player", "narration"}
     return validate_diff(json.loads(diff(fact("f", "narration"), changes=changes)),
                          present=eng.scene.present, sources=srcs, state=eng.live.snapshot(),
-                         characters=set(eng.scene.present), texts=texts)
+                         characters=set(eng.scene.present), texts=texts, fuzzy=fuzzy)
 
 
 def ch(op, item, **kw):
@@ -128,3 +128,29 @@ def test_extractor_prompt_lists_ids_only_when_enabled():
     assert "[id:" not in old and '"move"' not in old  # old recordings keep their prompt
     assert "[id: item:lantern] [location: in:item:backpack] (hidden)" in new
     assert '"move"|"realize"' in new and '"id": optional existing item id' in new
+
+
+def test_inexact_remove_dropped_when_item_ids_off():
+    eng, _ = make_engine({})
+    pack(eng)
+    d = _validate(eng, (ch("remove", "The Lantern"),), fuzzy=False)
+    assert d.changes == [] and "does not have" in d.dropped[0]["reason"]
+    assert [c.item for c in _validate(eng, (ch("remove", "The Lantern"),)).changes] == ["lantern"]
+
+
+def test_hidden_danger_in_closed_container_does_not_raise_stakes():
+    eng, _ = make_engine({})
+    eng.apply_state_change(StateChange(PLAYER, INVENTORY, "add", "backpack", True,
+                                       id="item:backpack", location="worn"))
+    eng.apply_state_change(StateChange(PLAYER, INVENTORY, "add", "drawn dagger", True,
+                                       id="item:dagger", location="in:item:backpack"))
+    assert eng.ctx.situation("innkeeper", eng.scene).stakes == "low"
+    items.open_container(eng, PLAYER, "item:backpack")
+    assert eng.ctx.situation("innkeeper", eng.scene).stakes == "high"
+
+
+def test_memory_state_shows_derived_observability():
+    eng, _ = make_engine({})
+    pack(eng)
+    mem = eng.deriver.derive(PLAYER, eng.scene.time)
+    assert {e.item: e.observable for e in mem.state} == {"backpack": True, "lantern": False}
