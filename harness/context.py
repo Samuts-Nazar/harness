@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 from typing import Any, Callable, Sequence
 
 from .agents import Intents
+from . import items
 from .eventlog import EventLog
 from .facts import FactStore
 from .glossary import Glossary
@@ -132,6 +133,9 @@ class ContextBuilder:
         self.style = style
         self.player_unlimited = player_unlimited
         self.outcomes = False  # set by the engine (harness/outcome.py)
+        # set by the engine: the extractor prompt lists item ids and locations and teaches
+        # move/realize. Off keeps the old prompt byte for byte, so old recordings still replay.
+        self.item_ids = False
         # the player's wishes for the campaign, set at its start (a game package: tone, pace,
         # content limits, notes); shown to the narrator, never above the rules
         self.intent = ""
@@ -504,9 +508,10 @@ class ContextBuilder:
             parts.append("Relevant canon:\n" + "\n".join(f"- {m(f.content)}" for f in canon))
         parts.append(self._scene_header(scene, PLAYER))
         state_lines = [
-            f"- {self.ref(PLAYER, c)}: {cat}: {item} ({'observable' if obs else 'hidden'})"
+            f"- {self.ref(PLAYER, c)}: {cat}: {item} "
+            f"({'observable' if items.is_observable(el, snap) else 'hidden'})"
             for c in scene.present
-            for (cat, item), obs in snap.get(c, {}).items()
+            for (cat, item), el in snap.get(c, {}).items()
         ]
         if state_lines:
             parts.append("Character state:\n" + "\n".join(state_lines))
@@ -627,9 +632,13 @@ class ContextBuilder:
         body = "\n".join(f"[{k}] {t}" for k, t in segments)
         snap = self.live.snapshot()
         cur = [
-            f"- {c}: {cat}: {item} ({'observable' if obs else 'hidden'})"
+            f"- {c}: {cat}: {item}"
+            + (f" [id: {el.id}]" if self.item_ids and el.id else "")
+            + (f" [location: {el.location}]" if self.item_ids and el.location else "")
+            + (" [container, open]" if self.item_ids and el.open else "")
+            + f" ({'observable' if items.is_observable(el, snap) else 'hidden'})"
             for c, elems in snap.items()
-            for (cat, item), obs in elems.items()
+            for (cat, item), el in elems.items()
         ]
         hidden = self.names and any(self.names.hidden(c) for c in scene.present + scene.outside)
         instr = (
@@ -638,11 +647,20 @@ class ContextBuilder:
             '{"new_facts": [{"content": str, "source": <one of: ' + keys + '>, '
             '"notability": number 0..1, "location": optional str}],\n'
             ' "state_changes": [{"character": <id>, "category": "injury"|"clothing"|"inventory"|'
-            '"equipment"|"internal"|"appearance", "op": "add"|"remove"|"reveal"|"hide", "item": str, '
-            '"observable": true|false, "source": <segment>}]}\n'
+            '"equipment"|"internal"|"appearance", "op": "add"|"remove"|"reveal"|"hide"'
+            + ('|"move"|"realize"' if self.item_ids else "") + ', "item": str, '
+            '"observable": true|false, "source": <segment>'
+            + (', "id": optional existing item id, "location": optional str' if self.item_ids else "")
+            + '}]}\n'
             f"Characters: {who}. Do not say who knows or saw a fact; that is decided elsewhere. "
             '"remove" only works on an item the character currently has; "reveal"/"hide" change '
-            "whether an existing item is observable. Do not emit any other keys. Figures of speech and "
+            "whether an existing item is observable. "
+            + ('Items listed with an [id: ...] are referred to by that "id" for "remove", "move", '
+               '"reveal", "hide" and "realize" (never invent ids; a new item is added by its text '
+               'and gets its id elsewhere). "move" needs a "location": "worn", "in_hand", '
+               '"on:<place>" or "in:<container id>"; "add" may give one too. "realize" is for a '
+               'character who learns of an item they carried unaware. ' if self.item_ids else "")
+            + "Do not emit any other keys. Figures of speech and "
             "gestures are not state (\'took his hand\' adds no hand to anyone's inventory).\n"
             + (f"Names (a passage may describe a person without naming them; in facts, use the "
                f"name): {'; '.join(names)}.\n" if hidden else "")

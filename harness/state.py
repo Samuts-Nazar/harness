@@ -20,7 +20,7 @@ class StateError(ValueError):
 class StateChange:
     character: str
     category: str
-    op: str  # add | remove | reveal | hide | move | realize
+    op: str  # add | remove | reveal | hide | move | realize | open
     item: str
     observable: bool = True  # only meaningful for `add`
     source: str | None = None  # extractor segment key the change came from
@@ -41,9 +41,12 @@ class Element:
     aware: bool = True
     until: int | None = None
     channel: str = "sight"
+    open: bool = False  # a container: its contents (location "in:<id>") are visible once open
 
     def __bool__(self) -> bool:
         """Old callers treated a snapshot value as the observable flag."""
+        # Only the *stored* flag: whether an item is really perceivable (inside a closed
+        # container, say) is derived at read time by items.is_observable, never stored.
         return self.observable
 
 
@@ -80,6 +83,8 @@ def apply(state: State, ch: StateChange) -> None:
         elems[key] = replace(cur, location=ch.location)
     elif ch.op == "realize":
         elems[key] = replace(cur, aware=True)
+    elif ch.op == "open":
+        elems[key] = replace(cur, open=True)
 
 
 def check_change(state: State, ch: StateChange) -> None:
@@ -101,6 +106,15 @@ def check_change(state: State, ch: StateChange) -> None:
         raise StateError(f"{ch.item!r} is already hidden")
     if ch.op == "realize" and _aware(elems[key]):
         raise StateError(f"{ch.character} is already aware of {ch.item!r}")
+    if ch.op == "open" and getattr(elems[key], "open", False):
+        raise StateError(f"{ch.item!r} is already open")
+    if ch.op == "move" and not ch.location:
+        raise StateError(f"cannot move {ch.item!r}: no location given")
+    if ch.op in ("add", "move") and ch.location:
+        from . import items  # items imports this module
+        cur = elems.get(key)
+        items.check_location(state, ch.id if ch.op == "add" else getattr(cur, "id", None),
+                             ch.location)
 
 
 def payload(ch: StateChange) -> dict:  # type: ignore[type-arg]
@@ -144,4 +158,6 @@ class LiveState:
         return list(elems.values())
 
     def observable(self, character: str) -> list[Element]:
-        return [e for e in self.of(character) if e.observable]
+        from . import items
+        snap = self.snapshot()
+        return [e for e in snap.get(character, {}).values() if items.is_observable(e, snap)]

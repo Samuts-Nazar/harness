@@ -80,6 +80,7 @@ from .settings import (
 )
 from .shape import (SPEECH_SHAPES, Shape, beat_wanted, fit_to_shape, sample_shape, shape_prior,
                     shape_weights, word_bounds)
+from . import items
 from .state import LiveState, StateChange, check_change, payload as change_payload
 from .streaming import InterruptHandle, StreamResult, run_stream
 from .style import (Style, beat_as_action, cut_foreign, foreign_runs, foreign_voice,
@@ -278,6 +279,7 @@ class Engine:
         style: Style | None = None,
         player_unlimited: bool = False,
         outcomes: bool = False,
+        item_ids: bool = False,
         seed: int | str = 0,
         dialogue: str = DEFAULT_DIALOGUE,
         world_profile: WorldProfile | None = None,
@@ -384,6 +386,7 @@ class Engine:
                                   narration=narration, names=self.names, style=style,
                                   player_unlimited=player_unlimited)
         self.ctx.outcomes = outcomes
+        self.ctx.item_ids = item_ids  # the extractor prompt shows item ids and locations
         self.world = world
         self._short_portraits: dict[str, dict | None] = {}  # npc -> generated portrait (None: failed)
         try:  # a broken portrait file must not stop a campaign from opening
@@ -1142,7 +1145,8 @@ class Engine:
     # -- live state and its perception ---------------------------------
     def _apply_change(self, ch: StateChange, cause: Event, *,
                       defer: list[_Job] | None = None) -> Event:
-        was = self.live.snapshot().get(ch.character, {}).get((ch.category, ch.item))
+        before = self.live.snapshot()
+        was = before.get(ch.character, {}).get((ch.category, ch.item))
         ev = self.log.append(
             STATE_CHANGE,
             game_time=self.scene.time,
@@ -1156,10 +1160,14 @@ class Engine:
         # only someone in the room can be seen; an absent character's change waits for entry
         observers = ([c for c in self.scene.present if c != ch.character]
                      if ch.character in self.scene.present else [])
-        if ch.op == "add" and ch.observable or ch.op == "reveal":
-            self._observe(_OBSERVED[ch.category].format(who=who, item=ch.item), observers, ev,
-                          defer=defer)
-        elif ch.op == "remove" and was:
+        after = self.live.snapshot()
+        # observability is derived (a closed container hides its contents), so the new state
+        # decides what is perceived: whatever became observable is observed once
+        if ch.op in ("add", "reveal", "move", "open"):
+            for el in items.newly_observable(before, after, ch.character):
+                self._observe(_OBSERVED[el.category].format(who=who, item=el.item), observers, ev,
+                              defer=defer)
+        elif ch.op == "remove" and was and items.is_observable(was, before):
             self._observe(f"{who} no longer has {ch.item}", observers, ev, defer=defer)
         return ev
 
@@ -1233,12 +1241,12 @@ class Engine:
         sc.present = sc.present + (character,)
         snap = self.live.snapshot()
         for (cat, item), obs in snap.get(character, {}).items():
-            if obs:
+            if items.is_observable(obs, snap):
                 self._observe(_OBSERVED[cat].format(who=self.ctx.name(character), item=item),
                               others, ev)
         for other in others:
             for (cat, item), obs in snap.get(other, {}).items():
-                if obs:
+                if items.is_observable(obs, snap):
                     self._observe(_OBSERVED[cat].format(who=self.ctx.name(other), item=item),
                                   [character], ev)
         self.refresh_memory()
@@ -2760,7 +2768,7 @@ class Engine:
                              "narration": self.narration,
                              "minutes_per_turn": self.minutes_per_turn,
                              "player_unlimited": self.ctx.player_unlimited,
-                             "outcomes": self.outcomes_on, "seed": self.seed,
+                             "outcomes": self.outcomes_on, "item_ids": self.ctx.item_ids, "seed": self.seed,
                              "dialogue": self.dialogue, "world": self.world,
                              "rung_seeds": self.ctx.rung_seeds},
                 "vitals": self.vitals.to_json(),

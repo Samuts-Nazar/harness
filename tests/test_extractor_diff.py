@@ -29,7 +29,8 @@ def v(data, state=None):
 def test_valid_diff():
     d = v({"new_facts": [ok_fact()], "state_changes": [ok_change()]})
     assert d.facts[0].content == "x" and d.facts[0].source == "narration"
-    assert d.changes == [StateChange("innkeeper", "injury", "add", "cut lip", True, "action1")]
+    assert d.changes == [StateChange("innkeeper", "injury", "add", "cut lip", True, "action1",
+                                      id="item:cut-lip")]  # the id is minted in code
 
 
 def test_empty_diff_ok():

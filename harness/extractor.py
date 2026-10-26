@@ -10,10 +10,11 @@ import copy
 import json
 import math
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Collection
 
 from .metaphor import literal_reading
+from . import items
 from .state import State, StateChange, StateError, apply, check_change
 
 
@@ -38,7 +39,8 @@ class Diff:
 
 _TOP_KEYS = {"new_facts", "state_changes"}
 _FACT_KEYS = {"content", "source", "notability", "location"}
-_CHANGE_KEYS = {"character", "category", "op", "item", "observable", "source"}
+_CHANGE_KEYS = {"character", "category", "op", "item", "observable", "source", "id", "location"}
+_REFERS = ("remove", "move", "reveal", "hide")  # ops that must name an existing item
 MAX_CONTENT = 500
 MAX_FACTS = 20
 MAX_CHANGES = 20
@@ -129,6 +131,7 @@ def validate_diff(
         where = f"state_changes[{i}]"
         try:
             change = _parse_change(c, where, who, sources)
+            change = _bind_item(c, change, where, sim)
             check_change(sim, change)
             why = literal_reading(change.category, change.op, change.item,
                                   (texts or {}).get(change.source, ""))
@@ -161,4 +164,31 @@ def _parse_change(c: Any, where: str, who: set[str], sources: Collection[str]) -
     obs = c.get("observable", True)
     if not isinstance(obs, bool):
         raise DiffValidationError(f"{where}: observable must be true or false")
-    return StateChange(ch, cat, op, item.strip(), obs, src)
+    loc = c.get("location")
+    if loc is not None and not isinstance(loc, str):
+        raise DiffValidationError(f"{where}: location must be text")
+    return StateChange(ch, cat, op, item.strip(), obs, src, location=loc.strip() if loc else None)
+
+
+def _bind_item(c: dict[str, Any], change: StateChange, where: str, sim: State) -> StateChange:
+    """Tie the change to an item. `add` of new text mints an id in code (a model-proposed id is
+    ignored). remove/move/reveal/hide/realize/open refer to an item by `id`, else by its text;
+    an id that matches nothing, or text that only matches an id-less item exactly, is left for
+    check_change, which drops what it cannot find."""
+    elems = sim.get(change.character, {})
+    if change.op == "add":
+        return replace(change, id=items.mint_id(change.item, items.all_ids(sim)))
+    mid = c.get("id")
+    if mid is not None:
+        if not isinstance(mid, str):
+            raise DiffValidationError(f"{where}: id must be text")
+        el = next((e for e in elems.values() if e.id == mid), None)
+        if el is None:
+            raise DiffValidationError(f"{where}: unknown item id {mid!r}")
+        return replace(change, category=el.category, item=el.item)
+    if (change.category, change.item) not in elems:
+        rid = items.resolve(change.item, change.character, sim)
+        if rid is not None:
+            el = next(e for e in elems.values() if e.id == rid)
+            return replace(change, category=el.category, item=el.item)
+    return change
