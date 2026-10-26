@@ -81,6 +81,8 @@ def full_role(messages: list[dict[str, str]]) -> str:
         return "director: actions"
     if "You help write characters" in sys:
         return "manner notes"
+    if "reader's request into search terms" in sys or "passages of a text" in sys:
+        return "reader"
     if "translate" in sys.lower():
         return "translator"
     if sys.startswith("You are "):

@@ -966,7 +966,7 @@ def open_package(stack: Stack, pkg: Package, *, root: Path | str = CAMPAIGNS,
             # what the character believes from their own life: a claim, not world truth
             eng.facts.add_canon(f"{pname} вважає (з власного життя, може помилятися): {fact}",
                                 game_time=eng.scene.time,
-                                knowers=[(PLAYER, "told", "own life")])
+                                knowers=[(PLAYER, "told", "own life, from another world")])
         if inventory:  # the package's own list replaces the equipment/inventory of the sheet
             seed_player_state(eng, traits, base=(), skip=(EQUIPMENT, INVENTORY))
             seed_player_inventory(eng, inventory)

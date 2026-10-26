@@ -66,8 +66,9 @@ from .outcome import (
     CHARACTER_DEATH, FAILS, OUTCOME, CampaignEnded, Outcome, OutcomeJudge, record_death, record_outcome,
 )
 from .perception import ACTION, DESCRIPTION, SPEECH, perceivers
+from . import readable
 from .policy import (
-    DEFAULT_EXTRACTOR, DEFAULT_JUDGE_LLM, DEFAULT_NARRATOR, DEFAULT_NPC, FALLBACKS,
+    DEFAULT_EXTRACTOR, DEFAULT_JUDGE_LLM, DEFAULT_NARRATOR, DEFAULT_NPC, DEFAULT_READER, FALLBACKS,
 )
 from .providers import Provider, ProviderError
 from .stylehits import count_by_kind, style_hits
@@ -144,6 +145,8 @@ class ModelConfig:
     judge_fallback: str | None = None
     assistant: str = "assistant"  # the turn assistant's suggestions (harness/assistant.py)
     assistant_fallback: str | None = None
+    reader: str = "reader"  # term expansion and reading of readable items (harness/readable.py)
+    reader_fallback: str | None = None
 
     @classmethod
     def live(cls) -> "ModelConfig":
@@ -151,7 +154,8 @@ class ModelConfig:
         return cls(DEFAULT_NARRATOR, DEFAULT_NPC, DEFAULT_EXTRACTOR, DEFAULT_JUDGE_LLM,
                    FALLBACKS["narrator"], FALLBACKS["npc"], FALLBACKS["extractor"],
                    FALLBACKS["judge_llm"], assistant=DEFAULT_NPC,
-                   assistant_fallback=FALLBACKS["npc"])
+                   assistant_fallback=FALLBACKS["npc"], reader=DEFAULT_READER,
+                   reader_fallback=FALLBACKS["reader"])
 
 
 class _Timeout(RuntimeError):
@@ -247,6 +251,8 @@ class TurnResult:
     # living mode, in order: ("line", npc, delivered text), ("gesture", npc, the action as the
     # player sees it) or ("silence", npc, "")
     exchange: list[tuple[str, str, str]] = field(default_factory=list)
+    # what the player read this turn (harness/readable.py), None when the turn read nothing
+    read: Any = None
 
 
 class Engine:
@@ -1810,6 +1816,31 @@ class Engine:
         """Setup: `a` knows `b` by name (and `b` knows `a`): prior acquaintance, own life, canon."""
         self.names.acquaint(a, b, self.scene, how=how, mutual=mutual)
 
+    def _read_turn(self, model_text: str) -> "readable.ReadResult | None":
+        """If the player holds an item with content and this turn reads it (`read_intent`, one
+        judgment, asked only then), read it for what the player looks for."""
+        held = readable.readable_held(self, PLAYER)
+        if not held:
+            return None
+        try:
+            item = readable.read_intent(self, model_text, held)
+        except JudgeError as e:
+            self._note("read_intent_unavailable", error=str(e))
+            return None
+        if item is None:
+            return None
+        res = readable.read(self, PLAYER, item, model_text)
+        self._note("item_read", item=item, found=res.found, minutes=res.minutes,
+                   terms=res.terms, chars=res.chars)
+        return res
+
+    def _read_note(self, res: "readable.ReadResult") -> str:
+        """What the narrator is told about the reading: the text read, or that nothing was found
+        (so nothing is invented in its place)."""
+        if res.found:
+            return f"[What the player character read: {res.text}]"
+        return f"[The player character looked it up and found nothing: {res.text}]"
+
     def turn(
         self,
         player_text: str,
@@ -1838,6 +1869,8 @@ class Engine:
         if self.ended:
             raise CampaignEnded("the player character is dead; the campaign is read-only")
         t_start = time.monotonic()
+        read_res: readable.ReadResult | None = None
+        read_minutes = 0  # the clock already moved by these while reading
         waited = self._settle_for_next_turn()
         marks = (len(self.judgments.entries), len(self.llm_calls), len(self.devlog))
         if self.canon_guard is not None:
@@ -1857,6 +1890,12 @@ class Engine:
             player_ev = player_pairs[0][1]
             turn_events.extend(ev for _, ev in player_pairs)
             self._learn_from_player(player_pairs)
+            read_res = self._read_turn(model_text)  # the player reads an item with content
+            if read_res is not None:
+                read_minutes = read_res.minutes
+                model_text += "\n" + self._read_note(read_res)
+                if read_res.event_id is not None:
+                    turn_events.append(self.log.get(read_res.event_id))
             outcome: Outcome | None = None
             if self.outcomes_on:  # the world judges the attempt before any prose (task 19)
                 judged = self.outcome_judge.player(model_text, unbounded=self.ctx.player_unlimited)
@@ -1935,6 +1974,7 @@ class Engine:
             for e in turn_events:
                 self.log.rollback(e.id, "turn failed")
             self._unadmit(self._admitted)
+            sc.time -= read_minutes  # the reading did not happen either
             self.refresh_memory()
             raise
         if launch is not None and self.parallel:
@@ -1944,7 +1984,8 @@ class Engine:
                 launch.chains[n][1].cancel()
             if unused:
                 self._note("chains_unused_after_interruption", npcs=unused)
-        sc.time += self.minutes_per_turn
+        result.read = read_res
+        sc.time += max(0, self.minutes_per_turn - read_minutes)  # reading is part of the turn
         with self._slow_lock:
             self._slow = slow
             if defer_slow and self.parallel:

@@ -130,7 +130,9 @@ class MemoryWriter:
                 places.add(f.location)
             if f.source_event_id is not None:
                 event_ids.add(f.source_event_id)
-            if k.source is not None:
+            if k.source is not None and k.source.startswith("read: "):
+                how = f"read in {k.source[6:]}"
+            elif k.source is not None:
                 how = f"{'told by' if k.how == 'told' else 'heard from'} {self._who(k.source)}"
             else:
                 how = "perceived directly" if k.how == "witnessed" else k.how

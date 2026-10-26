@@ -21,13 +21,24 @@ if TYPE_CHECKING:
     from .pipeline import Engine
 
 FACT, NAME, SEEN, BACKGROUND, STATE = "fact", "name", "seen", "background", "state"
+READ = "read"  # read in an item with content (harness/readable.py); knower source "read: <item id>"
 OWN_LIFE = "own life"  # knower source of a fact judged from the character's own life
+# what the player character knows from his own life in another world (`player.knows` of a package)
+OWN_LIFE_OTHER_WORLD = "own life, from another world"
+READ_PREFIX = "read: "
+
+
+def read_item(source: str | None) -> str | None:
+    """The item id of a `read: <item id>` knower source, else None."""
+    if source and source.startswith(READ_PREFIX):
+        return source[len(READ_PREFIX):]
+    return None
 
 
 @dataclass(frozen=True)
 class Item:
     key: str
-    kind: str  # FACT | NAME | SEEN | BACKGROUND | STATE
+    kind: str  # FACT | NAME | SEEN | BACKGROUND | STATE | READ
     text: str  # what is known (real names: this is for judges and the debug view)
     how: str  # witnessed | heard | told | introduced | ... | background
     source: str | None  # character id the knowledge came from (None: perceived directly)
@@ -52,8 +63,11 @@ def items_for(eng: "Engine", character: str, before: int | None = None) -> list[
         if before is not None and k.event_id is not None and k.event_id >= before:
             continue
         canon = f.store == "canon"  # pre-campaign knowledge has no meaningful "when"
-        if k.source == OWN_LIFE:  # judged lazily from the character's life (canon/play.py)
+        if k.source in (OWN_LIFE, OWN_LIFE_OTHER_WORLD):  # the character's own life
             add(BACKGROUND, f.content, "background", None, None, k.event_id, f.id, canon=True)
+            continue
+        if read_item(k.source) is not None:  # read in an item: the item id is the source
+            add(READ, f.content, "read", k.source, k.learned_at, k.event_id, f.id)
             continue
         add(FACT, f.content, k.how, k.source, None if canon else k.learned_at, k.event_id, f.id,
             canon=canon)
@@ -88,7 +102,7 @@ _UK = {
     "name_told": "чув це ім'я від когось", "name_overheard": "чув це ім'я мимохідь",
     "name_player": "знає ім'я, бо ти його назвав", "name_canon": "знає ім'я з власного життя",
     "seen": "почув у цій розмові", "background": "це з його власного життя",
-    "state": "бачить на власні очі",
+    "state": "бачить на власні очі", "read": "прочитав це",
 }
 _EN = {
     "now": "just now", "today": "today", "yesterday": "yesterday",
@@ -100,7 +114,7 @@ _EN = {
     "name_told": "heard the name from someone", "name_overheard": "heard the name in passing",
     "name_player": "knows the name because you said it", "name_canon": "knows the name from their own life",
     "seen": "heard it in this conversation", "background": "part of their own life",
-    "state": "sees it themselves",
+    "state": "sees it themselves", "read": "read it",
 }
 
 
@@ -140,6 +154,8 @@ def public_channel(eng: "Engine", item: Item) -> str:
         phrase = L["background"]
     elif item.kind == STATE:
         phrase = L["state"]
+    elif item.kind == READ:
+        phrase = L["read"]
     elif item.source == PLAYER:
         phrase = L["from_player"]
     elif item.how == "witnessed":
@@ -156,7 +172,12 @@ def public_channel(eng: "Engine", item: Item) -> str:
 
 def detail(eng: "Engine", item: Item) -> str:
     """The full event behind the channel (the spoiler): what, how, from whom, when."""
-    src = f", from {eng.names.real(item.source)}" if item.source else ""
+    iid = read_item(item.source)
+    if iid is not None:
+        from .readable import item_name  # readable imports this module's constants lazily
+        src = f", in {item_name(eng, iid)} ({iid})"
+    else:
+        src = f", from {eng.names.real(item.source)}" if item.source else ""
     when = f", {format_time(item.when)}" if item.when is not None else ""
     ev = f", event #{item.event}" if item.event is not None else ""
     return f"{item.text} ({item.kind}, {item.how}{src}{when}{ev})"
@@ -167,7 +188,8 @@ def report(eng: "Engine", character: str) -> list[dict[str, Any]]:
     out = []
     for it in items_for(eng, character):
         d = asdict(it)
-        d["source_name"] = eng.names.real(it.source) if it.source else None
+        d["source_name"] = (it.source if read_item(it.source) is not None
+                            else eng.names.real(it.source) if it.source else None)
         d["when_text"] = format_time(it.when) if it.when is not None else None
         out.append(d)
     return out
