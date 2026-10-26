@@ -83,7 +83,8 @@ PLAYER_KEYS = ("name", "description", "appearance", "traits", "knows", "unbounde
                "inventory", "latent")
 ITEM_KEYS = ("name", "where", "condition", "notes", "container", "open", "hidden", "content",
              "power", "grants_sense")
-SENSES = ("magic",)  # what an item may grant, and a person may have besides sight
+from harness.portrait import SENSES as _ALL_SENSES
+SENSES = tuple(s for s in _ALL_SENSES if s != "sight")  # what an item may grant, a person may add
 MAX_ITEMS, MAX_ITEM_NAME, MAX_ITEM_NOTES, MAX_ITEM_CONTENT = 80, 80, 400, 4_000
 START_KEYS = ("canon", "place", "day", "time", "situation", "who_is_here")
 PERSON_KEYS = ("name", "role", "appearance", "attitude", "goal", "knows_player", "portrait",

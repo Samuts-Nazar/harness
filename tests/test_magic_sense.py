@@ -167,3 +167,18 @@ def test_senses_survive_reopen(tmp_path):
     eng = Engine.open_campaign("c", FakeProvider(), root=tmp_path, models=ModelConfig())
     assert eng.profiles["sorc"].senses == ("sight", "magic")
     assert eng.profiles["inn"].senses == ("sight",)
+
+
+def test_removal_of_a_magic_element_is_perceived_only_by_the_sense():
+    eng, judge = make(present=(PLAYER, "inn"))
+    latent(eng)
+    n = len(salience_asked(judge))
+    eng.apply_state_change(StateChange(PLAYER, INTERNAL, "remove", SOURCE, True))
+    assert known(eng, "inn") == [] and len(salience_asked(judge)) == n
+    eng2, judge2 = make(present=(PLAYER, "inn", "sorc"))
+    latent(eng2)
+    eng2.apply_state_change(StateChange(PLAYER, INTERNAL, "remove", SOURCE, True))
+    assert any("no longer has" in c and SOURCE in c for c in known(eng2, "sorc"))
+    assert known(eng2, "inn") == []
+    for _, qs in salience_asked(judge2):
+        assert set(qs) == {"sorc"}

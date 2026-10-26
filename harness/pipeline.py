@@ -1182,7 +1182,8 @@ class Engine:
                 self._observe(_observed_text(el, who), self._perceivers(el, observers), ev,
                               defer=defer)
         elif ch.op == "remove" and was and items.is_observable(was, before):
-            self._observe(f"{who} no longer has {ch.item}", observers, ev, defer=defer)
+            self._observe(f"{who} no longer has {ch.item}", self._perceivers(was, observers), ev,
+                          defer=defer)
         return ev
 
     def senses_of(self, character: str) -> frozenset[str]:

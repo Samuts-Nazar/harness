@@ -16,6 +16,7 @@ WORLDS = Path(__file__).resolve().parents[1] / "worlds"
 RUNGS = ("stranger", "client", "ally", "close", "lover", "rival", "enemy", "subordinate")
 LADDER = ("stranger", "client", "ally", "close", "lover")
 WHEN_KEYS = ("power", "audience", "stakes")
+SENSES = ("sight", "magic")  # what a character can perceive with
 MAX_WORDS = 260
 MAX_EXAMPLES = 2
 
@@ -148,7 +149,7 @@ def parse_portrait(d: object, path: Path | str = "<portrait>") -> Portrait:
     senses = ("sight",)
     if d.get("senses") is not None:
         got = _str_list(path, d["senses"], "senses")
-        bad = [x for x in got if x not in ("sight", "magic")]
+        bad = [x for x in got if x not in SENSES]
         if bad:
             raise PortraitError(path, "senses", f"unknown sense {bad[0]!r}")
         senses = tuple(dict.fromkeys(("sight", *got)))
