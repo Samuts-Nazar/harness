@@ -92,6 +92,19 @@ Status: closed decisions only. Anything not listed here is undecided. Do not des
 - Canon pull is proportional to the deviation: small acts do not change big events; large or logically connected changes can, when the consequence is logical and fitting.
 - The books get a one-off structured ingestion (who, what, when, where, who knew and how, how others reacted) to make later play cheaper and more accurate. It is piloted on one arc first (book "Останнє бажання": "Голос розуму-1" and the story "Відьмак"), checked record by record and played; only when the result satisfies the user does it extend to the rest of book 1, then the whole saga.
 
+## Outsider campaign (plan 1, 2026-10-27)
+
+Spec `docs/superpowers/specs/2026-10-26-outsider-campaign-design.md`; plans 2 and 3 are not built.
+
+- Explicit inventory: a package may list the player's items (up to 80) with `where` (worn, in hand, pocket, or a container's name), condition, notes, `container`, `open`, `content`. Each listed item has a stable id (`item:<slug>`) and changes match by id; location is state (`worn`, `in_hand`, `in:<container id>`, `on:<place>`, op `move`), and observability is derived: what lies in a closed container is perceived only by its owner until it is opened (op `open`, then the usual observation). Without a list, the derived items and their caps stay.
+- Self-awareness at retrieval: a state element may be unaware to its owner (`aware: false`). The one function that renders a character's state for any composer leaves it out for the owner (panel, own context, assistant, outcome prose) and keeps it for everyone else's perception and for the debug view. A `realize` event makes it aware.
+- Timed effects: an element may carry `until` (in-world time); `World.tick` removes it by an ordinary state event, so rollback works.
+- Reading is an ordinary action. When the player holds an item with `content`, a judgment per turn decides whether he reads it; a file is grepped for terms that one cheap call expands from the request (short inline text is read whole), and one cheap reader call says what it says, close to the text. The clock moves by the duration judgment. The result becomes the reader's own records with source `read: <item id>` (channel READ, accepted by the unknown-claim check and "how does he know that"), and the player sees it as its own block «Прочитано · <item>». Nobody else present learns what was read.
+- Magic sense: a character (portrait or profile) or the wearer of an item may have the `magic` sense. Elements perceptible only by magic (an aura, a spell, a latent Source) are observed only by those who have it, through the same observation and salience path. A package's `player.latent` is such an element, unaware to the player.
+- Canon starts go through a general builder (`builder: canon`: any canon place and store; the Vizima builder stays). A canon event whose participant is in the player's scene at another site is deferred until that person is at the event's place, in story order per person, at most 6 released per world step, and retired unfired after 14 story days.
+- Canon extraction for further books is done by Claude Code subagents in development, by `reports/canon_be/EXTRACTION.md`, with no API spend; the ingestor validates and loads their JSON.
+- The player is free to go anywhere. Canon deferral never forces or restricts him; it only delays book scenes whose people are with him elsewhere.
+
 ## Interaction
 
 - Interruption is a button. Narration streams at speaking pace so interruption points are meaningful.
