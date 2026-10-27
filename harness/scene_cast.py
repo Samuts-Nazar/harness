@@ -6,7 +6,11 @@ pick them. After the narrator, before delivery, `SceneCast.review` finds the peo
 narration shows present who are not in the scene (one cheap list call; the model only lists, code
 decides) and decides for each:
 
-- someone already in the scene (by name or appearance): nothing to do;
+- someone already in the scene: nothing to do. Found by name, or by appearance in code (most of
+  the words of their appearance label in the mention), and else, for a mention that would become
+  a passer-by while other people are present, by a typed choice in the same batched judgment
+  (the narrator may describe a present person in other words: «жінка в чорно-білій сукні» is the
+  sorceress already here, not a new woman);
 - a known character who is not here: walking in from nearby (`scene.outside`) is fine; else the
   world says where they are (`where`), and elsewhere means drift; no information: a typed
   plausibility judgment;
@@ -37,6 +41,7 @@ if TYPE_CHECKING:
 
 HERE, ELSEWHERE, UNKNOWN = "here", "elsewhere", "unknown"
 MAX_PEOPLE = 4  # a narration that brings in more is listed only this far
+NEW_PERSON, SAME_TAG = "new", "cast_same_person"
 MAX_PASSERS_BY = 3  # invented passers-by admitted into one scene at most (the cast must not swell)
 # a mention of several people («кілька возіїв», «двоє наймитів», «гурт прочан») is a crowd, not a
 # person who could speak: not admitted
@@ -278,6 +283,14 @@ class SceneCast:
                 eng._note("scene_cast_cap", mention=m, cap=MAX_PASSERS_BY)
                 continue
             adm = Admission("passer_by", m, label=m)
+            others = {c: eng.names.describe(c) for c in sc.present if c != PLAYER}
+            if others:  # an unnamed mention may be a present person seen another way
+                ask[f"same{i}"] = choice_q(
+                    f"The narration shows a person described as «{m}». Is that one of the people "
+                    "already in the scene (listed with their names and how they look), seen or "
+                    "described in other words, or someone else?",
+                    {NEW_PERSON: "someone else, not one of them", **others}, tag=SAME_TAG)
+                pending[f"same{i}"] = adm
             ask[f"s{i}"] = choice_q(f"Is the person described as «{m}» a man or a woman?",
                                     {"m": "a man or a boy", "f": "a woman or a girl"},
                                     tag="cast_sex")
@@ -293,7 +306,13 @@ class SceneCast:
                 got = {}
             for k, adm in pending.items():
                 j = got.get(k)
-                if k.startswith("s"):
+                if k.startswith("same"):
+                    if j is not None and str(j.answer) != NEW_PERSON:
+                        # a person who is here already: no walk-in
+                        rv.admit = [a for a in rv.admit if a is not adm]
+                        eng._note("scene_cast_same_person", mention=adm.mention,
+                                  character=str(j.answer))
+                elif k.startswith("s"):
                     adm.sex = str(j.answer) if j is not None else None
                 elif j is not None and j.answer:
                     rv.admit.append(adm)

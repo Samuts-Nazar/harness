@@ -32,3 +32,26 @@ Package: `app/tests/fixtures/outsider_ellander.yaml` (start `ellander_road`, a `
 6. The magic observation stores the package's authoring wording as what she perceives.
 7. First word 17–27 s.
 8. «окуляри» appears twice on the panel.
+
+## Re-run after fixes (2026-10-27)
+
+Fixes (task 11), each with a fake-provider test in `tests/test_outsider_live_fixes.py`:
+
+1. **Duplicate of a present NPC.** `SceneCast.review` keeps its code rule (most words of a present person's appearance label in the mention), and for a mention that would become a passer-by while others are present adds one typed choice (`cast_same_person`: someone else, or one of the present people) to the batch it already asks, so no extra call. Code alone misses a present person described in other words («чарівниця з фіалковими очима»), and a choice alone would cost a judgment the code can often skip. The narrator already gets the present people under their labels («Present: …» uses `ref(PLAYER, c)`). The actual cause was problem 2: with the label «Йеннфер» the code rule could not match.
+2. **Name leak.** `CanonPlay.profile_for` takes the label from the portrait's new `look` field (Yennefer «жінка в чорно-білій сукні», Nenneke «огрядна жриця в білому», Ciri «худенька дівчинка з попелястим волоссям»; also used for the no-store stand-ins). Without a `look`, it takes the first alias that is not a name form (`name_form`: capitalised, or sharing four letters with the name). Vizima: the labels of every person in `pilot_v3.db` (and the other pilot stores except `pilot_luna2`'s «Дальку», itself a name form) are unchanged, and the Vizima canon tests pass with `HARNESS_CANON_DB=pilot_v3.db`. `experiments/canon_be_fix.py` step 4 removed «Йеннфер» from be.db and from `raw_be/entities.json` (idempotent: a second run removes 0).
+3. **Containers.** The extractor prompt (item ids on) now lists `open` and says that taking an item out is a `move` to `in_hand` and never a `remove`. Two checks in code back this up. A `move` out of a closed container opens it first, so its contents are observed once. A `remove` of an item inside a container that the same diff opens or moves becomes `move → in_hand` when the turn's text has a take-out verb (дістаю, виймаю, витягаю, takes out…), and is dropped with a reason otherwise.
+4. **Reader request.** `readable.lookup_topic` finds the topic in code, with no call: the clauses that read or look something up, from their «про»/about on. «…дістаю ноутбук і відкриваю свої нотатки про духа лампи» gives «про духа лампи». This topic goes to term expansion, the reader, the duration judgment and the read event. The reader is told to answer only that topic, ignore the physical actions and write only in the output language. An answer that cannot be parsed is asked for once more. MAX_RECORDS is now 6 (records ≤ 600 chars as before).
+8. **Panel duplicate:** one chip per text.
+
+Suite: `nix develop --command pytest -m "eval or not eval"`: 1023 passed, 1 skipped. Run 1 had the known flake `test_stream_and_state_answer_while_slow_translations_run`, which passed when rerun alone. Run 2: no failures.
+
+Live re-run: same script, same 3 turns, cap $0.10. Two runs: $0.0067 each, $0.0134 in total.
+
+| Check | Run 1 | Run 2 (after the reader re-ask) |
+|---|---|---|
+| a) no duplicate / Source hidden | pass: no walk-in in 3 turns; Yennefer speaks every line herself as «Жінка в чорно-білій сукні»; no canon name anywhere in the transcript; the Source stays `internal`, `aware: false`, not on the panel | pass, same |
+| b) Yennefer's magic sense | the magic-sense fact at entry (`witnessed`); she speaks now | same; in turn 3 she asks who taught him and asks to see what is written |
+| c) reading the laptop | **fail**: the reader's answer (5 026 chars) did not parse, so "nothing found". Five probes with the same prompt all parsed: a one-off. Fixed by asking once more. | **pass**: request «про духа лампи»; the 'Прочитано · ноутбук' text is the notes, close to the text, in Ukrainian, with no commentary on the actions; 6 records with `read: item:ноутбук`; clock +5 min; Yennefer gained no read records |
+| d) backpack | **pass**: the extractor wrote `move рюкзак → on:ground`, `open рюкзак`, `move ноутбук → in_hand`; she perceived the contents once | **pass**: the same form; the laptop stays in hand |
+
+Latency (first word): 17.2 / 30.1 / 9.8 s and 27.3 / 32.3 / 7.9 s. Still to do: problems 5–7 (records that say "the player", the authoring wording of the magic observation, latency). The observation text for the contents of an opened pack reads "has X in hand or at the belt" (the category wording, not the location).

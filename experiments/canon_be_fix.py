@@ -11,6 +11,9 @@
    rows (699, 707, 729, 751) now learn at the event's own time, delay 0. Rows with an early learned time
    (letters, 474, 624, 645, 646) are correct and are not touched: the rule only matches learned_t 29700.
 3. Bystanders without knower rows are by design not knowers: nothing is changed (see VERIFY.md).
+4. The misspelt alias «Йеннфер» of `char:yennefer` (outsider live check, problem 2: it became her
+   appearance label, a name form the player never learned) is removed from `canon_alias`, and from
+   `raw_be/entities.json` next to the store when that file exists.
 
 The FTS table is rebuilt at the end. No model call, no network.
 """
@@ -30,6 +33,23 @@ from harness.canon.refine import Refiner
 MAIN = Path("/home/cock/projects/harness/campaigns/canon")
 PLACE = "place:temple-poultry-yard"
 DAY21_PM = 29700
+BAD_ALIASES = [("char:yennefer", "Йеннфер")]
+
+
+def fix_raw_entities(path: Path) -> int:
+    """Drop the bad aliases from an ingest's entities.json (idempotent). Returns how many."""
+    if not path.is_file():
+        return 0
+    data = json.loads(path.read_text(encoding="utf-8"))
+    n = 0
+    for ent in data.get("entities", []):
+        for eid, alias in BAD_ALIASES:
+            if ent.get("id") == eid and alias in ent.get("aliases", []):
+                ent["aliases"] = [a for a in ent["aliases"] if a != alias]
+                n += 1
+    if n:
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    return n
 
 
 def fix(db: str | Path) -> dict:
@@ -56,9 +76,15 @@ def fix(db: str | Path) -> dict:
         "UPDATE canon_knower SET learned_t=(SELECT t_from FROM record WHERE id=canon_knower.event_id), "
         "delay_minutes=0 WHERE learned_t=? AND channel IN ('told','heard','read','inferred') "
         "AND event_id IN (SELECT id FROM record WHERE t_from < 0)", (DAY21_PM,))
+    n_learned = cur.rowcount
+    n_alias = 0
+    for eid, alias in BAD_ALIASES:
+        n_alias += con.execute("DELETE FROM canon_alias WHERE entity=? AND alias=?",
+                               (eid, alias)).rowcount
     con.commit()
     ref.rebuild_fts()
-    out = {"place_fixed": n_place, "learned_fixed": cur.rowcount}
+    out = {"place_fixed": n_place, "learned_fixed": n_learned, "alias_removed": n_alias,
+           "raw_alias_removed": fix_raw_entities(db.parent / "raw_be" / "entities.json")}
     con.close()
     os.replace(tmp, db)
     raw.rmdir()

@@ -241,6 +241,17 @@ class CanonGuard:
 _PRONOUNS = {"вона", "вони", "він", "воно"}
 
 
+def name_form(alias: str, name: str) -> bool:
+    """A form of the person's name, not a description: capitalised (a proper name, a misspelling
+    of it, a nickname used as a name: «Йеннфер», «Дальку»), or sharing its first four letters
+    with a word of the name («йеннефер», «ґеральте»)."""
+    a = alias.strip()
+    if not a or a[0].isupper():
+        return True
+    head = a.casefold()[:4]
+    return len(head) == 4 and any(w.casefold().startswith(head) for w in name.split())
+
+
 def cid_of(entity: str) -> str:
     """Engine character id for a canon entity id: the part after the prefix."""
     return entity.split(":", 1)[1].replace("-", "_")
@@ -261,16 +272,22 @@ class CanonPlay:
         return cls(canon, CanonCampaign(start_t=t, place=place, offset=t, present=list(present)))
 
     # -- characters from canon
-    def profile_for(self, entity: str, *, cid: str | None = None) -> CharacterProfile:
+    def profile_for(self, entity: str, *, cid: str | None = None, look: str = "") -> CharacterProfile:
+        """The engine profile of a canon person. The appearance (the label everyone who does not
+        know the name uses, harness/names.py) is a description, never a form of the name
+        (decisions: "A name is knowledge"): `look` (the portrait's `look`) when given, else the
+        first alias that describes rather than names (a role or a look: «бургомістр»,
+        «біловолосий»), else none."""
         p = self.canon.profile(entity) or {}
         name = self.canon.name(entity)
         unnamed = bool(p.get("unnamed"))
-        appearance = ""
-        if not unnamed:
+        appearance = " ".join(look.split())
+        if not unnamed and not appearance:
             with self.canon._lock:
                 al = [r["alias"] for r in self.canon.con.execute("SELECT alias FROM canon_alias WHERE entity=?", (entity,))]
             for a in al:
-                if a.lower() != name.lower() and len(a) >= 5 and a.lower() not in _PRONOUNS and " " not in a.strip():
+                if (a.lower() != name.lower() and len(a) >= 5 and a.lower() not in _PRONOUNS
+                        and " " not in a.strip() and not name_form(a, name)):
                     appearance = a
                     break
         desc = "; ".join(x for x in (p.get("who"), p.get("role"), p.get("standing")) if x)
@@ -283,7 +300,8 @@ class CanonPlay:
         from a group inherits (a guard from the town guards)."""
         if entity in self.made:
             return self.made[entity]
-        prof = self.profile_for(entity, cid=cid)
+        port = eng.ctx.portraits.get(self.portraits.get(entity, ""))
+        prof = self.profile_for(entity, cid=cid, look=getattr(port, "look", "") or "")
         eng.profiles[prof.id] = prof
         self.made[entity] = prof.id
         known = knowledge_as_of(self.canon, entity, self.start.start_t, also=member_of)

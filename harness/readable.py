@@ -46,7 +46,7 @@ READ_DURATION_TAG, READ_INTENT_TAG = "read_duration", "read_intent"
 MAX_TERMS = 12
 CAP_CHARS = 2000  # one read returns at most this much text
 RECORD_CHARS = 600  # one stored record
-MAX_RECORDS = 4
+MAX_RECORDS = 6
 MIN_TERM_LETTERS = 3  # «і», «на», «що»: no search term
 COMMON_HITS = 300  # a term with more hit lines than this only fills what the others leave
 NO_CONTENT = "У цій речі нема чого читати."
@@ -157,10 +157,18 @@ EXPAND_SYSTEM = (
 
 
 def _parse_json(raw: str) -> Any:
-    m = re.search(r"\{.*\}", raw or "", re.S)
-    if not m:
+    """The first JSON object in `raw` (text before it, or after it, is ignored)."""
+    text = raw or ""
+    start = text.find("{")
+    if start < 0:
         raise ValueError("no JSON object")
-    return json.loads(m.group(0))
+    try:
+        return json.JSONDecoder().raw_decode(text[start:])[0]
+    except json.JSONDecodeError:
+        m = re.search(r"\{.*\}", text, re.S)
+        if not m:
+            raise ValueError("no JSON object") from None
+        return json.loads(m.group(0))
 
 
 def _letters(term: str) -> int:
@@ -315,7 +323,10 @@ def grep_file(path: Path, terms: list[str], context_lines: int = 3,
 READER_SYSTEM = (
     "You read passages of a text for someone who searches it. Use only the passages: say what "
     "they actually say about the request, close to the text, with nothing added, no outside "
-    "knowledge and no guessing. If they say nothing about it, found is false. Return JSON only: "
+    "knowledge and no guessing. Answer only the topic of the lookup: say nothing about what the "
+    "reader does with his hands or body, the item, or anything else in the scene. Write the text "
+    "in {out} only, with no word of any other language. If the passages say nothing about the "
+    "topic, found is false. Return JSON only: "
     "{{\"found\": true|false, \"text\": \"what the passages say about the request, in {out}, at "
     "most 1200 characters\", \"records\": [\"one point the reader now knows from the text, in "
     "{rec}, at most 600 characters\"]}} with at most {n} records.")
@@ -328,16 +339,58 @@ def _cut(text: str, n: int) -> str:
     return text[: n - 1].rsplit(" ", 1)[0].rstrip(" ,;:") + "…"
 
 
+# The lookup topic of a turn (outsider live check, problem 4): "Знімаю рюкзак, розстібаю його,
+# дістаю ноутбук і відкриваю свої нотатки про духа лампи" looks up «нотатки про духа лампи», not the
+# backpack. Derived in code, no model call: the clauses of the turn that read or look something up
+# (a reading verb, or the item's name): what follows a "про"/"about" from the first of them on, else
+# those clauses themselves; the whole turn when no clause qualifies (the reader's instruction then still says to answer only the
+# lookup).
+_CLAUSE = re.compile(r"[,;:.!?\n]+|\s+(?:і|й|та|а|and|then)\s+", re.IGNORECASE)
+_READ_VERB = re.compile(
+    r"(?<!\w)(?:чита\w*|прочита\w*|перечита\w*|шука\w*|знайд\w*|знаход\w*|горта\w*|"
+    r"перегляда\w*|переглян\w*|дивл\w* (?:в|у|що)|відкрива\w* (?:\w+ )?(?:нотат|запис|файл|"
+    r"сторін|розділ|документ|лист)\w*|нотат\w*|запис\w*|read\w*|look\w* (?:up|for|in)|search\w*|"
+    r"find\w*|notes?)(?!\w)", re.IGNORECASE)
+_ABOUT = re.compile(r"(?<!\w)(?:про|щодо|стосовно|about|on the subject of)(?!\w)", re.IGNORECASE)
+
+
+def lookup_topic(text: str, item: str = "") -> str:
+    """What the turn looks up in the item (see above). Never empty for a non-empty turn."""
+    clean = re.sub(r"[«»\"*]", " ", text or "")
+    item_re = (re.compile(r"(?<!\w)" + re.escape(item.strip()[:max(3, len(item.strip()) - 2)]),
+                          re.IGNORECASE) if item.strip() else None)
+    parts = [p.strip() for p in _CLAUSE.split(clean) if p and p.strip()]
+    reading = [i for i, p in enumerate(parts)
+               if _READ_VERB.search(p) or (item_re is not None and item_re.search(p))]
+    picked: list[str] = []
+    if reading:  # what it is about, from the first reading clause on; else the reading clauses
+        for p in parts[reading[0]:]:
+            m = _ABOUT.search(p)
+            if m and p[m.start():].strip() not in picked:
+                picked.append(p[m.start():].strip())
+        if not picked:
+            picked = [parts[i] for i in reading if _READ_VERB.search(parts[i])] or \
+                [parts[i] for i in reading]
+    return "; ".join(picked) or " ".join(clean.split())
+
+
 def _reader(eng: "Engine", request: str, passages: Sequence[Passage]) -> tuple[bool, str, list[str]]:
     out_lang = eng.output_language or "the language of the passages"
     rec_lang = eng.record_language or "the language of the passages"
     body = "\n\n".join(f"[lines {p.start}-{p.end}]\n{p.text}" for p in passages)
     msgs = [{"role": "system", "content": READER_SYSTEM.format(out=out_lang, rec=rec_lang,
                                                                n=MAX_RECORDS)},
-            {"role": "user", "content": f"Request: {request}\n\nPassages:\n{body}"}]
-    try:
-        got = _parse_json(eng._complete("reader", msgs))
-    except ValueError:
+            {"role": "user", "content": f"Request (the topic of the lookup): {request}\n\n"
+                                        f"Passages:\n{body}"}]
+    got: Any = None
+    for attempt in range(2):  # an unreadable answer (a cheap model may run on and break its JSON)
+        raw = eng._complete("reader", msgs)  # is asked once more
+        try:
+            got = _parse_json(raw)
+            break
+        except ValueError:
+            eng._note("reader_unparsed", attempt=attempt + 1, chars=len(raw or ""))
+    if got is None:
         return False, "", []
     if not isinstance(got, dict) or not got.get("found"):
         return False, "", []

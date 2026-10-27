@@ -167,7 +167,9 @@ def _portrait_stand_ins(eng: Engine, start: pilot.CanonStart) -> None:
         port = eng.ctx.portraits.get(pid) if pid else None
         if port is None or cid in eng.profiles:
             continue
-        eng.profiles[cid] = CharacterProfile(cid, port.name, " ".join(port.core.split()[:60]))
+        # the portrait's look is the label until the name is learned (a name is knowledge)
+        eng.profiles[cid] = CharacterProfile(cid, port.name, " ".join(port.core.split()[:60]),
+                                             appearance=port.look)
         made.append((cid, port.id))
     eng._save_setup()
     for cid, pid in made:

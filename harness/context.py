@@ -658,7 +658,7 @@ class ContextBuilder:
             '"notability": number 0..1, "location": optional str}],\n'
             ' "state_changes": [{"character": <id>, "category": "injury"|"clothing"|"inventory"|'
             '"equipment"|"internal"|"appearance", "op": "add"|"remove"|"reveal"|"hide"'
-            + ('|"move"|"realize"' if self.item_ids else "") + ', "item": str, '
+            + ('|"move"|"realize"|"open"' if self.item_ids else "") + ', "item": str, '
             '"observable": true|false, "source": <segment>'
             + (', "id": optional existing item id, "location": optional str' if self.item_ids else "")
             + '}]}\n'
@@ -669,7 +669,12 @@ class ContextBuilder:
                '"reveal", "hide" and "realize" (never invent ids; a new item is added by its text '
                'and gets its id elsewhere). "move" needs a "location": "worn", "in_hand", '
                '"on:<place>" or "in:<container id>"; "add" may give one too. "realize" is for a '
-               'character who learns of an item they carried unaware. ' if self.item_ids else "")
+               'character who learns of an item they carried unaware. "open" is for opening, '
+               'unzipping or untying a container (listed as a container, or one with items '
+               '[location: in:<its id>]). Taking an item out of a container is a "move" of that '
+               'item to "in_hand", never a "remove": "remove" is only for an item that is gone '
+               '(eaten, given away, destroyed). Putting down or taking off a container is a '
+               '"move" of the container itself; its contents stay in it. ' if self.item_ids else "")
             + "Do not emit any other keys. Figures of speech and "
             "gestures are not state (\'took his hand\' adds no hand to anyone's inventory).\n"
             + (f"Names (a passage may describe a person without naming them; in facts, use the "

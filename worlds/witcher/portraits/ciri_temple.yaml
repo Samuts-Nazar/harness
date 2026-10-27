@@ -7,6 +7,7 @@
 id: ciri_temple
 character: ciri
 name: Цірі
+look: "худенька дівчинка з попелястим волоссям"   # what a stranger sees: the label until the name is learned
 phase: "«Кров ельфів», храм Мелітеле в Елландері: the day Yennefer arrives at the temple; Ciri is an adept under Nenneke since Geralt left her here, has not yet met the sorceress, Geralt long absent"
 core: >-
   A girl of about thirteen, quick, proud and stubborn, sword-drilled at Kaer Morhen and sure she is

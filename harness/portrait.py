@@ -69,6 +69,9 @@ class Portrait:
     never: str
     relations: dict[str, str]  # other character id -> rung (static NPC->NPC)
     senses: tuple[str, ...] = ("sight",)  # `senses: [magic]` adds the magic sense to whoever plays it
+    # `look`: how a stranger sees this person (a short Ukrainian phrase, never a name): the label
+    # others use until they learn the name (harness/names.py). "" means none given.
+    look: str = ""
 
 
 def _req(path, d, key, types, where=""):
@@ -153,6 +156,9 @@ def parse_portrait(d: object, path: Path | str = "<portrait>") -> Portrait:
         if bad:
             raise PortraitError(path, "senses", f"unknown sense {bad[0]!r}")
         senses = tuple(dict.fromkeys(("sight", *got)))
+    look = d.get("look") or ""
+    if not isinstance(look, str):
+        raise PortraitError(path, "look", "must be text")
     return Portrait(
         id=_req(path, d, "id", str), character=_req(path, d, "character", str),
         name=_req(path, d, "name", str), phase=_req(path, d, "phase", str),
@@ -162,7 +168,7 @@ def parse_portrait(d: object, path: Path | str = "<portrait>") -> Portrait:
         hidden=_req(path, d, "hidden", str),
         leaks=_str_list(path, _req(path, d, "leaks", list), "leaks"),
         voice=_req(path, d, "voice", str), never=_req(path, d, "never", str),
-        relations=dict(rel), senses=senses,
+        relations=dict(rel), senses=senses, look=" ".join(look.split()),
     )
 
 

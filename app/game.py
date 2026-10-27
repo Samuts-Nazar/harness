@@ -351,8 +351,13 @@ class Game:
             # turns it into the Ukrainian one: mask the translated text again
             both = [eng.ctx.mask(PLAYER, t) for t in both]
             items, prose = both[: len(items)], both[len(items):]
-        chips = [{"text": t, "category": e.category, "label": CATEGORY_UK[e.category],
-                  "observable": e.observable} for t, e in zip(items, mem.state)]
+        chips, shown = [], set()
+        for t, e in zip(items, mem.state):  # one chip per text («окуляри»: a look and an item)
+            if t.casefold().strip() in shown:
+                continue
+            shown.add(t.casefold().strip())
+            chips.append({"text": t, "category": e.category, "label": CATEGORY_UK[e.category],
+                          "observable": e.observable})
         return {"name": eng.profiles[PLAYER].name, "chips": chips, "prose": prose}
 
     def state(self) -> dict[str, Any]:

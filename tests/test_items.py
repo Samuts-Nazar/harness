@@ -104,7 +104,9 @@ def test_unresolved_remove_dropped_but_unresolved_add_creates_item():
     # by id, and by normalised text, an existing item resolves
     d = _validate(eng, (ch("move", "whatever", id="item:lantern", location="in_hand"),
                         ch("remove", "The Lantern")))
-    assert [(c.op, c.item) for c in d.changes] == [("move", "lantern"), ("remove", "lantern")]
+    # (moving it out of the closed backpack opens the backpack first: outsider live check fix)
+    assert [(c.op, c.item) for c in d.changes] == [("open", "backpack"), ("move", "lantern"),
+                                                   ("remove", "lantern")]
 
 
 def test_text_keyed_items_without_ids_unchanged():

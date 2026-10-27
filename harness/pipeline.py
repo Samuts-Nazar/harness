@@ -1862,15 +1862,17 @@ class Engine:
         if item is None:
             return None
         t0, mark = self.scene.time, max((e.id for e in self.log.active()), default=0)
+        # the request is what he looks up, not the whole turn (its other actions are no lookup)
+        topic = readable.lookup_topic(model_text, held[item])
         try:
-            res = readable.read(self, PLAYER, item, model_text)
+            res = readable.read(self, PLAYER, item, topic)
         except (JudgeError, ProviderError) as e:  # nothing read: no knowledge, no time
             for ev in self.log.active([readable.READ_EVENT]):
                 if ev.id > mark:
                     self.log.rollback(ev.id, "read failed")
             self.scene.time = t0
             self._note("read_failed", item=item, error=str(e))
-            res = readable.failed(self, PLAYER, item, model_text)
+            res = readable.failed(self, PLAYER, item, topic)
             self.refresh_memory()
             return res
         self._note("item_read", item=item, found=res.found, minutes=res.minutes,
