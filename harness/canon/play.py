@@ -33,12 +33,15 @@ Phrase = Callable[[str], str]   # a cheap-model text call: prompt -> text
 
 # ---- scheduled canon events (the list task 17 executes) -------------------------------------
 def scheduled_events(canon: Canon, after_t: int, until_t: int | None = None) -> list[ScheduledEvent]:
-    """Story events with t_from in (after_t, until_t], in story order, with participants and knowers."""
+    """Story events with t_from in (after_t, until_t], in story order, with participants and knowers.
+    Dated events (a story day) and `before` events (a season before day 1, `t_prec` 'season': a
+    flashback that lies in the future of a campaign starting before it); events of unknown time
+    carry an earlier time forward and are never scheduled."""
     out: list[ScheduledEvent] = []
     with canon._lock:
         rows = canon.con.execute(
             "SELECT r.id, r.body, r.place, r.t_from, c.day, c.ekind, c.loudness, c.gist_uk, c.order_key FROM record r "
-            "JOIN canon_event c ON c.id=r.id WHERE r.t_from > ? AND c.day IS NOT NULL "
+            "JOIN canon_event c ON c.id=r.id WHERE r.t_from > ? AND (c.day IS NOT NULL OR r.t_prec = 'season') "
             + ("AND r.t_from <= ? " if until_t is not None else "") + "ORDER BY r.t_from, c.order_key",
             (after_t, until_t) if until_t is not None else (after_t,)).fetchall()
         for r in rows:

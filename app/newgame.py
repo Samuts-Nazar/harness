@@ -1001,8 +1001,8 @@ def open_package(stack: Stack, pkg: Package, *, root: Path | str = CAMPAIGNS,
 
     filled = {"name": pname} if not d["player"].get("name") else {}
     if not free:
-        canon = viz.load_canon(stack, canon_db)
         cs = canon_start(st["canon"])
+        canon = viz.load_canon(stack, canon_db, store=cs.canon_db)
         eng, play = viz.create_situation_a(rec, root, name, canon, kw, player=player,
                                            unbounded=unbounded(pkg), kind=KIND, setup=setup,
                                            start=cs)
@@ -1092,11 +1092,10 @@ def reopen(stack: Stack, name: str, *, root: Path | str = CAMPAIGNS, canon_db: A
     eng.ctx.limits = limits_text(pkg)
     mw = saved.get("world") or {}
     if mw.get("kind") == "situation_a":
-        canon = viz.load_canon(stack, canon_db) if mw.get("canon") else None
         cid = mw.get("start")
-        world = viz.situation_a_world(
-            eng, canon, stack.judge,
-            start=canon_start(cid) if cid in start_points() else pilot.SITUATION_A)
+        cs = canon_start(cid) if cid in start_points() else pilot.SITUATION_A
+        canon = viz.load_canon(stack, canon_db, store=cs.canon_db) if mw.get("canon") else None
+        world = viz.situation_a_world(eng, canon, stack.judge, start=cs)
         if canon is None:
             eng.canon_guard = None
         world.cast.update(mw.get("cast", {}))
