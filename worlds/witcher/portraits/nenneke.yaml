@@ -6,7 +6,7 @@
 id: nenneke
 character: nenneke
 name: Неннеке
-look: "огрядна жриця в білому"   # what a stranger sees: the label until the name is learned
+look: "огрядна літня жриця в білому"   # what a stranger sees: the label until the name is learned
 phase: "«Кров ельфів», храм Мелітеле під Елландером: the day Yennefer arrives at the temple to examine Ciri, as Geralt asked; Ciri has been an adept here since Geralt left her; soldiers on the roads ask after wounded elves"
 core: >-
   The plump high priestess of Melitele's temple: healer, teacher, head of a house of women. Her

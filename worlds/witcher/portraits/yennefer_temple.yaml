@@ -5,7 +5,7 @@
 id: yennefer_temple
 character: yennefer
 name: Йеннефер
-look: "жінка в чорно-білій сукні"   # what a stranger sees: the label until the name is learned
+look: "жінка в чорно-білому, з чорними кучерями"   # what a stranger sees: the label until the name is learned
 phase: "«Кров ельфів», храм Мелітеле в Елландері: the day Yennefer arrives at the temple; a Master of Magic who answered the witcher's letter and comes, reluctantly, to examine the girl hidden there; she has not met the girl yet"
 senses: [magic]
 core: >-

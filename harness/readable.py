@@ -340,38 +340,57 @@ def _cut(text: str, n: int) -> str:
 
 
 # The lookup topic of a turn (outsider live check, problem 4): "Знімаю рюкзак, розстібаю його,
-# дістаю ноутбук і відкриваю свої нотатки про духа лампи" looks up «нотатки про духа лампи», not the
-# backpack. Derived in code, no model call: the clauses of the turn that read or look something up
-# (a reading verb, or the item's name): what follows a "про"/"about" from the first of them on, else
-# those clauses themselves; the whole turn when no clause qualifies (the reader's instruction then still says to answer only the
-# lookup).
-_CLAUSE = re.compile(r"[,;:.!?\n]+|\s+(?:і|й|та|а|and|then)\s+", re.IGNORECASE)
+# дістаю ноутбук і відкриваю свої нотатки про духа лампи" looks up «про духа лампи», not the
+# backpack. Derived in code, no model call (the read_intent judge has only yes/no, choice and score
+# questions, so it cannot return the topic):
+# - quoted speech is removed first (what he says is no lookup);
+# - the turn is cut into clauses; a reading clause has a reading verb, or names the item (a name of
+#   four letters or more, as a whole word with its endings); a clause that opens with «що/чи/де/як»
+#   right after a reading clause continues it («Гляну в нотатник, що там про джинів»);
+# - the topic is what follows «про»/about in the reading clauses (never in a later clause: «…і питаю
+#   її про місто» is talk); without one, the reading clauses that have a verb;
+# - otherwise, or when «про» stands only outside the reading clauses («Запитую її про Цірі й
+#   заглядаю в ноутбук»), the whole turn without the quoted speech. Inline content up to 2 000
+#   characters is read whole anyway; the reader's instruction says to answer only the lookup.
+_QUOTED = re.compile(r"«[^»]*»|\"[^\"]*\"|“[^”]*”|„[^“”]*[“”]")
+_CLAUSE = re.compile(r"[,;:.!?…\n]+|\s+(?:і|й|та|а|потім|and|then)\s+", re.IGNORECASE)
+_CONTINUES = re.compile(r"^(?:що|чи|де|як|котр\w*|what|whether|where|how)(?!\w)", re.IGNORECASE)
 _READ_VERB = re.compile(
-    r"(?<!\w)(?:чита\w*|прочита\w*|перечита\w*|шука\w*|знайд\w*|знаход\w*|горта\w*|"
-    r"перегляда\w*|переглян\w*|дивл\w* (?:в|у|що)|відкрива\w* (?:\w+ )?(?:нотат|запис|файл|"
-    r"сторін|розділ|документ|лист)\w*|нотат\w*|запис\w*|read\w*|look\w* (?:up|for|in)|search\w*|"
-    r"find\w*|notes?)(?!\w)", re.IGNORECASE)
+    r"(?<!\w)(?:чита\w*|прочита\w*|перечита\w*|шука\w*|пошука\w*|знайд\w*|знайти|знаход\w*|"
+    r"горта\w*|перегляда\w*|переглян\w*|загляда\w*|заглян\w*|глян\w*|напис\w*|"
+    r"(?:по)?дивл\w*(?= (?:в|у|що)(?!\w)|$)|відкрива\w* (?:\w+ )?(?:нотат|запис|файл|сторін|"
+    r"розділ|документ|лист)\w*|нотат\w*|запис\w*|read\w*|look\w* (?:up|for|in|at)|"
+    r"search\w*|find\w*|notes?|written)(?!\w)", re.IGNORECASE)
 _ABOUT = re.compile(r"(?<!\w)(?:про|щодо|стосовно|about|on the subject of)(?!\w)", re.IGNORECASE)
+_MIN_ITEM = 4  # an item name shorter than this is not matched in the turn at all
 
 
 def lookup_topic(text: str, item: str = "") -> str:
     """What the turn looks up in the item (see above). Never empty for a non-empty turn."""
-    clean = re.sub(r"[«»\"*]", " ", text or "")
-    item_re = (re.compile(r"(?<!\w)" + re.escape(item.strip()[:max(3, len(item.strip()) - 2)]),
-                          re.IGNORECASE) if item.strip() else None)
+    clean = re.sub(r"\s+([,.;:!?…])", r"\1",
+                   " ".join(_QUOTED.sub(" ", text or "").replace("*", " ").split()))
+    whole = clean or " ".join((text or "").split())
+    name = item.strip()
+    item_re = term_pattern(name.casefold()) if len(name) >= _MIN_ITEM else None
     parts = [p.strip() for p in _CLAUSE.split(clean) if p and p.strip()]
-    reading = [i for i, p in enumerate(parts)
-               if _READ_VERB.search(p) or (item_re is not None and item_re.search(p))]
-    picked: list[str] = []
-    if reading:  # what it is about, from the first reading clause on; else the reading clauses
-        for p in parts[reading[0]:]:
-            m = _ABOUT.search(p)
-            if m and p[m.start():].strip() not in picked:
-                picked.append(p[m.start():].strip())
-        if not picked:
-            picked = [parts[i] for i in reading if _READ_VERB.search(parts[i])] or \
-                [parts[i] for i in reading]
-    return "; ".join(picked) or " ".join(clean.split())
+    verb = [bool(_READ_VERB.search(p)) for p in parts]
+    reading = [v or bool(item_re is not None and item_re.search(p)) for p, v in zip(parts, verb)]
+    for i in range(1, len(parts)):  # «…, що там про джинів» continues the reading clause before it
+        if reading[i - 1] and not reading[i] and _CONTINUES.search(parts[i]):
+            reading[i] = verb[i] = True
+    if not any(reading):
+        return whole
+    topics: list[str] = []
+    for p, r in zip(parts, reading):
+        m = _ABOUT.search(p) if r else None
+        if m and p[m.start():].strip() not in topics:
+            topics.append(p[m.start():].strip())
+    if topics:
+        return "; ".join(topics)
+    if any(_ABOUT.search(p) for p, r in zip(parts, reading) if not r):
+        return whole  # the «про» is talk outside the lookup: no topic of the lookup to take
+    with_verb = [p for p, r, v in zip(parts, reading, verb) if r and v]
+    return "; ".join(with_verb) or whole
 
 
 def _reader(eng: "Engine", request: str, passages: Sequence[Passage]) -> tuple[bool, str, list[str]]:

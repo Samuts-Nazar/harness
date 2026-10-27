@@ -28,17 +28,20 @@ _CANDIDATES = [ROOT / "campaigns/canon/be.db",
                pathlib.Path("/home/cock/projects/harness/campaigns/canon/be.db")]
 BE = next((p for p in _CANDIDATES if p.is_file()), None)
 needs_be = pytest.mark.skipif(BE is None, reason="local canon store be.db is absent")
-LOOK = "жінка в чорно-білій сукні"
+LOOK = "жінка в чорно-білому, з чорними кучерями"   # Yennefer's portrait look
+NENNEKE = "огрядна літня жриця в білому"
 
 
 # -- 1. a present person described without a name is no walk-in -----------------------------------
-def _cast_engine(lister, rules=None, look=LOOK):
+def _cast_engine(lister, rules=None, look=LOOK, nenneke=False):
     profiles = [CharacterProfile(PLAYER, "Ілько", "Чужинець.", appearance="бородань в окулярах"),
-                CharacterProfile("yennefer", "Йеннефер", "A sorceress.", appearance=look)]
+                CharacterProfile("yennefer", "Йеннефер", "A sorceress.", appearance=look),
+                CharacterProfile("nenneke", "Неннеке", "A priestess.", appearance=NENNEKE)]
     judge = FakeJudge({"director_narration": True, "director_next": NOBODY, **(rules or {})})
-    prov = FakeProvider(script={"narrator": [f"Жінка в чорно-білій сукні дивиться на вас."],
+    prov = FakeProvider(script={"narrator": ["Жінка в чорно-білій сукні дивиться на вас."],
                                 "npc": [], "extractor": [*lister, "none", diff()]})
-    eng = Engine(prov, profiles, Scene("дорога до Елландера", (PLAYER, "yennefer"), time=0),
+    present = (PLAYER, "yennefer", "nenneke") if nenneke else (PLAYER, "yennefer")
+    eng = Engine(prov, profiles, Scene("храм Мелітеле", present, time=0),
                  models=ModelConfig(), judge=judge, narration="prose", record_language=None)
     eng.scene_cast = SceneCast(None, culture="northern")
     return eng, judge
@@ -52,6 +55,10 @@ def test_present_person_by_her_look_admits_no_walkin():
     eng, _ = _cast_engine([LOOK])
     eng.turn("Підводжуся з землі.")
     assert _walkins(eng) == [] and set(eng.scene.present) == {PLAYER, "yennefer"}
+    # the brief's case: the narration's «жінка в чорно-білій сукні» is her (typed choice)
+    eng, _ = _cast_engine(["жінка в чорно-білій сукні"], {SAME_TAG: "yennefer"})
+    eng.turn("Підводжуся з землі.")
+    assert _walkins(eng) == []
     assert not [e for e in eng.log.active([SCENE_ENTRY]) if e.payload["character"] != PLAYER
                 and e.payload["character"] != "yennefer"]
 
@@ -68,6 +75,36 @@ def test_present_person_in_other_words_found_by_the_typed_judgment():
     eng2, _ = _cast_engine(["худий хлопчик-посильний"])
     eng2.turn("Підводжуся з землі.")
     assert len(_walkins(eng2)) == 1
+
+
+@pytest.mark.parametrize("mention", ["молода жриця в білому", "жриця в білому фартусі",
+                                     "стара жінка", "жінка з кошиком", "жінка в чорній сукні"])
+def test_real_new_people_next_to_present_ones_are_admitted(mention):
+    """Generic words («жриця», «жінка», «в білому») never merge a newcomer with Nenneke or
+    Yennefer: only all of a label's distinctive words do (the judgment's default: someone else)."""
+    eng, _ = _cast_engine([mention], nenneke=True)
+    eng.turn("Озираюся.")
+    assert len(_walkins(eng)) == 1, mention
+
+
+def test_same_look_rule():
+    from harness.scene_cast import _same_look
+    assert _same_look("огрядна літня жриця в білому", NENNEKE)
+    assert _same_look("огрядну жрицю в білому", NENNEKE)        # inflected, generic words aside
+    assert not _same_look("молода жриця в білому", NENNEKE)
+    assert not _same_look("жриця в білому фартусі", NENNEKE)
+    assert _same_look("жінка з чорними кучерями в чорно-білому", LOOK)
+    assert not _same_look("жінка в чорно-білій сукні", LOOK)     # left to the judgment
+
+
+def test_missing_same_person_judgment_admits():
+    from harness.judge import JudgeError
+
+    def down(q, state):
+        raise JudgeError("no judge")
+    eng, _ = _cast_engine(["чарівниця з фіалковими очима"], {SAME_TAG: down})
+    eng.turn("Підводжуся з землі.")
+    assert len(_walkins(eng)) == 1
 
 
 def test_the_old_misspelt_label_was_the_cause():
@@ -174,35 +211,59 @@ def _validate(eng, changes, text=TURN2):
                          texts={"player": text}, fuzzy=True)
 
 
-def test_live_failure_remove_of_taken_out_item_becomes_a_move():
-    """The live diff: `move рюкзак -> on:ground` + `remove ноутбук`, no `open`."""
+def test_remove_is_never_rewritten_nor_dropped():
+    """Consumed, broken, burned or thrown items stay `remove` and are removed, also next to an
+    open or a move of their container (review round 1: no text matching, no rewrite)."""
+    probes = [
+        ("Дістаю з рюкзака ліхтарик і розбиваю його об камінь.",
+         (_ch("remove", "ліхтарик", "item:ліхтарик"),)),
+        ("Розстібаю рюкзак і викидаю ліхтарик у річку.",
+         (_ch("open", "рюкзак", "item:рюкзак"), _ch("remove", "ліхтарик", "item:ліхтарик"))),
+        ("Знімаю рюкзак і спалюю ліхтарик у багатті.",
+         (_ch("move", "рюкзак", "item:рюкзак", location="on:ground"),
+          _ch("remove", "ліхтарик", "item:ліхтарик"))),
+        ("Дістаю батончик і з'їдаю його.", (_ch("remove", "ліхтарик", "item:ліхтарик"),)),
+    ]
+    for text, changes in probes:
+        eng, _ = make_engine({}, item_ids=True)
+        _pack(eng)
+        d = _validate(eng, changes, text=text)
+        assert not d.dropped, text
+        assert ("remove", "ліхтарик") in [(c.op, c.item) for c in d.changes], text
+        for c in d.changes:
+            eng._apply_change(c, eng.log.active()[-1])
+        assert (INVENTORY, "ліхтарик") not in eng.live.snapshot()[PLAYER], text
+
+
+def test_take_out_opens_the_bag_and_is_observed_once():
     eng, _ = make_engine({}, item_ids=True)
     _pack(eng)
     d = _validate(eng, (_ch("move", "рюкзак", "item:рюкзак", location="on:ground"),
-                        _ch("remove", "ноутбук", "item:ноутбук")))
+                        _ch("move", "ноутбук", "item:ноутбук", location="in_hand")))
     assert [(c.op, c.item, c.location) for c in d.changes] == [
         ("move", "рюкзак", "on:ground"), ("open", "рюкзак", None),
         ("move", "ноутбук", "in_hand")]
-    # applied: nothing lost, the backpack open, its contents observed once by the others
     for c in d.changes:
         eng._apply_change(c, eng.log.active()[-1])
     snap = eng.live.snapshot()[PLAYER]
-    assert snap[(INVENTORY, "ноутбук")].location == "in_hand"
-    assert snap[(INVENTORY, "рюкзак")].open
+    assert snap[(INVENTORY, "ноутбук")].location == "in_hand" and snap[(INVENTORY, "рюкзак")].open
     seen = [f.content for f in eng.facts.visible_to("innkeeper", eng.scene.time)]
-    assert sum("ліхтарик" in s for s in seen) == 1 and sum("ноутбук" in s for s in seen) == 1
+    assert sum("ліхтарик" in x for x in seen) == 1 and sum("ноутбук" in x for x in seen) == 1
 
 
-def test_remove_of_an_item_in_a_handled_container_without_take_out_words_is_dropped():
+def test_words_alone_open_nothing():
+    """«дістаюся до храму» (or any text) opens no bag: only a move of an item inside does."""
     eng, _ = make_engine({}, item_ids=True)
     _pack(eng)
-    d = _validate(eng, (_ch("open", "рюкзак", "item:рюкзак"),
-                        _ch("remove", "ноутбук", "item:ноутбук")), text="Розстібаю рюкзак.")
-    assert [c.op for c in d.changes] == ["open"]
-    assert d.dropped and "taken out is a move" in d.dropped[0]["reason"]
-    # an item that is really gone (not inside a container this diff touches) is still removed
-    d = _validate(eng, (_ch("remove", "ноутбук", "item:ноутбук"),), text="Ноутбук розбився.")
-    assert [c.op for c in d.changes] == ["remove"]
+    d = _validate(eng, (_ch("move", "рюкзак", "item:рюкзак", location="on:ground"),),
+                  text="Дістаюся до храму й ставлю рюкзак на землю.")
+    assert [c.op for c in d.changes] == ["move"]
+    # a move of an item that is not inside the bag opens nothing either
+    eng.apply_state_change(StateChange(PLAYER, INVENTORY, "add", "ніж", True, id="item:ніж",
+                                       location="worn"))
+    d = _validate(eng, (_ch("move", "ніж", "item:ніж", location="in_hand"),),
+                  text="Дістаю ніж.")
+    assert [c.op for c in d.changes] == ["move"]
 
 
 def test_corrected_form_and_implicit_open():
@@ -232,11 +293,36 @@ NOTES = ("Нотатки до гри.\nДух лампи звуть Ормаз.\
          "Боїться солоної води.\nСвітить зеленим поруч із брехнею.")
 
 
-def test_lookup_topic():
-    assert readable.lookup_topic(TURN2, "ноутбук") == "про духа лампи"
-    assert readable.lookup_topic("Гляну в нотатник, що там про джинів.", "нотатник") == "про джинів"
-    assert readable.lookup_topic("*читаю нотатник*", "нотатник") == "читаю нотатник"
-    assert readable.lookup_topic("Ну?", "нотатник") == "Ну?"   # nothing to pick: the whole turn
+@pytest.mark.parametrize("turn,item,topic", [
+    (TURN2, "ноутбук", "про духа лампи"),
+    ("Гляну в нотатник, що там про джинів.", "нотатник", "про джинів"),
+    ("*читаю нотатник*", "нотатник", "читаю нотатник"),
+    ("Ну?", "нотатник", "Ну?"),                                   # nothing to pick: the whole turn
+    # review round 1 probes
+    ("Дивлюсь, що там у файлі про духів, і питаю її про місто.", "ноутбук", "про духів"),
+    ("дивлюсь що там у файлі про духів і питаю її про місто", "ноутбук", "про духів"),
+    ("Запитую її про Цірі й заглядаю в ноутбук.", "ноутбук",
+     "Запитую її про Цірі й заглядаю в ноутбук."),              # «про» is talk: the whole turn
+    ("Заглядаю в щоденник, що там написано про перевал.", "щоденник", "про перевал"),
+    ("Шукаю в ноутбуці рецепт зілля.", "ноутбук", "Шукаю в ноутбуці рецепт зілля"),
+    ("Хочу знайти в записнику адресу.", "записник", "Хочу знайти в записнику адресу"),
+    ("Відкриваю ноутбук.", "ноутбук", "Відкриваю ноутбук."),    # no topic: the whole turn
+    # quoted speech is no lookup: «про» inside it is ignored
+    ("Кажу: «Розкажіть про храм», і гортаю нотатки про перевал.", "нотатки", "про перевал"),
+    ("Кажу їй «зараз гляну про вас», і усміхаюся.", "ноутбук",
+     "Кажу їй, і усміхаюся."),
+])
+def test_lookup_topic(turn, item, topic):
+    assert readable.lookup_topic(turn, item) == topic
+
+
+def test_lookup_topic_short_item_name_needs_a_whole_word():
+    # a name under four letters is never matched; a longer one only as a whole word (+ endings)
+    assert readable.lookup_topic("Ніжно торкаюся її руки, а потім про дорогу.", "ніж") == \
+        "Ніжно торкаюся її руки, а потім про дорогу."
+    assert readable.lookup_topic("Листаю книжку про трави.", "лист") == \
+        "Листаю книжку про трави."
+    assert readable.lookup_topic("Беру лист про трави.", "лист") == "про трави"
 
 
 def test_read_turn_reader_gets_the_topic_and_six_records(tmp_path):

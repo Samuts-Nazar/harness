@@ -104,6 +104,10 @@ Spec `docs/superpowers/specs/2026-10-26-outsider-campaign-design.md`; plans 2 an
 - Canon starts go through a general builder (`builder: canon`: any canon place and store; the Vizima builder stays). A canon event whose participant is in the player's scene at another site is deferred until that person is at the event's place, in story order per person, at most 6 released per world step, and retired unfired after 14 story days.
 - Canon extraction for further books is done by Claude Code subagents in development, by `reports/canon_be/EXTRACTION.md`, with no API spend; the ingestor validates and loads their JSON.
 - The player is free to go anywhere. Canon deferral never forces or restricts him; it only delays book scenes whose people are with him elsewhere.
+- A label is never a name form: a canon person a character has not learned the name of is shown by a description (a portrait's `look`, or an alias that describes), never by an alias that is a variant or misspelling of the name.
+- A person the narration describes who is already present is not admitted again: by all distinctive words of their label in code, else by a typed `cast_same_person` choice; generic words never merge two people, and without a verdict the newcomer is admitted.
+- Taking an item out of a closed container opens it (a `move` out of it implies `open`); a `remove` means the item is gone and is never reinterpreted.
+- A read's request is the lookup topic of the turn (`lookup_topic`), not the turn's physical actions.
 
 ## Interaction
 

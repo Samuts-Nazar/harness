@@ -6,8 +6,8 @@ pick them. After the narrator, before delivery, `SceneCast.review` finds the peo
 narration shows present who are not in the scene (one cheap list call; the model only lists, code
 decides) and decides for each:
 
-- someone already in the scene: nothing to do. Found by name, or by appearance in code (most of
-  the words of their appearance label in the mention), and else, for a mention that would become
+- someone already in the scene: nothing to do. Found by name, or by appearance in code (the label
+  itself, or every distinctive word of it: `_same_look`), and else, for a mention that would become
   a passer-by while other people are present, by a typed choice in the same batched judgment
   (the narrator may describe a present person in other words: «жінка в чорно-білій сукні» is the
   sorceress already here, not a new woman);
@@ -140,14 +140,32 @@ def _same_word(a: str, b: str) -> bool:
     return n >= 3 and n >= min(len(a), len(b)) - 2
 
 
+# Words that say what kind of person someone is, not which one: two different priestesses are both
+# «жриця», two women both «жінка». They never identify a present person by appearance.
+_GENERIC = ("жінка", "жінки", "жінку", "жінкою", "чоловік", "дівчина", "дівчинка", "хлопець",
+            "хлопчик", "парубок", "юнак", "дитина", "людина", "старий", "стара", "літній", "літня",
+            "молодий", "молода", "жриця", "жрець", "черниця", "корчмар", "торговка", "торговець",
+            "селянин", "селянка", "незнайомець", "незнайомка", "пані", "панна", "вбранні",
+            "сукні", "одязі", "woman", "man", "girl", "boy", "priestess", "priest", "old", "young")
+
+
+def _generic(w: str) -> bool:
+    return any(_same_word(w, g) for g in _GENERIC)
+
+
 def _same_look(mention: str, label: str) -> bool:
-    """The mention describes the person with this appearance label: more than half of the label's
-    words occur in the mention as whole words (a bare "жінка" or "сивий" is not enough)."""
+    """The mention describes the person with this appearance label: the mention is the label (word
+    for word, inflection allowed), or the label has at least two distinctive words (not a
+    generic kind-of-person word: «жінка», «жриця», «стара»…) and every one of them occurs in the
+    mention. «молода жриця в білому» is not «огрядна літня жриця в білому»; a bare «сивий» is not
+    «кремезний сивий корчмар». A paraphrase is left to the typed judgment."""
     lw, mw = _words(label), _words(mention)
     if not lw or not mw:
         return False
-    hit = sum(1 for w in lw if any(_same_word(w, m) for m in mw))
-    return hit * 2 > len(lw)
+    if len(lw) == len(mw) and all(_same_word(a, b) for a, b in zip(lw, mw)):
+        return True
+    dist = [w for w in lw if not _generic(w)]
+    return len(dist) >= 2 and all(any(_same_word(w, m) for m in mw) for w in dist)
 
 
 _SENTENCE = re.compile(r"[^.!?…\n]*(?:[.!?…]+[»\"]?|\n|$)")
@@ -285,16 +303,16 @@ class SceneCast:
             adm = Admission("passer_by", m, label=m)
             others = {c: eng.names.describe(c) for c in sc.present if c != PLAYER}
             if others:  # an unnamed mention may be a present person seen another way
-                ask[f"same{i}"] = choice_q(
+                ask[f"here{i}"] = choice_q(
                     f"The narration shows a person described as «{m}». Is that one of the people "
                     "already in the scene (listed with their names and how they look), seen or "
                     "described in other words, or someone else?",
                     {NEW_PERSON: "someone else, not one of them", **others}, tag=SAME_TAG)
-                pending[f"same{i}"] = adm
-            ask[f"s{i}"] = choice_q(f"Is the person described as «{m}» a man or a woman?",
+                pending[f"here{i}"] = adm
+            ask[f"sex{i}"] = choice_q(f"Is the person described as «{m}» a man or a woman?",
                                     {"m": "a man or a boy", "f": "a woman or a girl"},
                                     tag="cast_sex")
-            pending[f"s{i}"] = adm
+            pending[f"sex{i}"] = adm
             rv.admit.append(adm)
         if ask:
             try:
@@ -306,13 +324,13 @@ class SceneCast:
                 got = {}
             for k, adm in pending.items():
                 j = got.get(k)
-                if k.startswith("same"):
+                if k.startswith("here"):
                     if j is not None and str(j.answer) != NEW_PERSON:
                         # a person who is here already: no walk-in
                         rv.admit = [a for a in rv.admit if a is not adm]
                         eng._note("scene_cast_same_person", mention=adm.mention,
                                   character=str(j.answer))
-                elif k.startswith("s"):
+                elif k.startswith("sex"):
                     adm.sex = str(j.answer) if j is not None else None
                 elif j is not None and j.answer:
                     rv.admit.append(adm)

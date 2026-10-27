@@ -31,5 +31,5 @@ From the ledger `.superpowers/sdd/2026-10-26-outsider-campaign-plan1/progress.md
 - Deferred: only held people block; unmapped places never held; off-map scene drains backlog; no travel time when a person leaves mid-journey; absolute /home/cock paths in tests/scripts (skip safely).
 - Canon store: FTS only (no embedder); times and some places are guesses (VERIFY.md).
 
-## Task 10 (live check) — found, to fix before merge
-See `reports/outsider/SUMMARY.md` problems 1–4; deferred: 5–8.
+## Task 10 (live check) and task 11 (fixes)
+See `reports/outsider/SUMMARY.md` problems 1–4 and 8: fixed in task 11 (and its review round 1); deferred: 5–7.

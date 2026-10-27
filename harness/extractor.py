@@ -128,14 +128,11 @@ def validate_diff(
     sim = copy.deepcopy(state or {})
     out_changes: list[StateChange] = []
     dropped: list[dict[str, Any]] = []
-    handled = _containers_handled(changes, who, sources, sim, fuzzy)
-    said = " ".join((texts or {}).values())
     for i, c in enumerate(changes):
         where = f"state_changes[{i}]"
         try:
             change = _parse_change(c, where, who, sources)
             change = _bind_item(c, change, where, sim, fuzzy)
-            change = _taken_out(change, where, sim, handled, said)
             for opened in _implicit_opens(change, sim):
                 check_change(sim, opened)
                 apply(sim, opened)
@@ -205,13 +202,10 @@ def _bind_item(c: dict[str, Any], change: StateChange, where: str, sim: State,
 
 # -- containers (outsider live check, problem 3) ----------------------------------------------------
 # "Знімаю рюкзак, розстібаю його, дістаю ноутбук" once came out as `move рюкзак -> on:ground` plus
-# `remove ноутбук` with no `open`: the laptop was lost. The prompt says how to write it; these are
-# the safety net in code.
-_TAKE_OUT = re.compile(
-    r"(?<!\w)(?:діста\w*|дістав\w*|дістан\w*|вийма\w*|вийня\w*|вийму|витяг\w*|витягу\w*|"
-    r"takes? out|took out|taking out|pull(?:s|ed|ing)? out|gets? out|got out)(?!\w)", re.IGNORECASE)
-
-
+# `remove ноутбук` with no `open`: the laptop was lost. The prompt says how to write it (take out =
+# `move`, open = `open`). The one safety net in code: a `move` that takes an item out of a closed
+# container it is in opens that container first. A `remove` is never rewritten (the item may really
+# be eaten, burned or thrown away), and no text is matched.
 def _element(sim: State, ch: StateChange) -> Any:
     return sim.get(ch.character, {}).get((ch.category, ch.item))
 
@@ -225,43 +219,11 @@ def _box_of(sim: State, character: str, el: Any) -> Any:
                  if getattr(e, "id", None) == bid), None)
 
 
-def _containers_handled(changes: list[Any], who: set[str], sources: Collection[str], sim: State,
-                        fuzzy: bool) -> set[str]:
-    """Ids of the containers this diff opens or moves (resolved against the state before it)."""
-    out: set[str] = set()
-    for i, c in enumerate(changes):
-        if not isinstance(c, dict) or c.get("op") not in ("open", "move"):
-            continue
-        try:
-            ch = _bind_item(c, _parse_change(c, f"state_changes[{i}]", who, sources), "", sim, fuzzy)
-        except (DiffValidationError, StateError):
-            continue
-        el = _element(sim, ch)
-        if getattr(el, "id", None):
-            out.add(el.id)
-    return out
-
-
-def _taken_out(change: StateChange, where: str, sim: State, handled: set[str],
-               said: str) -> StateChange:
-    """A `remove` of an item that sits in a container this same diff opens or moves is an item
-    taken out, not one that is gone: when the text says it is taken out it becomes a `move` to the
-    hand (which opens the container, below); otherwise the remove is dropped."""
-    if change.op != "remove":
-        return change
-    el = _element(sim, change)
-    box = _box_of(sim, change.character, el)
-    if box is None or box.id not in handled:
-        return change
-    if _TAKE_OUT.search(said):
-        return replace(change, op="move", location="in_hand")
-    raise DiffValidationError(f"{where}: remove of {change.item!r}, which is inside {box.item!r} "
-                              "that this diff opens or moves: taken out is a move, not a remove")
-
-
 def _implicit_opens(change: StateChange, sim: State) -> list[StateChange]:
-    """A `move` of an item out of a closed container opens it first (each closed container on the
-    way out, outermost first), so whatever is inside is observed once."""
+    """A `move` of an item that is (in the state before the move) inside a closed container, to a
+    place outside it, opens that container first (each closed container on the way out, outermost
+    first), so whatever is inside is observed once. It also fires on an extractor mistake: a wrong
+    move out of a closed bag opens the bag."""
     if change.op != "move" or not change.location:
         return []
     el = _element(sim, change)
