@@ -55,3 +55,12 @@ Live re-run: same script, same 3 turns, cap $0.10. Two runs: $0.0067 each, $0.01
 | d) backpack | **pass**: the extractor wrote `move рюкзак → on:ground`, `open рюкзак`, `move ноутбук → in_hand`; she perceived the contents once | **pass**: the same form; the laptop stays in hand |
 
 Latency (first word): 17.2 / 30.1 / 9.8 s and 27.3 / 32.3 / 7.9 s. Still to do: problems 5–7 (records that say "the player", the authoring wording of the magic observation, latency). The observation text for the contents of an opened pack reads "has X in hand or at the belt" (the category wording, not the location).
+
+## Re-run 2 (after review round 1, 2026-10-27)
+
+One run of the same script, same 3 turns, with Yennefer's look «жінка в чорно-білому, з чорними кучерями». Cost $0.0080 in 106 calls. First word 9.7 / 18.9 / 7.6 s.
+
+- Walk-in duplicate of Yennefer: **N**. Nobody but Yennefer and the player entered the scene. The narrator called her «жінка» / «вона», and the people lister returned nobody new, so neither the code rule nor the `cast_same_person` choice was needed: the typed judgment was **not exercised live** in this run.
+- Who spoke: Yennefer only. Three lines, all labelled «Жінка в чорно-білому, з чорними кучерями». No name form anywhere in the transcript or on the panel.
+- Backpack: pass. The extractor wrote `move рюкзак → on:wet ground`, `open рюкзак`, `move ноутбук → in_hand`; the backpack is open and the laptop in hand.
+- Read: pass. Request «про духа лампи», Ukrainian text close to the notes, 6 records with `read: item:ноутбук`, +5 min; Yennefer gained no read records.
