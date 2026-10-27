@@ -15,3 +15,23 @@ Chosen by the controller on 2026-10-26 from the density of Yennefer, Nenneke, Ci
 Windows (about 400 lines each): 15505–15900, 15901–16261, 19009–19408, 19409–19808, 19809–20208, 20209–20608, 20609–21008, 21009–21408, 21409–21808, 21809–22100.
 
 Extraction is done by Claude Code subagents following `reports/canon_be/EXTRACTION.md`, into `/home/cock/projects/harness/campaigns/canon/raw_be/` (git-ignored). No API spend.
+
+## Load counts (ingest run, task 8)
+
+| What | Count |
+|---|---|
+| entities | 156 (153 from the cast list + 3 added by windows) |
+| canon_event | 234 |
+| canon_participant | 633 |
+| canon_knower | 662 from the ingest, + 5 `witnessed` rows added by the finish pass (667) |
+| canon_reaction | 179 |
+| dropped records | 0 |
+| flagged | none |
+| format failures / window failures | 0 / 0 |
+| JSON files read | 11 |
+| uncovered lines | 16263–19007 (chapters 2–4), by design |
+
+**Inconsistent times.** Geralt's letter asking Yennefer for help (`before` 0.08 years, −42048) and her
+reply (−15768) are stamped *after* her arrival at the temple (`before` 0.2 years, −105120), though in the
+story the letter sends her there. Both stamps are anchor guesses; the store is self-inconsistent here and
+was not changed. Effect at the `ellander_road` start: Yennefer does not yet "know" the letter.

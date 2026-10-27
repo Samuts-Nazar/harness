@@ -76,3 +76,7 @@ script does not change these rows.
   event, the source should say so and the event should list them as witness.
 - **Not fixed:** event 630 (Tissaia channel `inferred` instead of `witnessed`; invented place
   `vilgefortz-residence`) and the other guessed times and places listed above.
+- **Self-inconsistent times: the letter after the arrival.** Geralt's letter to Yennefer (−42048,
+  "a month ago" before day 1) and her reply (−15768) are stamped after her arrival at the temple
+  (`before` 0.2, −105120), though the letter is what sends her there. Both are anchor guesses; not
+  changed. At the `ellander_road` start Yennefer therefore does not know the letter yet.

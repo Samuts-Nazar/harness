@@ -161,14 +161,17 @@ def _portrait_stand_ins(eng: Engine, start: pilot.CanonStart) -> None:
     keeps the person and the portrait's senses; they carry no canon knowledge."""
     from harness.canon.play import cid_of
     portraits = dict(start.portraits)
+    made: list[tuple[str, str]] = []
     for ent, _home, _goal in start.people:
         cid, pid = cid_of(ent), portraits.get(ent)
         port = eng.ctx.portraits.get(pid) if pid else None
         if port is None or cid in eng.profiles:
             continue
         eng.profiles[cid] = CharacterProfile(cid, port.name, " ".join(port.core.split()[:60]))
-        eng._save_setup()
-        eng.bind_portrait(cid, port.id)
+        made.append((cid, port.id))
+    eng._save_setup()
+    for cid, pid in made:
+        eng.bind_portrait(cid, pid)
 
 
 def _populate_without_canon(eng: Engine, start: pilot.CanonStart = pilot.SITUATION_A) -> None:
