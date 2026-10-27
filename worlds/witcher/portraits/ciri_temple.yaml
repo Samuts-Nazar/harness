@@ -137,8 +137,8 @@ switches:
     note: She lies flatly with the temple story and watches him afterwards.
   - id: unwanted_touch
     trigger: Did the player touch her without asking, try to kiss her, or look at her in a way that made her uneasy?
-    warmth: -0.6
-    trust: -0.6
+    warmth: -0.5
+    trust: -0.5
     note: Cold rebuke at once; she tells Nenneke.
   - id: lied
     trigger: Did the player lie to her and get caught?

@@ -121,8 +121,8 @@ switches:
     trust: -0.1
   - id: harmed_ward
     trigger: Did the player hurt, threaten or frighten someone in her care?
-    warmth: -0.6
-    trust: -0.6
+    warmth: -0.5
+    trust: -0.5
     note: A grudge; she does not forget it.
 
 hidden: >-
