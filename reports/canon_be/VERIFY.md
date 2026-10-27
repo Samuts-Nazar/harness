@@ -53,7 +53,26 @@ script does not change these rows.
   in 479, 602 and 608, Yennefer in 612, and the zhahnytsia in 510-522). The loader does not add knowers
   for bystanders, so these people do not know events they stood next to. That is correct only where they
   really did not notice.
-- **No gist or keywords.** Records are English with Ukrainian names. Ukrainian full-text matching works
-  only through names and the verbatim quote, so recall of everyday Ukrainian wording is weaker than in the
-  pilot-2 stores.
+- **Gist, no keywords.** Records are English with Ukrainian names. Since the follow-up below every event has a
+  Ukrainian one-sentence `gist_uk`, hand-translated from the stored `what` (no `kw_uk`), so everyday
+  Ukrainian wording now matches in FTS.
 - **Uncovered range.** Lines 16263-19007 (chapters 2-4, Kaer Morhen) are not in the store, by design.
+
+## Follow-up fixes (scripts `experiments/canon_be_gist.py` and `experiments/canon_be_fix.py`, both idempotent)
+
+- **Gist.** `campaigns/canon/raw_be/gists.json` ({event_id: sentence}, git-ignored with the store) holds 234
+  Ukrainian sentences with the glossary names; `canon_be_gist.py` writes them to `canon_event.gist_uk` and
+  rebuilds the FTS. A test checks that the everyday query "Йеннефер приїхала до храму" returns events and that
+  their search rows contain the gist.
+- **Event 672.** There was no poultry-yard place in the cast, so `place:temple-poultry-yard` (name
+  "птахівник храму") was added as a minimal entity row. The event was moved there and its record meta flagged
+  `place_unverified`; "in the temple park" in its `what` became "in the temple poultry yard".
+- **Learned time of flashback knowers.** Rows 699 (Yennefer), 707 and 729 (Ciri) and 751 (Eist) now learn at the
+  event's own `before` time with delay 0. The rule is: told/heard/read/inferred rows with learned time 29700
+  whose event has t_from < 0. It matches exactly those four; the other early-learned rows (468, 469, 474, 624,
+  645, 646) are correct and untouched.
+- **Bystanders without knower rows (16): left as they are, by design.** A bystander is someone who stood near
+  but did not take part or notice, so the loader gives no knower row. Where a bystander really noticed the
+  event, the source should say so and the event should list them as witness.
+- **Not fixed:** event 630 (Tissaia channel `inferred` instead of `witnessed`; invented place
+  `vilgefortz-residence`) and the other guessed times and places listed above.

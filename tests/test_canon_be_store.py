@@ -95,3 +95,14 @@ def test_ciri_does_not_know_before_she_learns(canon: Canon, con: sqlite3.Connect
     assert all(e["learned_t"] <= CH7_NOON for e in early["events"])
     after = canon.recall(CIRI, q, LATE, k=10)
     assert {e["id"] for e in after["events"]} & set(later)
+
+
+def test_everyday_ukrainian_query_hits_the_gist(canon: Canon, con: sqlite3.Connection) -> None:
+    assert con.execute("SELECT COUNT(*) FROM canon_event WHERE gist_uk IS NULL OR gist_uk=''").fetchone()[0] == 0
+    got = canon.recall(CIRI, "Йеннефер приїхала до храму", LATE)["events"]
+    assert got
+    # the gist is in the search row of at least one returned event
+    for e in got:
+        gist = con.execute("SELECT gist_uk FROM canon_event WHERE id=?", (e["id"],)).fetchone()[0]
+        text = con.execute("SELECT text FROM canon_event_fts WHERE rowid=?", (e["id"],)).fetchone()[0]
+        assert gist in text
