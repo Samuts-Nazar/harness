@@ -21,6 +21,8 @@ Event types written by the world (all derived state comes from them):
 - CANON_EXECUTED  a scheduled canon event happened (or was changed): payload {canon_id, outcome}
 - CANON_DEFERRED  a scheduled canon event is held back: one of its people stands in the player's
                   scene at another place; payload {canon_id, t, held}
+- CANON_RETIRED   a deferred canon event older than STALE_DAYS story days: never fired;
+                  payload {canon_id, t, reason}
 """
 from __future__ import annotations
 
@@ -32,6 +34,7 @@ WORLD_REACTION, OFFSCREEN_UPDATE, WORLD_MOVE, WORLD_TICK, CANON_EXECUTED, WORLD_
     "world_reaction", "offscreen_update", "world_move", "world_tick", "canon_executed",
     "world_arrival")
 CANON_DEFERRED = "canon_deferred"  # a canon event waits for its people to reach its place
+CANON_RETIRED = "canon_retired"  # a deferred canon event waited too long: the world moved on
 WORLD_TRAIL = "world_trail"  # men looking for a person reached a place: found nobody / next place
 THREAD_RESOLVED, PERIOD_SUMMARY = "thread_resolved", "period_summary"
 

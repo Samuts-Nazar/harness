@@ -213,12 +213,15 @@ def test_temple_events_wait_while_yennefer_is_on_the_road(tmp_path):
     ids = [e.payload["canon_id"] for e in late]
     assert ids == held[:len(ids)]                      # in story order
     # a three-day wait at the temple: the park is part of its site, so the whole conversation
-    # happens in story order (the park scenes 703-712 before the guest-room scenes 714-721)
+    # happens in story order (the park scenes before the guest-room scenes)
     world.tick(eng.scene.time + 3 * 1440)
     ex = [e for e in eng.log.active([nw.CANON_EXECUTED]) if e.payload["canon_id"] in held]
     order = [e.payload["canon_id"] for e in ex]
     assert sorted(order) == sorted(held) and order == held
-    park, room = [i for i in order if 703 <= int(i) <= 712], [i for i in order if 714 <= int(i) <= 721]
+    # found by their canon places: the park talk, then the talk in Yennefer's guest room
+    raw = world.canon._by_id
+    park = [i for i in order if raw[i].place == "place:temple-park"]
+    room = [i for i in order if raw[i].place == "place:yennefer-room"]
     assert park and room and order.index(park[-1]) < order.index(room[0])
     stamps = [e.game_time for e in ex]
     assert stamps == sorted(stamps)

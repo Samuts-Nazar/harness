@@ -97,3 +97,53 @@ def test_a_site_counts_as_reached_and_an_unknown_scene_place_holds_nothing():
     eng.scene.location = "a hut somewhere"            # not on the map: old behaviour
     w.tick(21 * 60 + 30)
     assert not eng.log.active([nw.CANON_DEFERRED])
+
+
+class _Spy(ListCanon):
+    """A ListCanon that records the windows it is asked for."""
+
+    def __init__(self, events):
+        super().__init__(events)
+        self.calls: list[tuple[int, int]] = []
+
+    def scheduled(self, after_t, up_to_t):
+        self.calls.append((after_t, up_to_t))
+        return super().scheduled(after_t, up_to_t)
+
+
+def test_a_held_event_retires_after_stale_days_and_never_fires():
+    from harness.world.world import STALE_DAYS
+    canon = _Spy([ScheduledEvent("m", T, "market", ("innkeeper",), "The innkeeper haggles",
+                                 ("innkeeper",), 0.3)])
+    eng, w, _ = build(canon=canon)
+    w.tick(21 * 60 + 30)
+    assert len(eng.log.active([nw.CANON_DEFERRED])) == 1
+    w.tick(T + (STALE_DAYS + 1) * 1440)               # he stays with the player for two weeks
+    ret = eng.log.active([nw.CANON_RETIRED])
+    assert len(ret) == 1 and ret[0].payload == {"canon_id": "m", "t": T, "reason": "stale",
+                                                "logged_at": ret[0].payload["logged_at"]}
+    canon.calls.clear()
+    w.tick(eng.scene.time + 120)
+    assert canon.calls and all(a >= eng.scene.time - 120 for a, _u in canon.calls)  # window bounded
+    eng.scene.location = w.map.name("market")         # he reaches the place: too late now
+    w.tick(eng.scene.time + 120)
+    assert not eng.log.active([nw.CANON_EXECUTED])
+    assert len(eng.log.active([nw.CANON_RETIRED])) == 1   # logged once
+    # a rollback of the retirement restores the waiting event (still stale: retired again)
+    eng.log.rollback(ret[0].id)
+    assert "m" in w._deferred(w._executed())
+    w.tick(eng.scene.time + 60)
+    assert not eng.log.active([nw.CANON_EXECUTED])
+    assert len(eng.log.active([nw.CANON_RETIRED])) == 1
+
+
+def test_a_held_event_younger_than_stale_days_still_fires():
+    from harness.world.world import STALE_DAYS
+    eng, w, _ = build(canon=_canon(1))
+    w.tick(21 * 60 + 30)
+    w.tick(T + (STALE_DAYS - 1) * 1440)
+    assert not eng.log.active([nw.CANON_RETIRED])
+    eng.scene.location = w.map.name("market")
+    w.tick(eng.scene.time + 60)
+    assert [e.payload["canon_id"] for e in eng.log.active([nw.CANON_EXECUTED])
+            if e.payload["canon_id"] != "d"] == ["m0"]
