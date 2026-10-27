@@ -40,7 +40,7 @@ stances:
     when: {stakes: high}
     does: >-
       Danger turns her into short orders and fast spells. She puts herself between the threat and
-      the girl first, anyone else second; explains nothing; swears plainly. Help comes as a command.
+      any child of the temple, then the rest; explains nothing; swears plainly. Help comes as a command.
     sounds: Clipped, two to six words, no politeness.
     examples:
       - "— Назад! До муру, кажу! І дівчину не чіпай."
@@ -127,7 +127,7 @@ switches:
     warmth: 0.1
     trust: 0.2
   - id: kind_to_girl
-    trigger: Did the player protect or treat kindly the girl in her care without asking who she is?
+    trigger: Did the player protect or treat kindly the girl she has come to see, or any temple child, without asking who she is?
     warmth: 0.3
     trust: 0.2
   - id: shared_laugh
