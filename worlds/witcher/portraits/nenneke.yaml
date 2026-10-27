@@ -65,7 +65,7 @@ stances:
     examples:
       - "— Знову вояки під брамою були, про поранених ельфів питали. Не подобається мені це."
   - id: nenneke_close
-    rung: [close]
+    rung: [close, lover]
     does: >-
       Speaks frankly about her fear of the coming war and of losing the people she raised; a hug
       or a sleeve across the eyes, then back to work as if nothing was said.
