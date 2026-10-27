@@ -1,7 +1,7 @@
 """Canon events whose people stand in the player's scene at another place are deferred (outsider
-campaign Task 9 review): Yennefer on the road with the player cannot meet Ciri in the temple
-refectory at the same time. They happen once she reaches the event's place (or leaves the player's
-scene), in story order, at most `CANON_LATE_PER_STEP` per world step. Fake judge, no network."""
+campaign Task 9 review, two rounds): Yennefer on the road with the player cannot meet Ciri in the temple
+refectory at the same time. They happen once she reaches the event's site (or leaves the player's
+scene), in story order per person, at most `CANON_LATE_PER_STEP` per world step. Fake judge, no network."""
 from __future__ import annotations
 
 from harness.models import PLAYER
@@ -44,7 +44,7 @@ def test_deferred_events_fire_in_order_when_the_person_reaches_the_place():
     w.tick(22 * 60 + 30)                               # one world step
     late = [e for e in eng.log.active([nw.CANON_EXECUTED]) if "deferred_from" in e.payload]
     assert [e.payload["canon_id"] for e in late] == [f"m{i}" for i in range(CANON_LATE_PER_STEP)]
-    assert all(e.game_time == 22 * 60 + 30 for e in late)   # they happen now, not in the past
+    assert all(e.game_time == 21 * 60 + 30 for e in late)   # at the step's start, not the past
     assert [e.payload["deferred_from"] for e in late] == [T + i for i in range(CANON_LATE_PER_STEP)]
     w.tick(23 * 60 + 30)
     late = [e for e in eng.log.active([nw.CANON_EXECUTED]) if "deferred_from" in e.payload]
@@ -61,3 +61,39 @@ def test_leaving_the_players_scene_releases_them():
     w.tick(22 * 60 + 30)
     assert len(_market_facts(eng, "innkeeper", eng.scene.time)) == 2
     assert PLAYER in eng.scene.present
+
+
+def test_story_order_per_person_and_stamp_order():
+    """A later event of the same person waits behind an earlier deferred one, even where it
+    could happen on time (the tavern is the scene's place); stamps follow story order."""
+    canon = ListCanon([
+        ScheduledEvent("away", T, "market", ("innkeeper",), "The innkeeper haggles at the market",
+                       ("innkeeper",), 0.3),
+        ScheduledEvent("home", T + 20, "tavern", ("innkeeper",), "The innkeeper opens a cask",
+                       ("innkeeper",), 0.3),
+        ScheduledEvent("other", T + 25, "market", ("drunk",), "The drunk buys a whip", (), 0.3),
+    ])
+    eng, w, _ = build(canon=canon)
+    w.tick(21 * 60 + 30)
+    ex = {e.payload["canon_id"]: e for e in eng.log.active([nw.CANON_EXECUTED])}
+    assert set(ex) == {"other"}                       # someone else's event is not held
+    held = {e.payload["canon_id"] for e in eng.log.active([nw.CANON_DEFERRED])}
+    assert held == {"away", "home"}
+    eng.leave_scene("innkeeper", stay_nearby=False)   # he goes about his day: both can happen
+    w.tick(22 * 60 + 30)
+    ex = [e for e in eng.log.active([nw.CANON_EXECUTED]) if e.payload["canon_id"] != "other"]
+    assert [e.payload["canon_id"] for e in ex] == ["away", "home"]
+    assert ex[0].game_time <= ex[1].game_time
+
+
+def test_a_site_counts_as_reached_and_an_unknown_scene_place_holds_nothing():
+    # the palace is 3 minutes from the guardhouse: one site
+    canon = ListCanon([ScheduledEvent("g", T, "guardhouse", ("innkeeper",), "The innkeeper "
+                                      "reports to the sergeant", ("innkeeper",), 0.3)])
+    eng, w, _ = build(canon=canon, place="palace")
+    w.tick(21 * 60 + 30)
+    assert [e.payload["canon_id"] for e in eng.log.active([nw.CANON_EXECUTED])] == ["g"]
+    eng, w, _ = build(canon=_canon(1))
+    eng.scene.location = "a hut somewhere"            # not on the map: old behaviour
+    w.tick(21 * 60 + 30)
+    assert not eng.log.active([nw.CANON_DEFERRED])

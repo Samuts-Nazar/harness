@@ -32,6 +32,7 @@ ROUTINE_HOURS = 8  # an agent with a goal and no news gets one judgment this oft
 STEP_MINUTES, LONG_STEP_MINUTES, LONG_SPAN = 60, 180, 12 * 60
 SKIP_STEP_MINUTES, SKIP_SPAN = 720, 3 * 24 * 60  # a skip of days runs in half-day steps
 CANON_LATE_PER_STEP = 6  # deferred canon events released per world step (judge calls per tick)
+SITE_MINUTES = 5  # places this close are one site: a person at one has reached the others
 KINDS = ("town", "authority")
 
 # what an off-screen agent can do (the options offered depend on the situation)
@@ -649,30 +650,40 @@ class World:
             p = self.map.add_place(Place(ref, ref))
         return p.id
 
-    def _deferred(self, done: set[str]) -> dict[str, int]:
-        """Canon events held back and not yet executed: canon id -> story stamp (campaign min)."""
-        return {e.payload["canon_id"]: int(e.payload["t"])
+    def _deferred(self, done: set[str]) -> dict[str, tuple[int, list[str]]]:
+        """Canon events held back and not yet executed: canon id -> (story stamp in campaign
+        minutes, the people it waits for)."""
+        return {e.payload["canon_id"]: (int(e.payload["t"]), list(e.payload.get("held", [])))
                 for e in self.eng.log.active([nw.CANON_DEFERRED])
                 if e.payload["canon_id"] not in done}
 
     def _held(self, ce: ScheduledEvent, place: str) -> list[str]:
-        """The event's people who stand in the player's scene while the scene is at another
-        place than the event: it cannot happen to them there (they are with the player)."""
-        if place == self.here():
+        """The event's people who stand in the player's scene while the scene is at another site
+        than the event: it cannot happen to them there (they are with the player). A site is the
+        places within `SITE_MINUTES` of each other (a temple and its park). Nothing is held when
+        the scene's place is not on the map, or the event's place has no links (where it is
+        cannot be told)."""
+        here = self.here()
+        if here is None or not self.map.edges.get(place) or place == here:
+            return []
+        if self.map.minutes(place, here) <= SITE_MINUTES:
             return []
         present = set(self.eng.scene.present) - {PLAYER}
         return [p for p in ce.participants if p in present]
 
     def run_canon(self, after: int, upto: int) -> list[Event]:
         """Execute the canon events of (after, upto]. An event one of whose people stands in the
-        player's scene at another place is deferred (logged, not consumed); it happens on the first
-        step after that no longer holds (they reached its place, or left the player's scene), in
-        story order, at that step's time, at most `CANON_LATE_PER_STEP` per step."""
+        player's scene at another site is deferred (logged, not consumed), and so is every later
+        event of the same person while an earlier one waits (story order per person). A deferred
+        event happens on the first step after that no longer holds (they reached its site, or
+        left the player's scene), in story order, stamped at the step's start (so never after a
+        later on-time event), at most `CANON_LATE_PER_STEP` per step."""
         done = self._executed()
         pending = self._deferred(done)
-        since = min([after, *(t - 1 for t in pending.values())])
         out: list[Event] = []
+        since = min([after, *(t - 1 for t, _h in pending.values())])
         late_fired = 0
+        blocked: set[str] = set()   # people with an earlier event still waiting in this pass
         for ce in sorted(self.canon.scheduled(since, upto), key=lambda e: e.t):
             if ce.id in done:
                 continue
@@ -681,16 +692,18 @@ class World:
                 continue
             place = self._place_id(ce.place)
             held = self._held(ce, place)
+            held += [p for p in ce.participants if p in blocked and p not in held]
+            if not held and late and late_fired >= CANON_LATE_PER_STEP:
+                held = pending[ce.id][1]  # over the cap: waits one more step, keeps its people's order
             if held:
+                blocked.update(held)
                 if not late:
                     self._log(nw.CANON_DEFERRED, upto, {"canon_id": ce.id, "t": ce.t, "held": held},
                               place=place, notability=0.0)
                 continue
             if late:
-                if late_fired >= CANON_LATE_PER_STEP:
-                    continue
                 late_fired += 1
-            at = upto if late else ce.t
+            at = after if late else ce.t
             touched = self._touched(ce, place)
             outcome, reason, new_summary = "as_written", "", None
             if touched and hasattr(self.canon, "verdict"):

@@ -193,7 +193,8 @@ def test_vizima_start_points_unchanged():
 @needs_be
 def test_temple_events_wait_while_yennefer_is_on_the_road(tmp_path):
     """Review fix: the arrival scenes at the temple (11:00) cannot happen to Yennefer while she
-    stands on the road with the player; they happen once she is at the temple, six per step."""
+    stands on the road with the player; they happen once she is at the temple (or its park, the
+    same site), in story order, six per step."""
     from harness.world import news as nw
     from harness.world.world import CANON_LATE_PER_STEP
     g, _ = build(tmp_path, BE)
@@ -210,13 +211,19 @@ def test_temple_events_wait_while_yennefer_is_on_the_road(tmp_path):
     late = [e for e in eng.log.active([nw.CANON_EXECUTED]) if "deferred_from" in e.payload]
     assert 0 < len(late) <= CANON_LATE_PER_STEP
     ids = [e.payload["canon_id"] for e in late]
-    assert ids == [i for i in held if i in ids]        # in story order
-    world.tick(eng.scene.time + 4 * 60)
-    fired = {e.payload["canon_id"] for e in eng.log.active([nw.CANON_EXECUTED])}
+    assert ids == held[:len(ids)]                      # in story order
+    # a three-day wait at the temple: the park is part of its site, so the whole conversation
+    # happens in story order (the park scenes 703-712 before the guest-room scenes 714-721)
+    world.tick(eng.scene.time + 3 * 1440)
+    ex = [e for e in eng.log.active([nw.CANON_EXECUTED]) if e.payload["canon_id"] in held]
+    order = [e.payload["canon_id"] for e in ex]
+    assert sorted(order) == sorted(held) and order == held
+    park, room = [i for i in order if 703 <= int(i) <= 712], [i for i in order if 714 <= int(i) <= 721]
+    assert park and room and order.index(park[-1]) < order.index(room[0])
+    stamps = [e.game_time for e in ex]
+    assert stamps == sorted(stamps)
+    per_step: dict[int, int] = {}
+    for e in ex:
+        per_step[e.game_time] = per_step.get(e.game_time, 0) + 1
+    assert max(per_step.values()) <= CANON_LATE_PER_STEP
     assert any(f.location == temple for f in eng.facts.visible_to("yennefer", eng.scene.time))
-    # the park scenes still wait: she is in the temple, not in its park
-    assert [i for i in held if i not in fired]
-    eng.scene.location = world.map.name("grounds")
-    world.tick(eng.scene.time + 3 * 60)
-    fired = {e.payload["canon_id"] for e in eng.log.active([nw.CANON_EXECUTED])}
-    assert set(held) <= fired

@@ -371,6 +371,8 @@ ellander_road:
     place:yennefer-room: temple
     place:temple-park: grounds
     place:temple-garden: grounds
+    place:forest-near-temple: grounds   # the wooded slope and the hill by the temple: its grounds,
+    place:megalith-hill: grounds        # so the person who is at the temple can reach them
   extras: []
   acquainted: [[yennefer, nenneke], [nenneke, ciri]]
   who: "Йеннефер на дорозі; у храмі — Неннеке і Цірі"
