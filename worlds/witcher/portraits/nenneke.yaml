@@ -4,7 +4,7 @@
 # The engine sends one stance at a time (<= 260 words). She does not yet know how Yennefer's
 # teaching will go.
 id: nenneke
-character: char:nenneke
+character: nenneke
 name: Неннеке
 phase: "«Кров ельфів», храм Мелітеле під Елландером: the day Yennefer arrives at the temple to examine Ciri, as Geralt asked; Ciri has been an adept here since Geralt left her; soldiers on the roads ask after wounded elves"
 core: >-
