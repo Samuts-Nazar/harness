@@ -155,11 +155,26 @@ def deny_list() -> frozenset[str]:
     return DENY | extra
 
 
+_local_models: set[str] = set()
+
+
+def allow_local(model: str) -> None:
+    """Mark `model` as served by a local server (harness.providers.LocalProvider): it costs
+    nothing, so the catalog price caps do not apply to it."""
+    with _lock:
+        _local_models.add(model)
+
+
+def is_local(model: str) -> bool:
+    with _lock:
+        return model in _local_models
+
+
 def check_model(model: str) -> None:
-    """Raise ModelNotAllowed unless `model` may be called over the API."""
+    """Raise ModelNotAllowed unless `model` may be called over the API (or is local)."""
     if model in deny_list():
         raise ModelNotAllowed(f"{model!r} is on the deny list")
-    if model in DECISION_MODELS:
+    if model in DECISION_MODELS or is_local(model):
         return
     if any(m in model.lower() for m in ANTHROPIC_MARKERS):
         raise ModelNotAllowed(f"{model!r}: no Anthropic models in the engine")

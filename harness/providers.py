@@ -1,4 +1,4 @@
-"""LLM provider interface, OpenRouter implementation and a scripted fake."""
+"""LLM provider interface, OpenRouter and local-server implementations and a scripted fake."""
 from __future__ import annotations
 
 import json
@@ -10,7 +10,8 @@ from typing import Callable, Iterator, Protocol
 
 import httpx
 
-from .policy import MODEL_TEMPERATURE, Spend, check_model
+from .decisions import full_role
+from .policy import MODEL_TEMPERATURE, Spend, allow_local, check_model
 from .retry import RETRY_STATUS, backoff_delay, send_with_retry
 
 Messages = list[dict[str, str]]
@@ -34,6 +35,30 @@ def _chunk_error(j: dict) -> str | None:  # type: ignore[type-arg]
         if c.get("finish_reason") == "error":
             return "finish_reason=error"
     return None
+
+
+def _sse_deltas(resp: httpx.Response, model: str,
+                usage: list[dict]) -> Iterator[str]:  # type: ignore[type-arg]
+    """The content deltas of an OpenAI-style SSE stream; a chunk's `usage` is appended to `usage`.
+    A mid-stream error under HTTP 200 raises ProviderError."""
+    for line in resp.iter_lines():
+        if not line.startswith("data:"):  # also skips ": OPENROUTER PROCESSING" comments
+            continue
+        data = line[5:].strip()
+        if data == "[DONE]":
+            break
+        try:
+            j = json.loads(data)
+        except json.JSONDecodeError:
+            continue
+        if (err := _chunk_error(j)) is not None:
+            raise ProviderError(f"{model}: {err}")
+        if j.get("usage"):  # the final chunk carries usage
+            usage.append(j["usage"])
+        choices = j.get("choices") or []
+        delta = (choices[0].get("delta") or {}).get("content") if choices else None
+        if delta:
+            yield delta
 
 
 class OpenRouterProvider:
@@ -113,31 +138,104 @@ class OpenRouterProvider:
                 break
             assert resp is not None
             resp.raise_for_status()
-            usage = None
-            for line in resp.iter_lines():
-                if not line.startswith("data:"):  # also skips ": OPENROUTER PROCESSING" comments
-                    continue
-                data = line[5:].strip()
-                if data == "[DONE]":
-                    break
-                try:
-                    j = json.loads(data)
-                except json.JSONDecodeError:
-                    continue
-                if (err := _chunk_error(j)) is not None:  # mid-stream error under HTTP 200
-                    raise ProviderError(f"{model}: {err}")
-                if j.get("usage"):  # the final chunk carries usage
-                    usage = j["usage"]
-                choices = j.get("choices") or []
-                delta = (choices[0].get("delta") or {}).get("content") if choices else None
-                if delta:
-                    yield delta
-            self.spend.add(usage)
+            usage: list[dict] = []  # type: ignore[type-arg]
+            yield from _sse_deltas(resp, model, usage)
+            self.spend.add(usage[-1] if usage else None)
         except httpx.HTTPError as e:
             raise ProviderError(f"{model}: {e}") from e
         finally:
             if resp is not None:
                 resp.close()
+
+
+LOCAL_URL = "http://127.0.0.1:8090/v1/chat/completions"
+CREATIVE_ROLES = ("narrator", "npc", "assistant", "world: rumour")
+CREATIVE_TEMPERATURE = 0.8  # as in the bake-off that chose the creative models (task 22)
+LOCAL_TEMPERATURE = 0.3  # narrow calls (judge, extractor, reader, looks): steadier JSON
+
+
+class LocalProvider:
+    """A local OpenAI-compatible server (llama.cpp `llama-server`, docs/local-llm.md): the same
+    interface as OpenRouterProvider, no key, no price caps (`policy.allow_local`: it costs
+    nothing; `spend` stays at 0), no OpenRouter-only fields (`reasoning`, `session_id`).
+
+    `slots`: the server's parallel slots (`--parallel 2`). At most that many requests are in
+    flight at once, from any thread (the engine's pool, translations, suggestions); the others
+    wait here instead of piling up in the server. With that bound the engine may run the
+    independent calls of a turn in parallel (`parallel_ok`)."""
+
+    parallel_ok = True
+
+    def __init__(self, url: str = LOCAL_URL, *, timeout: float = 300.0, slots: int = 2,
+                 spend: Spend | None = None, client: httpx.Client | None = None,
+                 retries: int = 2, backoff: float = 1.0,
+                 sleep: Callable[[float], None] = time.sleep) -> None:
+        self.url = url
+        self._client = client or httpx.Client(timeout=httpx.Timeout(timeout, connect=5.0))
+        self.spend = spend or Spend()
+        self.retries, self.backoff, self._sleep = retries, backoff, sleep
+        self._slots = threading.BoundedSemaphore(max(1, slots))
+
+    def _body(self, model: str, messages: Messages, stream: bool = False) -> dict:  # type: ignore[type-arg]
+        allow_local(model)
+        body: dict = {"model": model, "messages": messages}  # type: ignore[type-arg]
+        role = full_role(messages)
+        body["temperature"] = MODEL_TEMPERATURE.get(model, CREATIVE_TEMPERATURE if role.startswith(
+            CREATIVE_ROLES) else LOCAL_TEMPERATURE)
+        if stream:
+            body["stream"] = True
+        return body
+
+    def _fail(self, model: str, e: Exception) -> ProviderError:
+        if isinstance(e, httpx.TransportError) and not isinstance(e, httpx.TimeoutException):
+            return ProviderError(
+                f"{model}: the local model server at {self.url} is not answering ({e}). "
+                "Start it with the command in docs/local-llm.md.")
+        return ProviderError(f"{model} ({self.url}): {e}")
+
+    def complete(self, model: str, messages: Messages) -> str:
+        body = self._body(model, messages)
+        with self._slots:
+            try:
+                r = send_with_retry(lambda: self._client.post(self.url, json=body),
+                                    retries=self.retries, base=self.backoff, sleep=self._sleep)
+                r.raise_for_status()
+                j = r.json()
+            except (httpx.HTTPError, ValueError) as e:
+                raise self._fail(model, e) from e
+        if (err := _chunk_error(j)) is not None:
+            raise ProviderError(f"{model}: {err}")
+        self.spend.add(None)  # counts the call; the cost is 0
+        return j["choices"][0]["message"]["content"] or ""
+
+    def stream(self, model: str, messages: Messages) -> Iterator[str]:
+        body = self._body(model, messages, stream=True)
+        with self._slots:
+            resp = None
+            try:
+                for attempt in range(self.retries + 1):
+                    req = self._client.build_request("POST", self.url, json=body)
+                    try:
+                        resp = self._client.send(req, stream=True)
+                    except httpx.TransportError:
+                        if attempt == self.retries:
+                            raise
+                        self._sleep(backoff_delay(attempt, self.backoff))
+                        continue
+                    if resp.status_code in RETRY_STATUS and attempt < self.retries:
+                        resp.close()
+                        self._sleep(backoff_delay(attempt, self.backoff))
+                        continue
+                    break
+                assert resp is not None
+                resp.raise_for_status()
+                yield from _sse_deltas(resp, model, [])
+                self.spend.add(None)
+            except httpx.HTTPError as e:
+                raise self._fail(model, e) from e
+            finally:
+                if resp is not None:
+                    resp.close()
 
 
 @dataclass
