@@ -258,5 +258,5 @@ def local_stack(url: str = LOCAL_URL, model: str = LOCAL_MODEL, *,
     r = model
     models = ModelConfig(r, r, r, r, r, r, r, r, assistant=r, assistant_fallback=r, reader=r,
                          reader_fallback=r)
-    return Stack(provider, LLMJudge(provider, r, r), models, provider.spend, live=True,
+    return Stack(provider, LLMJudge(provider, r, r, compact=True), models, provider.spend, live=True,
                  fast_timeout=timeout, local=True)

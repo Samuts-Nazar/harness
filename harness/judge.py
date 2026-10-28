@@ -182,9 +182,14 @@ class LLMJudge(Judge):
     """A cheap allowed LLM answering typed questions as JSON (one call per batch)."""
 
     SYSTEM = "You are a module of a game engine that makes narrow judgments. Answer JSON only."
+    # a local model pretty-prints its JSON: on one line it writes about a third of the tokens
+    COMPACT = " Write the JSON on one line, without spaces or line breaks."
 
-    def __init__(self, provider: Provider, model: str, fallback_model: str | None = None) -> None:
+    def __init__(self, provider: Provider, model: str, fallback_model: str | None = None, *,
+                 compact: bool = False) -> None:
+        """`compact`: ask for one-line JSON (the local stack: output tokens are its cost)."""
         self.provider, self.model, self.fallback_model = provider, model, fallback_model
+        self.system = self.SYSTEM + (self.COMPACT if compact else "")
 
     def _complete(self, messages: list[dict[str, str]]) -> str:
         try:
@@ -218,7 +223,7 @@ class LLMJudge(Judge):
         raw = ""
         for attempt in range(2):  # one retry with a stricter instruction, like a strict matcher
             raw = self._complete(
-                [{"role": "system", "content": self.SYSTEM},
+                [{"role": "system", "content": self.system},
                  {"role": "user", "content": prompt + (
                      "\nJSON object only: no prose, no code fences, every question "
                      "name present." if attempt else "")}])

@@ -118,6 +118,8 @@ def test_local_stack_wiring_needs_no_key(monkeypatch):
     for role in ("narrator", "npc", "extractor", "judge", "assistant", "reader"):
         assert getattr(m, role) == "my-gguf" and getattr(m, role + "_fallback") == "my-gguf"
     assert type(s.judge) is LLMJudge and s.judge.provider is s.provider
+    assert s.judge.system.endswith(LLMJudge.COMPACT)  # one-line JSON: a third of the tokens
+    assert not LLMJudge(s.provider, "x").system.endswith(LLMJudge.COMPACT)
     assert s.live and s.local and s.fast_timeout == LOCAL_TIMEOUT_S >= 60
 
 

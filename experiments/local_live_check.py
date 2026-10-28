@@ -6,7 +6,7 @@ llama.cpp server (docs/local-llm.md; no key, no network, no cost).
 PACKAGE defaults to app/tests/fixtures/outsider_ellander.yaml; OUT_DIR (raw JSON, it may hold
 canon records and the sheet: keep it out of git) to /tmp/local_live. The canon store is
 $LOCAL_BE or /home/cock/projects/harness/campaigns/canon/be.db. The server URL and model:
-$LOCAL_URL, $LOCAL_MODEL. Prints per turn: first-word latency, total time, model calls,
+$LOCAL_URL, $LOCAL_MODEL; LOCAL_SERIAL=1 runs one call at a time. Prints per turn: first-word latency, total time, model calls,
 timeouts/fallbacks, judge parse failures, the transcript; then the panel (the latent Source must
 not be there), Yennefer's noticed facts and the backpack state.
 """
@@ -135,6 +135,8 @@ def backpack(eng):
 def main() -> None:
     url, model = os.environ.get("LOCAL_URL", LOCAL_URL), os.environ.get("LOCAL_MODEL", LOCAL_MODEL)
     stack = local_stack(url, model)
+    if os.environ.get("LOCAL_SERIAL"):  # A/B: one call at a time (no speculative NPC chains)
+        stack.provider.parallel_ok = False
     meter = Meter(stack)
     pkg = newgame.parse(PKG.read_text("utf-8"))
     turns = [T1, T2_READ if has_content(pkg) else T2_OPEN, T3, T4]
@@ -203,8 +205,8 @@ def main() -> None:
     (OUT / "results.json").write_text(json.dumps(results, ensure_ascii=False, indent=1, default=str))
     print("\npanel chips:", chips)
     print("Source shown on the panel:", results["final"]["source_on_panel"])
-    print("Yennefer noticed:", [k["text"] for k in results["final"]["yen_knows"]
-                                if k["how"] != "told"][:12])
+    print("Yennefer noticed (campaign facts):", [k["text"] for k in results["final"]["yen_knows"]
+                                                 if k["store"] != "canon"][-12:])
     print("backpack/laptop:", results["final"]["backpack"])
     print("spend", stack.spend.total, "calls", stack.spend.calls)
 
