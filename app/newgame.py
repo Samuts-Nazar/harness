@@ -83,7 +83,8 @@ TOP = ("version", "world", "player", "start", "canon", "tone", "pace", "limits",
 PLAYER_KEYS = ("name", "description", "appearance", "traits", "knows", "unbounded", "hidden",
                "inventory", "latent", "outsider")
 ITEM_KEYS = ("name", "where", "condition", "notes", "container", "open", "hidden", "content",
-             "power", "grants_sense")
+             "power", "grants_sense", "category")
+ITEM_CATEGORIES = ("clothing", "equipment", "inventory")  # how others see it: wears / in hand / carries
 from harness.portrait import SENSES as _ALL_SENSES
 SENSES = tuple(s for s in _ALL_SENSES if s != "sight")  # what an item may grant, a person may add
 MAX_ITEMS, MAX_ITEM_NAME, MAX_ITEM_NOTES, MAX_ITEM_CONTENT = 80, 80, 400, 4_000
@@ -434,6 +435,13 @@ def _inventory(c: "_Checker", v: Any) -> list[dict[str, Any]] | None:
                   "Річ може дати лише чуття magic (grants_sense: magic) тому, хто її носить.")
             gs = None
         e["grants_sense"] = gs.casefold() if gs else None
+        cat = c.text(f"{f}.category", raw.get("category"))
+        if cat and cat.casefold() not in ITEM_CATEGORIES:
+            c.err(f"{f}.category", f"Невідома категорія «{_show(cat)}».",
+                  "category: clothing (одяг), equipment (зброя чи спорядження в руці або при поясі) "
+                  "або inventory (те, що несуть); без неї — за where.")
+            cat = None
+        e["category"] = cat.casefold() if cat else None
         for k in ("container", "open", "hidden"):
             e[k] = c.flag(f"{f}.{k}", raw.get(k))
         e["container"], e["open"] = bool(e["container"]), bool(e["open"])
