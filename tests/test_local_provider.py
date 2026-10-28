@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from harness.judge import LLMJudge
-from harness.policy import ModelNotAllowed, check_model, is_local, set_catalog
+from harness.policy import ModelNotAllowed, check_model, set_catalog
 from harness.providers import LOCAL_URL, LocalProvider, ProviderError
 
 NARRATOR_SYS = {"role": "system", "content": "You are the narrator of a game."}
@@ -39,17 +39,18 @@ def test_request_body_has_no_openrouter_fields_and_no_key():
     assert p.spend.total == 0 and p.spend.calls == 2
 
 
-def test_no_price_check_and_check_model_lets_local_models_through():
+def test_a_local_call_does_not_open_the_price_caps():
+    """LocalProvider never consults the catalog, and it leaves no global state behind: the
+    same name is still refused for the hosted client afterwards."""
     set_catalog({})  # an empty catalog: any hosted model would be refused
     try:
-        with pytest.raises(ModelNotAllowed):
-            check_model("my-local-gguf")
         p, _ = local(lambda req: httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]}))
         assert p.complete("my-local-gguf", [NARRATOR_SYS]) == "ok"
-        assert is_local("my-local-gguf")
-        check_model("my-local-gguf")  # costs nothing: no price cap
+        assert p.complete("claude-local", [NARRATOR_SYS]) == "ok"
         with pytest.raises(ModelNotAllowed):
-            check_model("acme/hosted-model")
+            check_model("my-local-gguf")
+        with pytest.raises(ModelNotAllowed, match="Anthropic"):
+            check_model("claude-local")
     finally:
         set_catalog(None)
 
@@ -116,11 +117,14 @@ def test_local_stack_wiring_needs_no_key(monkeypatch):
     assert isinstance(s.provider, LocalProvider) and s.provider.url.endswith(":8099/v1/chat/completions")
     m = s.models
     for role in ("narrator", "npc", "extractor", "judge", "assistant", "reader"):
-        assert getattr(m, role) == "my-gguf" and getattr(m, role + "_fallback") == "my-gguf"
+        assert getattr(m, role) == "my-gguf" and getattr(m, role + "_fallback") is None
     assert type(s.judge) is LLMJudge and s.judge.provider is s.provider
     assert s.judge.system.endswith(LLMJudge.COMPACT)  # one-line JSON: a third of the tokens
     assert not LLMJudge(s.provider, "x").system.endswith(LLMJudge.COMPACT)
-    assert s.live and s.local and s.fast_timeout == LOCAL_TIMEOUT_S >= 60
+    assert s.judge.fallback_model is None
+    # no abandoned calls (they would keep running in a server slot): the read timeout bounds a call
+    assert s.live and s.local and s.fast_timeout is None
+    assert s.provider.timeout == LOCAL_TIMEOUT_S >= 60
 
 
 def test_local_timeout_reaches_the_engine_and_canon_has_no_hosted_embedder(monkeypatch):
@@ -145,6 +149,9 @@ def test_cli_local_flags():
         parse_args(["--local", "--live"])
     with pytest.raises(SystemExit):
         parse_args(["--local-model", "x"])  # needs --local
+    with pytest.raises(SystemExit):
+        parse_args(["--local-timeout", "60"])
+    assert make_stack(parse_args(["--local", "--local-timeout", "60"])).provider.timeout == 60
 
 
 def test_llm_judge_accepts_answers_keyed_by_question_text_or_bare():
@@ -164,3 +171,41 @@ def test_llm_judge_accepts_answers_keyed_by_question_text_or_bare():
     out = j.ask([], {"a": yes_no_q(q), "b": choice_q("Who?", ["x", "y"])})
     assert out["a"].answer is True and out["b"].answer == "x"
     assert len(prov.calls) == 3  # no retries needed
+
+
+def test_a_server_that_never_answers_is_not_retried_and_frees_its_slot():
+    """A read timeout is final: no retry storm holding the slot again; the slot is free after."""
+    attempts = []
+
+    def handler(req):
+        attempts.append(1)
+        raise httpx.ReadTimeout("timed out", request=req)
+
+    p, sleeps = local(handler, slots=1, timeout=7)
+    with pytest.raises(ProviderError, match="no answer in 7 s") as e:
+        p.complete("gemma-local", [NARRATOR_SYS])
+    assert "start it" not in str(e.value).lower()
+    assert attempts == [1] and sleeps == []
+    with pytest.raises(ProviderError):
+        list(p.stream("gemma-local", [NARRATOR_SYS]))
+    assert attempts == [1, 1]
+    assert p._slots.acquire(blocking=False)  # released both times
+    p._slots.release()
+
+
+def test_mid_stream_drop_is_not_reported_as_server_down():
+    class Broken(httpx.SyncByteStream):
+        def __iter__(self):
+            yield b'data: {"choices": [{"delta": {"content": "D"}}]}\n\n'
+            raise httpx.ReadError("connection reset")
+
+    p, sleeps = local(lambda req: httpx.Response(200, stream=Broken()))
+    with pytest.raises(ProviderError, match="broke mid-answer") as e:
+        list(p.stream("gemma-local", [NARRATOR_SYS]))
+    assert "docs/local-llm.md" not in str(e.value) and sleeps == []
+
+
+def test_an_answer_without_choices_is_a_provider_error():
+    p, _ = local(lambda req: httpx.Response(200, json={"object": "chat.completion"}))
+    with pytest.raises(ProviderError, match="no choices"):
+        p.complete("gemma-local", [NARRATOR_SYS])

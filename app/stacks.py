@@ -251,12 +251,14 @@ LOCAL_TIMEOUT_S = 120.0  # a narrator call with a long prompt: ~10 s prefill + 3
 
 def local_stack(url: str = LOCAL_URL, model: str = LOCAL_MODEL, *,
                 timeout: float = LOCAL_TIMEOUT_S) -> Stack:
-    """Every role on the one model of a local server (it holds one model, so the fallbacks are
-    the same model). Typed judgments go to that model as an LLMJudge (no hosted decision model);
-    no key, no network, no cost."""
-    provider = LocalProvider(url)
+    """Every role on the one model of a local server. Typed judgments go to that model as an
+    LLMJudge (no hosted decision model); no key, no network, no cost.
+
+    No fallbacks and no fast-lane timeout: the server holds one model, so a retry or an abandoned
+    call only adds load to its two slots (an abandoned call keeps running there). A call is bounded
+    by the provider's read timeout (`timeout`) instead, and is not retried after it."""
+    provider = LocalProvider(url, timeout=timeout)
     r = model
-    models = ModelConfig(r, r, r, r, r, r, r, r, assistant=r, assistant_fallback=r, reader=r,
-                         reader_fallback=r)
-    return Stack(provider, LLMJudge(provider, r, r, compact=True), models, provider.spend, live=True,
-                 fast_timeout=timeout, local=True)
+    models = ModelConfig(r, r, r, r, assistant=r, reader=r)
+    return Stack(provider, LLMJudge(provider, r, compact=True), models, provider.spend,
+                 live=True, fast_timeout=None, local=True)

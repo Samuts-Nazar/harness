@@ -1,6 +1,8 @@
 # Local model server (Gemma 4 26B-A4B, Unsloth build)
 
 Measured 2026-10-28 on the RTX 3070 Laptop (8 GB): about 27 tokens/s generation on prose, 190–300 tokens/s prompt processing, VRAM about 6.6 GB.
+Before starting: the 8 GB of VRAM hold one model. If the system's llama-server router (port 8081) has a model loaded, stop it first: `sudo systemctl stop llama-server` (start it again afterwards with `sudo systemctl start llama-server`). A stray server already on 8090 is stopped by killing its pid: `kill $(pgrep -f 'llama-server.*--port 8090')`.
+
 Start (the Unsloth build of llama.cpp needs its own CUDA 13 libraries on `LD_LIBRARY_PATH`, otherwise it silently runs on the CPU at ~50 tokens/s prompt):
 
     CU=/home/cock/.unsloth/studio/unsloth_studio/lib/python3.13/site-packages/nvidia/cu13/lib
@@ -19,12 +21,14 @@ With the server up (`curl -s http://127.0.0.1:8090/v1/models` lists `gemma-local
 
     nix develop --command python -m app --local [--local-url http://127.0.0.1:8090/v1/chat/completions] [--local-model gemma-local] [--local-timeout 120]
 
-Every role (narrator, NPCs, extractor, typed judgments, assistant, reader) runs on that one model;
-the role fallbacks are the same model. Typed judgments go to it as an `LLMJudge` (JSON answers), not to a
+Every role (narrator, NPCs, extractor, typed judgments, assistant, reader) runs on that one model,
+with no fallback model. Typed judgments go to it as an `LLMJudge` (JSON answers), not to a
 hosted decision model. No OpenRouter key is read and nothing goes over the network (the canon store
-is searched by full text only, without the hosted embedder). The cost is 0, the price caps do not
-apply to a local model (`policy.allow_local`). A narrator or NPC call may take `--local-timeout`
-seconds (default 120, the hosted stack uses 20) before it is retried once.
+is searched by full text only, without the hosted embedder). The cost is 0; `LocalProvider` never
+calls the price check (`check_model` is unchanged for the hosted clients). One answer may take
+`--local-timeout` seconds (default 120; the read timeout). A timed-out call is not retried and not
+abandoned early (the hosted stack's 20 s fast-lane timeout is off): an abandoned call would keep
+running in a server slot. Only a refused connection or a 5xx status is retried.
 `LocalProvider` keeps at most 2 requests in flight (the server's `--parallel 2`), from any thread.
 
 A game package (the file-package step): open the page, «Нова гра з файлу», pick the `.yaml`. The

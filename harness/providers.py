@@ -11,7 +11,7 @@ from typing import Callable, Iterator, Protocol
 import httpx
 
 from .decisions import full_role
-from .policy import MODEL_TEMPERATURE, Spend, allow_local, check_model
+from .policy import MODEL_TEMPERATURE, Spend, check_model
 from .retry import RETRY_STATUS, backoff_delay, send_with_retry
 
 Messages = list[dict[str, str]]
@@ -156,8 +156,8 @@ LOCAL_TEMPERATURE = 0.3  # narrow calls (judge, extractor, reader, looks): stead
 
 class LocalProvider:
     """A local OpenAI-compatible server (llama.cpp `llama-server`, docs/local-llm.md): the same
-    interface as OpenRouterProvider, no key, no price caps (`policy.allow_local`: it costs
-    nothing; `spend` stays at 0), no OpenRouter-only fields (`reasoning`, `session_id`).
+    interface as OpenRouterProvider, no key, no price check (`check_model` is never called: it
+    costs nothing; `spend` stays at 0), no OpenRouter-only fields (`reasoning`, `session_id`).
 
     `slots`: the server's parallel slots (`--parallel 2`). At most that many requests are in
     flight at once, from any thread (the engine's pool, translations, suggestions); the others
@@ -166,18 +166,22 @@ class LocalProvider:
 
     parallel_ok = True
 
-    def __init__(self, url: str = LOCAL_URL, *, timeout: float = 300.0, slots: int = 2,
+    def __init__(self, url: str = LOCAL_URL, *, timeout: float = 120.0, slots: int = 2,
                  spend: Spend | None = None, client: httpx.Client | None = None,
                  retries: int = 2, backoff: float = 1.0,
                  sleep: Callable[[float], None] = time.sleep) -> None:
-        self.url = url
+        """`timeout`: seconds to wait for an answer (the read timeout). The engine does not
+        abandon local calls (the local stack has no fast-lane timeout), so this is what bounds
+        how long a call holds a slot. `retries`: only for a refused connection or a 5xx status;
+        a timeout or a connection dropped mid-answer is never retried (it would hold the slot
+        again for as long)."""
+        self.url, self.timeout = url, timeout
         self._client = client or httpx.Client(timeout=httpx.Timeout(timeout, connect=5.0))
         self.spend = spend or Spend()
         self.retries, self.backoff, self._sleep = retries, backoff, sleep
         self._slots = threading.BoundedSemaphore(max(1, slots))
 
     def _body(self, model: str, messages: Messages, stream: bool = False) -> dict:  # type: ignore[type-arg]
-        allow_local(model)
         body: dict = {"model": model, "messages": messages}  # type: ignore[type-arg]
         role = full_role(messages)
         body["temperature"] = MODEL_TEMPERATURE.get(model, CREATIVE_TEMPERATURE if role.startswith(
@@ -187,47 +191,58 @@ class LocalProvider:
         return body
 
     def _fail(self, model: str, e: Exception) -> ProviderError:
-        if isinstance(e, httpx.TransportError) and not isinstance(e, httpx.TimeoutException):
+        if isinstance(e, (httpx.ConnectError, httpx.ConnectTimeout)):
             return ProviderError(
                 f"{model}: the local model server at {self.url} is not answering ({e}). "
                 "Start it with the command in docs/local-llm.md.")
+        if isinstance(e, httpx.TimeoutException):
+            return ProviderError(f"{model} ({self.url}): no answer in {self.timeout:g} s ({e})")
+        if isinstance(e, httpx.TransportError):
+            return ProviderError(f"{model} ({self.url}): the connection broke mid-answer ({e})")
         return ProviderError(f"{model} ({self.url}): {e}")
+
+    def _send(self, req_fn: Callable[[], httpx.Response]) -> httpx.Response:
+        """Retry a refused connection or a 5xx status with backoff; anything else is final."""
+        for attempt in range(self.retries + 1):
+            try:
+                r = req_fn()
+            except (httpx.ConnectError, httpx.ConnectTimeout):
+                if attempt == self.retries:
+                    raise
+                self._sleep(backoff_delay(attempt, self.backoff))
+                continue
+            if r.status_code in RETRY_STATUS and attempt < self.retries:
+                r.close()
+                self._sleep(backoff_delay(attempt, self.backoff))
+                continue
+            return r
+        raise AssertionError("unreachable")
 
     def complete(self, model: str, messages: Messages) -> str:
         body = self._body(model, messages)
         with self._slots:
             try:
-                r = send_with_retry(lambda: self._client.post(self.url, json=body),
-                                    retries=self.retries, base=self.backoff, sleep=self._sleep)
+                r = self._send(lambda: self._client.post(self.url, json=body))
                 r.raise_for_status()
                 j = r.json()
             except (httpx.HTTPError, ValueError) as e:
                 raise self._fail(model, e) from e
         if (err := _chunk_error(j)) is not None:
             raise ProviderError(f"{model}: {err}")
+        try:
+            out = j["choices"][0]["message"]["content"] or ""
+        except (KeyError, IndexError, TypeError) as e:
+            raise ProviderError(f"{model} ({self.url}): no choices in the answer {str(j)[:200]!r}") from e
         self.spend.add(None)  # counts the call; the cost is 0
-        return j["choices"][0]["message"]["content"] or ""
+        return out
 
     def stream(self, model: str, messages: Messages) -> Iterator[str]:
         body = self._body(model, messages, stream=True)
         with self._slots:
             resp = None
             try:
-                for attempt in range(self.retries + 1):
-                    req = self._client.build_request("POST", self.url, json=body)
-                    try:
-                        resp = self._client.send(req, stream=True)
-                    except httpx.TransportError:
-                        if attempt == self.retries:
-                            raise
-                        self._sleep(backoff_delay(attempt, self.backoff))
-                        continue
-                    if resp.status_code in RETRY_STATUS and attempt < self.retries:
-                        resp.close()
-                        self._sleep(backoff_delay(attempt, self.backoff))
-                        continue
-                    break
-                assert resp is not None
+                resp = self._send(lambda: self._client.send(
+                    self._client.build_request("POST", self.url, json=body), stream=True))
                 resp.raise_for_status()
                 yield from _sse_deltas(resp, model, [])
                 self.spend.add(None)

@@ -26,8 +26,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--local-url", default=LOCAL_URL, help=f"chat completions URL (default {LOCAL_URL})")
     ap.add_argument("--local-model", default=LOCAL_MODEL,
                     help=f"model name the server answers to (default {LOCAL_MODEL})")
-    ap.add_argument("--local-timeout", type=float, default=LOCAL_TIMEOUT_S,
-                    help="seconds a narrator/NPC call may take before it is retried (local mode)")
+    ap.add_argument("--local-timeout", type=float, default=None,
+                    help=f"seconds to wait for one local answer (default {LOCAL_TIMEOUT_S:g})")
     ap.add_argument("--host", default="127.0.0.1", help="0.0.0.0 to reach it from the phone over the LAN")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--pace", type=float, default=0.25, help="seconds per streamed word")
@@ -42,14 +42,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                          "classic: the old director (for A/B generation)")
     ap.add_argument("--budget", type=float, default=1.0, help="USD cap for a live session")
     a = ap.parse_args(argv)
-    if not a.local and (a.local_url != LOCAL_URL or a.local_model != LOCAL_MODEL):
-        ap.error("--local-url and --local-model need --local")
+    if not a.local and (a.local_url != LOCAL_URL or a.local_model != LOCAL_MODEL
+                        or a.local_timeout is not None):
+        ap.error("--local-url, --local-model and --local-timeout need --local")
     return a
 
 
 def make_stack(a: argparse.Namespace) -> campaigns.Stack:
     if a.local:
-        return local_stack(a.local_url, a.local_model, timeout=a.local_timeout)
+        return local_stack(a.local_url, a.local_model, timeout=a.local_timeout or LOCAL_TIMEOUT_S)
     return live_stack(a.budget) if a.live else fake_stack()
 
 
