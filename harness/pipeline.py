@@ -1494,10 +1494,11 @@ class Engine:
 
     def _scene_starts(self, turn_events: Sequence[Event]) -> bool:
         """The first turn of a scene: nothing was said or done at this place before this turn
-        (the events of this turn are left out)."""
+        (the events of this turn are left out; so is a start point's `arrival`, written before
+        the first turn, which the first narration still describes)."""
         mine = {e.id for e in turn_events}
         before = [e for e in self.log.active([UTTERANCE, ACTION_EVENT, NARRATION])
-                  if e.id not in mine]
+                  if e.id not in mine and not e.payload.get("arrival")]
         return not before or before[-1].location != self.scene.location
 
     def _without_narration(self, player_text: str, *, keep: bool = False

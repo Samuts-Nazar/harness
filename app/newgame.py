@@ -33,7 +33,7 @@ import yaml
 from harness.glossary import Glossary
 from harness.knowledge import OWN_LIFE, OWN_LIFE_OTHER_WORLD
 from harness.state import StateChange
-from harness.models import EQUIPMENT, INTERNAL, INVENTORY, PLAYER, CharacterProfile, Scene
+from harness.models import ACTION, EQUIPMENT, INTERNAL, INVENTORY, PLAYER, CharacterProfile, Scene
 from harness.npcgen import NORTHERN, infer_sex, pick_name
 from harness.pipeline import Engine
 from harness.world import pilot
@@ -1027,6 +1027,10 @@ def open_package(stack: Stack, pkg: Package, *, root: Path | str = CAMPAIGNS,
             eng.enter_scene(c)
             world.cast[c] = world.here() or cs.place_id
             world.goals[c] = _goals[c]
+        if sp.get("arrival"):  # how the player came, seen by everyone in the first scene
+            names = {c: p.name for c, p in eng.profiles.items()}
+            eng._event(ACTION, [PLAYER], {"text": str(sp["arrival"]).format_map(
+                {**names, "player": eng.profiles[PLAYER].name}), "arrival": True}, notability=0.6)
         meta_world = {"kind": "situation_a", "canon": canon_used is not None, "start": cs.id,
                       "cast": {c: world.cast[c] for c in extra_ids}, "goals": _goals}
     else:
