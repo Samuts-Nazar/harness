@@ -24,6 +24,7 @@ Status: closed decisions only. Anything not listed here is undecided. Do not des
 - Free (`:free`) models may be tested and used, but never as the only option for a role, because they disappear.
 - Strong-model judging in development is done by the Claude Code agent itself, never over the API.
 - Tests and demos use the fake provider by default; network only with `--live`.
+- Local model option (2026-10-28): anything may run locally. `--local` plays every role on one model of a local OpenAI-compatible server (docs/local-llm.md); it costs nothing, so the price caps do not apply to it, and it uses no network and no key.
 
 ## Core architecture
 
