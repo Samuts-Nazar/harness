@@ -24,6 +24,10 @@
 # their home), places (the map of this start: id, name, note, to, links {place: minutes}; links name
 # places listed earlier), canon_places (canon place entity -> map place id). `extras` may be empty.
 # Without its canon store the people of `people` are made from their portraits (no canon events).
+# arrival (optional): an observable event at the start time, written by code into the log as an
+# action everyone present witnesses (perceivers from the scene), so the NPCs in the first scene know
+# how the player came; `{player}` is the player character, `{<engine id>}` a person of the start
+# (each viewer reads the names it does not know as appearances).
 
 vidmak_A_tavern:
   title: "Визім · корчма «Під Лисом»"
@@ -374,7 +378,9 @@ ellander_road:
     place:forest-near-temple: grounds   # the wooded slope and the hill by the temple: its grounds,
     place:megalith-hill: grounds        # so the person who is at the temple can reach them
   extras: []
-  acquainted: [[yennefer, nenneke], [nenneke, ciri]]
+  # Yennefer knows Ciri by name (Geralt's letter, the Lion Cub of Cintra) before they meet
+  acquainted: [[yennefer, nenneke], [nenneke, ciri], [yennefer, ciri]]
+  arrival: "{player} з'являється зі спалаху світла просто в повітрі над дорогою й падає на дорогу перед конем {yennefer}; кінь шарахається"
   who: "Йеннефер на дорозі; у храмі — Неннеке і Цірі"
   geralt: "не тут: далеко від Елландера; книга не приводить його до храму в цей час"
   geralt_here: false

@@ -33,7 +33,7 @@ import yaml
 from harness.glossary import Glossary
 from harness.knowledge import OWN_LIFE, OWN_LIFE_OTHER_WORLD
 from harness.state import StateChange
-from harness.models import EQUIPMENT, INTERNAL, INVENTORY, PLAYER, CharacterProfile, Scene
+from harness.models import ACTION, EQUIPMENT, INTERNAL, INVENTORY, PLAYER, CharacterProfile, Scene
 from harness.npcgen import NORTHERN, infer_sex, pick_name
 from harness.pipeline import Engine
 from harness.world import pilot
@@ -83,7 +83,8 @@ TOP = ("version", "world", "player", "start", "canon", "tone", "pace", "limits",
 PLAYER_KEYS = ("name", "description", "appearance", "traits", "knows", "unbounded", "hidden",
                "inventory", "latent", "outsider")
 ITEM_KEYS = ("name", "where", "condition", "notes", "container", "open", "hidden", "content",
-             "power", "grants_sense")
+             "power", "grants_sense", "category")
+ITEM_CATEGORIES = ("clothing", "equipment", "inventory")  # how others see it: wears / in hand / carries
 from harness.portrait import SENSES as _ALL_SENSES
 SENSES = tuple(s for s in _ALL_SENSES if s != "sight")  # what an item may grant, a person may add
 MAX_ITEMS, MAX_ITEM_NAME, MAX_ITEM_NOTES, MAX_ITEM_CONTENT = 80, 80, 400, 4_000
@@ -434,6 +435,13 @@ def _inventory(c: "_Checker", v: Any) -> list[dict[str, Any]] | None:
                   "Річ може дати лише чуття magic (grants_sense: magic) тому, хто її носить.")
             gs = None
         e["grants_sense"] = gs.casefold() if gs else None
+        cat = c.text(f"{f}.category", raw.get("category"))
+        if cat and cat.casefold() not in ITEM_CATEGORIES:
+            c.err(f"{f}.category", f"Невідома категорія «{_show(cat)}».",
+                  "category: clothing (одяг), equipment (зброя чи спорядження в руці або при поясі) "
+                  "або inventory (те, що несуть); без неї — за where.")
+            cat = None
+        e["category"] = cat.casefold() if cat else None
         for k in ("container", "open", "hidden"):
             e[k] = c.flag(f"{f}.{k}", raw.get(k))
         e["container"], e["open"] = bool(e["container"]), bool(e["open"])
@@ -1027,6 +1035,10 @@ def open_package(stack: Stack, pkg: Package, *, root: Path | str = CAMPAIGNS,
             eng.enter_scene(c)
             world.cast[c] = world.here() or cs.place_id
             world.goals[c] = _goals[c]
+        if sp.get("arrival"):  # how the player came, seen by everyone in the first scene
+            names = {c: p.name for c, p in eng.profiles.items()}
+            eng._event(ACTION, [PLAYER], {"text": str(sp["arrival"]).format_map(
+                {**names, "player": eng.profiles[PLAYER].name}), "arrival": True}, notability=0.6)
         meta_world = {"kind": "situation_a", "canon": canon_used is not None, "start": cs.id,
                       "cast": {c: world.cast[c] for c in extra_ids}, "goals": _goals}
     else:

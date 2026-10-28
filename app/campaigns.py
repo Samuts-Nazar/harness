@@ -19,8 +19,8 @@ from harness import items, readable
 from harness.decisions import full_role
 from harness.glossary import Glossary
 from harness.models import (
-    ACTION, APPEARANCE, EQUIPMENT, INJURY, INTERNAL, NARRATION, PLAYER, UTTERANCE, CharacterProfile,
-    Scene,
+    ACTION, APPEARANCE, CLOTHING, EQUIPMENT, INJURY, INTERNAL, INVENTORY, NARRATION, PLAYER,
+    UTTERANCE, CharacterProfile, Scene,
 )
 from harness.pipeline import Engine, ModelConfig
 from harness.profile import load_profile
@@ -370,6 +370,20 @@ def _find_container(where: str, entries: list[dict]) -> int | None:
     return part[0] if len(part) == 1 else None
 
 
+def item_category(e: dict[str, Any]) -> str:
+    """The live-state category of an inventory entry, which sets how others see it: its own
+    `category`, else by `where`: worn clothing is clothing («wears»), a worn container (a backpack)
+    and whatever is in a pocket or a container is inventory («carries»), what is in hand equipment."""
+    if e.get("category"):
+        return str(e["category"])
+    kind = classify_where(e.get("where", ""))
+    if kind == "in_hand":
+        return EQUIPMENT
+    if kind == "worn" and not e.get("container"):
+        return CLOTHING
+    return INVENTORY
+
+
 def seed_player_inventory(eng: Engine, items_: list[dict[str, Any]]) -> dict[str, str]:
     """Give the player the package's explicit inventory: mint ids, set locations, add through
     `apply_state_change` (containers before what is inside them), then open the open containers.
@@ -405,11 +419,11 @@ def seed_player_inventory(eng: Engine, items_: list[dict[str, Any]]) -> dict[str
         hidden = e.get("hidden")
         if hidden is None:
             hidden = classify_where(e.get("where", "")) == "pocket"
-        eng.apply_state_change(StateChange(PLAYER, EQUIPMENT, "add", e["name"], not hidden,
+        eng.apply_state_change(StateChange(PLAYER, item_category(e), "add", e["name"], not hidden,
                                            id=ids[i], location=place[i]))
     for i, e in enumerate(items_):
         if e.get("container") and e.get("open"):
-            eng.apply_state_change(StateChange(PLAYER, EQUIPMENT, "open", e["name"]))
+            eng.apply_state_change(StateChange(PLAYER, item_category(e), "open", e["name"]))
     keys = ("condition", "notes", "content", "power", "grants_sense")
     meta = {ids[i]: {k: e[k] for k in keys if e.get(k)} for i, e in enumerate(items_)}
     with eng.conn:
