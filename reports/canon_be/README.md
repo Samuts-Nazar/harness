@@ -33,5 +33,6 @@ Extraction is done by Claude Code subagents following `reports/canon_be/EXTRACTI
 
 **Inconsistent times.** Geralt's letter asking Yennefer for help (`before` 0.08 years, −42048) and her
 reply (−15768) are stamped *after* her arrival at the temple (`before` 0.2 years, −105120), though in the
-story the letter sends her there. Both stamps are anchor guesses; the store is self-inconsistent here and
-was not changed. Effect at the `ellander_road` start: Yennefer does not yet "know" the letter.
+story the letter sends her there. Both stamps are anchor guesses. **Fixed 2026-10-28** by
+`experiments/canon_be_fix.py` step 5: letter `before` 0.25 (−131400, read by Yennefer at 0.24), reply 0.23
+(−120888); at the `ellander_road` start Yennefer now knows the letter and her reply.
