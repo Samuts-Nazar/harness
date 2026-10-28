@@ -143,3 +143,22 @@ def test_cli_local_flags():
         parse_args(["--local", "--live"])
     with pytest.raises(SystemExit):
         parse_args(["--local-model", "x"])  # needs --local
+
+
+def test_llm_judge_accepts_answers_keyed_by_question_text_or_bare():
+    """Gemma (local) keys its answer by the question's text, inside a code fence."""
+    from harness.judge import choice_q, yes_no_q
+    from harness.providers import FakeProvider
+
+    q = "Does the line assert a fact this character had no channel to learn?"
+    by_text = '```json\n{\n  "' + q + '": {\n    "answer": "no",\n    "p_yes": 0.05\n  }\n}\n```'
+    bare = '{"answer": "yes", "p_yes": 0.9}'
+    two = json.dumps({"[a] " + q: {"answer": "yes", "p_yes": 0.9},
+                      "Who?": {"answer": "x", "probabilities": {"x": 0.7}}})
+    prov = FakeProvider(script={"m": [by_text, bare, two]})
+    j = LLMJudge(prov, "m")
+    assert j.yes_no(q).answer is False
+    assert j.yes_no(q).answer is True
+    out = j.ask([], {"a": yes_no_q(q), "b": choice_q("Who?", ["x", "y"])})
+    assert out["a"].answer is True and out["b"].answer == "x"
+    assert len(prov.calls) == 3  # no retries needed

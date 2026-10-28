@@ -224,12 +224,32 @@ class LLMJudge(Judge):
                      "name present." if attempt else "")}])
             m = re.search(r"\{.*\}", raw, re.DOTALL)
             try:
-                data = json.loads(m.group(0)) if m else None
-                data = {k.strip().strip("[]").strip(): v for k, v in data.items()}  # "[name]" too
+                data = self._keyed(json.loads(m.group(0)) if m else None, questions)
                 return {n: self._parse(q, data[n]) for n, q in questions.items()}
             except (TypeError, KeyError, ValueError, AttributeError):
                 continue
         raise JudgeError(f"unparseable LLM judgment: {raw[:200]!r}")
+
+    @staticmethod
+    def _keyed(data: Any, questions: Mapping[str, Question]) -> dict[str, Any]:
+        """The answers by question name. Smaller local models key an answer by the question's
+        text instead of its name ("[q] ..." too), or, for a single question, reply with the bare
+        answer object or under any one key."""
+        def norm(k: str) -> str:
+            return re.sub(r"\s+", " ", str(k).strip().strip("[]").strip()).casefold()
+
+        if len(questions) == 1 and isinstance(data, dict) and "answer" in data:
+            return {next(iter(questions)): data}
+        got = {norm(k): v for k, v in data.items()}
+        out: dict[str, Any] = {}
+        for n, q in questions.items():
+            for k in (norm(n), norm(q.text), norm(f"[{n}] {q.text}")):
+                if k in got:
+                    out[n] = got[k]
+                    break
+        if len(questions) == 1 and not out and len(got) == 1:
+            out[next(iter(questions))] = next(iter(got.values()))
+        return out
 
     @staticmethod
     def _parse(q: Question, a: Mapping[str, Any]) -> Judgment:
