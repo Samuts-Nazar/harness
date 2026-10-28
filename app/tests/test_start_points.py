@@ -28,7 +28,9 @@ from harness.world import pilot
 from harness.world.places import VIZIMA_EXTRA, vizima
 
 REAL = canon_path()  # resolved before any test clears the environment
-POINTS = newgame.start_points()
+# the Vizima arc (`builder: vizima`); the general builder's starts are tested in
+# tests/test_ellander_start.py
+POINTS = {k: v for k, v in newgame.start_points().items() if v.get("builder", "vizima") == "vizima"}
 IDS = list(POINTS)
 D = 1440
 

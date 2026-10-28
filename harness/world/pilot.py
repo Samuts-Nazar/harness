@@ -103,25 +103,95 @@ class CanonStart:
                                           ("innkeeper", "drunk"))  # who knows whom (slot or cid)
     intro: str = ""
     portraits: tuple[tuple[str, str], ...] = ()   # (canon entity, portrait id): who plays a portrait
+    # -- the general builder (`builder: canon`); the Vizima builder ignores these ------------------
+    builder: str = "vizima"                   # "vizima": the pilot arc; "canon": any canon place
+    story_t: int | None = None                # story minute of the start (None: the same as `t`)
+    canon_db: str = ""                        # file name of the canon store ("": the Vizima pilot store)
+    people: tuple[tuple[str, str, str], ...] = ()  # (canon entity, home map place, goal) made at start
+    places: tuple[tuple[str, str, str, str, tuple[tuple[str, int], ...]], ...] = ()
+    #                                         # map places (id, name, note, to, links {id: minutes})
+    canon_places: tuple[tuple[str, str], ...] = ()  # canon place entity -> map place id
 
     @classmethod
     def from_dict(cls, cid: str, d: dict[str, Any]) -> "CanonStart":
         h, m = str(d.get("time", "00:00")).split(":")
         extras = tuple((str(x["slot"]), str(x["occupation"]), str(x.get("home", d["map_place"])),
                         str(x["look"]), str(x["goal"])) for x in d.get("extras", []))
+        people = tuple((str(x["entity"]), str(x.get("home", d["map_place"])), str(x.get("goal", "")))
+                       for x in d.get("people", []))
+        places = tuple((str(x["id"]), str(x["name"]), str(x.get("note", "")), str(x.get("to", "")),
+                        tuple((str(k), int(v)) for k, v in (x.get("links") or {}).items()))
+                       for x in d.get("places", []))
         return cls(cid, (int(d["day"]) - 1) * 1440 + int(h) * 60 + int(m), str(d["canon_place"]),
                    str(d["map_place"]), tuple(d.get("here", [])), extras,
                    tuple((str(a), str(b)) for a, b in d.get("acquainted", [])),
                    str(d.get("situation", "")),
-                   tuple((str(k), str(v)) for k, v in (d.get("portraits") or {}).items()))
+                   tuple((str(k), str(v)) for k, v in (d.get("portraits") or {}).items()),
+                   str(d.get("builder", "vizima")),
+                   int(d["story_t"]) if d.get("story_t") is not None else None,
+                   str(d.get("canon_db", "")), people, places,
+                   tuple((str(k), str(v)) for k, v in (d.get("canon_places") or {}).items()))
+
+    @property
+    def general(self) -> bool:
+        """Built by the general canon builder (its own places and people), not the Vizima one."""
+        return self.builder != "vizima"
+
+    def campaign(self) -> Any:
+        """The canon side of the start: the story clock runs `offset` ahead of the campaign clock
+        (`story_t - t`), so the campaign can start at an ordinary day 1 while canon events keep their
+        own story times; without `story_t` both clocks are the same (the Vizima arc)."""
+        from ..canon.api import CanonCampaign
+        st = self.t if self.story_t is None else self.story_t
+        return CanonCampaign(start_t=st, place=self.canon_place, offset=st - self.t)
 
     @property
     def map_extra(self) -> tuple[str, ...]:
         """The extra Vizima map places this start needs (see `places.VIZIMA_EXTRA`)."""
-        return (self.place_id,) if self.place_id in VIZIMA_EXTRA else ()
+        return (self.place_id,) if not self.general and self.place_id in VIZIMA_EXTRA else ()
 
     def world_map(self) -> Any:
-        return vizima(*self.map_extra)
+        if not self.general:
+            return vizima(*self.map_extra)
+        from .places import Place, WorldMap
+        m = WorldMap()
+        for pid, name, note, to, links in self.places:  # in order: links name earlier places
+            m.add_place(Place(pid, name, note, to=to), dict(links))
+        return m
+
+    def place_map(self) -> dict[str, str]:
+        """Canon place entity -> map place id (the canon calendar's "here")."""
+        return dict(self.canon_places) if self.general else dict(CANON_PLACES)
+
+    def canon_people(self) -> list[tuple[str, str]]:
+        """(canon entity, engine id) of the people and groups made when the campaign starts."""
+        if self.general:
+            from ..canon.play import cid_of
+            return [(e, cid_of(e)) for e, _h, _g in self.people]
+        return [("char:innkeeper", "innkeeper"), ("char:velerad", "velerad"),
+                ("char:foltest", "foltest"), *CANON_GROUPS.items()]
+
+    def cast(self) -> dict[str, str]:
+        """Engine id -> home map place of the people the world keeps (canon people and extras)."""
+        from ..canon.play import cid_of
+        ids = canon_extra_ids(self)
+        canon = ({cid_of(e): home for e, home, _g in self.people} if self.general
+                 else {"innkeeper": "tavern"})
+        return {**canon, **{ids[s]: home for s, _o, home, _l, _g in self.extras}}
+
+    def goals(self) -> dict[str, str]:
+        from ..canon.play import cid_of
+        ids = canon_extra_ids(self)
+        out = {ids[s]: g for s, _o, _h, _l, g in self.extras}
+        if self.general:
+            out.update({cid_of(e): g for e, _h, g in self.people if g})
+        else:
+            out["innkeeper"] = "keep the tavern open and stay out of trouble with the guard"
+        return out
+
+    def collectives(self, wmap: Any, canon: Any) -> list[Any]:
+        """The collectives of the world around this start (the Vizima town, guard and court)."""
+        return [] if self.general else canon_collectives(wmap, canon)
 
     @property
     def location(self) -> str:
@@ -167,13 +237,10 @@ def canon_extra_ids(start: CanonStart = SITUATION_A) -> dict[str, str]:
 def populate_canon_campaign(eng: Engine, canon: Any, start: CanonStart = SITUATION_A) -> Any:
     """A NEW campaign at a canon start (situation A by default): the canon people made with what
     they knew at that time, the code-made extras, the first scene. Returns the CanonPlay."""
-    from ..canon.api import CanonCampaign
     from ..canon.play import CanonPlay, cid_of
 
-    play = CanonPlay(canon, CanonCampaign(start_t=start.t, place=start.canon_place, offset=0),
-                     portraits=dict(start.portraits))
-    for ent, cid in (("char:innkeeper", "innkeeper"), ("char:velerad", "velerad"),
-                     ("char:foltest", "foltest"), *CANON_GROUPS.items()):
+    play = CanonPlay(canon, start.campaign(), portraits=dict(start.portraits))
+    for ent, cid in start.canon_people():
         try:
             play.ensure_character(eng, ent, cid=cid)
         except Exception as e:  # noqa: BLE001 - a store without this person: the scene still runs
@@ -195,27 +262,21 @@ def make_canon_world(eng: Engine, canon: Any, judge: Judge, *, play: Any = None,
                      start: CanonStart = SITUATION_A) -> World:
     """The world around an engine that was populated by `populate_canon_campaign` (also after a
     reopen: everything the world knows is derived from the log)."""
-    from ..canon.api import CanonCampaign
-    from ..canon.play import CanonPlay, cid_of
+    from ..canon.play import CanonPlay
     from .canon_adapter import PlayCanon
 
     if play is None:
-        play = CanonPlay(canon, CanonCampaign(start_t=start.t, place=start.canon_place, offset=0),
-                         portraits=dict(start.portraits))
-        for ent in ("char:innkeeper", "char:velerad", "char:foltest", *CANON_GROUPS):
-            cid = CANON_GROUPS.get(ent) or cid_of(ent)
+        play = CanonPlay(canon, start.campaign(), portraits=dict(start.portraits))
+        for ent, cid in start.canon_people():
             if cid in eng.profiles:
                 play.made[ent] = cid
     wmap = start.world_map()
-    ids = canon_extra_ids(start)
-    cast = {"innkeeper": "tavern", **{ids[s]: home for s, _o, home, _l, _g in start.extras}}
-    goals = {ids[s]: g for s, _o, _h, _l, g in start.extras}
-    goals["innkeeper"] = "keep the tavern open and stay out of trouble with the guard"
-    pc = PlayCanon(play, judge, places=CANON_PLACES, groups=CANON_GROUPS,
+    groups = {} if start.general else CANON_GROUPS
+    pc = PlayCanon(play, judge, places=start.place_map(), groups=groups,
                    text_call=lambda prompt: eng._complete(
                        "judge", [{"role": "user", "content": prompt}]))
-    world = World(eng, wmap, collectives=canon_collectives(wmap, canon), cast=cast, goals=goals,
-                  canon=pc)
+    world = World(eng, wmap, collectives=start.collectives(wmap, canon), cast=start.cast(),
+                  goals=start.goals(), canon=pc)
     try:
         eng.canon_guard = play.guard(judge)
     except Exception:  # noqa: BLE001
@@ -224,6 +285,6 @@ def make_canon_world(eng: Engine, canon: Any, judge: Judge, *, play: Any = None,
     # canon person can be here; whoever can is admitted to the scene, passers-by from npcgen
     from ..canon.play import CanonCast
     from ..scene_cast import SceneCast
-    eng.scene_cast = SceneCast(CanonCast(play, places=CANON_PLACES), culture="northern",
+    eng.scene_cast = SceneCast(CanonCast(play, places=start.place_map()), culture="northern",
                                where=world.where, here=world.here)
     return world

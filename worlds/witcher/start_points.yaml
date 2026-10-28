@@ -13,6 +13,17 @@
 # portraits (canon entity id -> portrait id of worlds/witcher/portraits: the people made at the
 # start play it, and Geralt when the canon brings him in), summary (the longer card/instruction
 # text), situation (the opening shown to the player; absent = the built-in text of situation A). Nothing in `situation` names a person the newcomer has not met.
+#
+# The general builder (`builder: canon`, outsider campaign D7) starts at any canon place, outside the
+# Vizima map. Its extra fields: story_t (the story minute of the start in the canon store's clock;
+# `day`/`time` are then the campaign clock, which starts at an ordinary day and keeps the store's
+# offset, so canon events, `before` flashbacks included, come at their story time after the start),
+# canon_db (the file name of its canon store, looked up next to the pilot store, in campaigns/canon
+# or as $HARNESS_CANON_DB_<NAME>; absent = the Vizima pilot store), people (canon people made at the
+# start: entity, home map place, goal; those in `here` stand in the first scene, the rest live at
+# their home), places (the map of this start: id, name, note, to, links {place: minutes}; links name
+# places listed earlier), canon_places (canon place entity -> map place id). `extras` may be empty.
+# Without its canon store the people of `people` are made from their portraits (no canon events).
 
 vidmak_A_tavern:
   title: "Визім · корчма «Під Лисом»"
@@ -322,3 +333,63 @@ vidmak_G_night_watch:
     руку на руків'ї, нічний вартовий не випускає ліхтаря, а молодий вартовий стискає спис
     так, що біліють пальці. У місті кажуть, що в такі ночі краще не ходити далі порога,
     і ніхто з вартових не сміється. Ви в кордегардії, до світанку ще далеко.
+
+ellander_road:
+  title: "Елландер · дорога до храму Мелітеле"
+  book: "Кров ельфів · розділ 7"
+  place: "дорога до Елландера"
+  day: 1
+  time: "09:00"
+  story_t: -105240   # two hours before the store's stamp of the arrival at the temple (-105120, `before` 0.2 years)
+  builder: canon
+  canon_db: be.db
+  canon_place: "place:ellander"
+  map_place: road
+  here: ["char:yennefer"]
+  people:
+    - {entity: "char:yennefer", home: temple,
+       goal: "reach the temple of Melitele and examine the girl hidden there, as the witcher asked, and keep her secret from everyone"}
+    - {entity: "char:nenneke", home: temple,
+       goal: "keep the temple and the girl in her care safe and decide whom to trust with her"}
+    - {entity: "char:ciri", home: temple,
+       goal: "get through her lessons, keep her pride before the adepts and go back to Kaer Morhen"}
+  places:
+    - {id: road, name: "дорога до Елландера", to: "на дорогу до Елландера",
+       note: "a dirt road between fields and groves, the temple hills ahead"}
+    - {id: temple, name: "храм Мелітеле", to: "до храму Мелітеле",
+       note: "the temple of Melitele: walls, the refectory, the dormitory, the library, the guest rooms",
+       links: {road: 90}}
+    - {id: grounds, name: "храмовий парк", to: "до храмового парку",
+       note: "the park, gardens and paths around the temple", links: {temple: 3}}
+  canon_places:
+    place:temple-of-melitele: temple
+    place:temple-dormitory: temple
+    place:temple-library: temple
+    place:temple-refectory: temple
+    place:temple-grotto: temple
+    place:yarres-tower: temple
+    place:yennefer-room: temple
+    place:temple-park: grounds
+    place:temple-garden: grounds
+    place:forest-near-temple: grounds   # the wooded slope and the hill by the temple: its grounds,
+    place:megalith-hill: grounds        # so the person who is at the temple can reach them
+  extras: []
+  acquainted: [[yennefer, nenneke], [nenneke, ciri]]
+  who: "Йеннефер на дорозі; у храмі — Неннеке і Цірі"
+  geralt: "не тут: далеко від Елландера; книга не приводить його до храму в цей час"
+  geralt_here: false
+  pitch: "Ранок на дорозі до храму Мелітеле: чарівниця їде до дівчинки, яку там ховають, і під ноги їй падає чужинець."
+  portraits:
+    char:yennefer: yennefer_temple
+    char:nenneke: nenneke
+    char:ciri: ciri_temple
+  summary: >-
+    Перший день гри, ранок, «Кров ельфів». Йеннефер їде дорогою з Елландера до храму Мелітеле:
+    Ґеральт попросив її оглянути й навчити дівчинку, яку ховають у храмі. Там на неї чекають
+    архіжриця Неннеке і Цірі, які ще не знають, що вона приїде сьогодні. За півтори години
+    дороги — храм і його парк. Посеред шляху їй під ноги падає чужинець, і далі книга йде своїм
+    ходом.
+  situation: >-
+    Ранок першого дня. Дорога з Елландера до храму Мелітеле йде між полями й гаями, у низинах
+    ще лежить туман. Жінка в чорному й білому, з чорними кучерями, веде коня за вуздечку до
+    храмових пагорбів. Просто їй під ноги на дорогу падаєте ви — чужа тут людина.

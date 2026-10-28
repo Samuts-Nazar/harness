@@ -1,6 +1,6 @@
 {
  "world": "witcher",
- "note": "Canonical Ukrainian forms as in the Ukrainian translation of the first story (the arc the canon pilot ingests, file lines 7-694), checked by counting against the local book text with experiments/glossary_check.py (task 14). Other volumes of the same file come from other translators and spell some names differently (Візімір, Геральт, Фолтест, Визим): those are listed as wrong forms on purpose, so records and quotes stay in one spelling. latin: Latin-script forms, replaced by the canonical form (a Latin possessive becomes cases[0] when there are cases). wrong: wrong Cyrillic spellings (stems; a declension ending after them is kept). cases: correct oblique forms seen in the text (never corrected). stem: declension stem when it differs from the canonical form. proper: false for common nouns (never swapped, never offered as names). Names the books do not contain (Рагнар, Горст, Ельза, Брідки, Вернон Роше, Гостомил) are the forms used in our demo and test sets. Merged from the former harness/canon glossary.",
+ "note": "Canonical Ukrainian forms as in the Ukrainian translation of the first story (the arc the canon pilot ingests, file lines 7-694), checked by counting against the local book text with experiments/glossary_check.py (task 14). Other volumes of the same file come from other translators and spell some names differently (Візімір, Геральт, Фолтест, Визим): those are listed as wrong forms on purpose, so records and quotes stay in one spelling. latin: Latin-script forms, replaced by the canonical form (a Latin possessive becomes cases[0] when there are cases). wrong: wrong Cyrillic spellings (stems; a declension ending after them is kept). cases: correct oblique forms seen in the text (never corrected). stem: declension stem when it differs from the canonical form. proper: false for common nouns (never swapped, never offered as names). Names the books do not contain (Рагнар, Горст, Ельза, Брідки, Вернон Роше, Гостомил) are the forms used in our demo and test sets. Merged from the former harness/canon glossary. Неннеке, Мелітеле and Елландер come from «Кров ельфів» (the Ellander start, outsider campaign): the translation spells them only so (144, 70 and 53 times in the file) and never declines Неннеке or Мелітеле, so their wrong forms are likely misspellings (declined Мелітела/Мелітели among them), not book variants.",
  "entries": [
   {"canonical": "Рагнар", "kind": "person", "latin": ["Ragnar"], "wrong": ["Рангар", "Рагнер", "Рагнарр", "Раґнар"]},
   {"canonical": "Горст", "kind": "person", "latin": ["Horst"], "wrong": ["Хорст"]},
@@ -8,6 +8,8 @@
   {"canonical": "Ґеральт", "kind": "person", "latin": ["Geralt", "Gerald", "Geralt of Rivia"], "wrong": ["Геральт", "Гелальт", "Ґералт"], "cases": ["Ґеральта", "Ґеральту", "Ґеральтом", "Ґеральте"], "titles": ["відьмак", "рівієць", "Ґеральт із Рівії"], "id": "char:geralt"},
   {"canonical": "Цірі", "kind": "person", "latin": ["Ciri", "Cirilla"], "wrong": ["Цирі"]},
   {"canonical": "Йеннефер", "kind": "person", "latin": ["Yennefer"], "wrong": ["Єнніфер", "Йенефер", "Єнефер", "Єніфер"]},
+  {"canonical": "Неннеке", "kind": "person", "latin": ["Nenneke"], "wrong": ["Ненеке", "Нененке", "Неннекке", "Ненекке", "Нєннеке"], "id": "char:nenneke"},
+  {"canonical": "Мелітеле", "kind": "person", "latin": ["Melitele"], "wrong": ["Мелителе", "Мелетеле", "Мелітела", "Мелітели"], "id": "char:melitele"},
   {"canonical": "Любисток", "kind": "person", "stem": "Любистк", "latin": ["Jaskier (Dandelion)", "Jaskier", "Dandelion"], "wrong": ["Лютик", "Яскер", "Яск'єр", "Яскьєр"]},
   {"canonical": "Весемір", "kind": "person", "latin": ["Vesemir"]},
   {"canonical": "Ламберт", "kind": "person", "latin": ["Lambert"]},
@@ -32,6 +34,7 @@
   {"canonical": "Яруга", "kind": "place", "stem": "Яруг", "latin": ["Yaruga"]},
   {"canonical": "Марібор", "kind": "place", "latin": ["Maribor"], "wrong": ["Марибор"]},
   {"canonical": "Цінтра", "kind": "place", "stem": "Цінтр", "latin": ["Cintra"], "wrong": ["Цинтр"]},
+  {"canonical": "Елландер", "kind": "place", "latin": ["Ellander"], "wrong": ["Еландер", "Елендер", "Елландар"], "cases": ["Елландері", "Елландеру"], "id": "place:ellander"},
   {"canonical": "Ковір", "kind": "place", "latin": ["Kovir"]},
   {"canonical": "Едірн", "kind": "place", "latin": ["Aedirn"], "wrong": ["Аедірн"]},
   {"canonical": "Брідки", "kind": "place", "stem": "Брідк", "latin": ["Bridky"]},

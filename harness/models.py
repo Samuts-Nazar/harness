@@ -29,7 +29,7 @@ PORTRAIT_LEAK = "portrait_leak"  # a hidden-layer leak a portrait NPC's line car
 INJURY, CLOTHING, INVENTORY, EQUIPMENT, INTERNAL, APPEARANCE = (
     "injury", "clothing", "inventory", "equipment", "internal", "appearance")
 STATE_CATEGORIES = (INJURY, CLOTHING, INVENTORY, EQUIPMENT, INTERNAL, APPEARANCE)
-OPS = ("add", "remove", "reveal", "hide")
+OPS = ("add", "remove", "reveal", "hide", "move", "realize", "open")
 
 # How a character came to know a fact
 WITNESSED = "witnessed"
@@ -88,6 +88,7 @@ class CharacterProfile:
     sex: str = ""  # "m"/"f" of a generated NPC (from its text or one decider call); "" unknown
     portrait: str = ""  # id of the world portrait (worlds/<world>/portraits) this NPC plays; ""
     # none: the flat profile (core, manner) is used
+    senses: tuple[str, ...] = ("sight",)  # how this character perceives ("magic" too: a sorceress)
 
 
 @dataclass

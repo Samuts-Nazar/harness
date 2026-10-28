@@ -45,12 +45,14 @@ DEFAULT_NPC = "xiaomi/mimo-v2.6-flash"  # second in that grading; faster for man
 DEFAULT_EXTRACTOR = "deepseek/deepseek-v4.1-flash-1017"
 DEFAULT_JUDGE_FIRST = "liquid/d1-ultra"
 DEFAULT_JUDGE_LLM = "openai/gpt-6-luna"  # escalation target
+DEFAULT_READER = "inclusionai/ling-3.1-flash"  # term expansion and reader (docs/tools.md, 2026-10-26)
 FALLBACKS = {
     "narrator": "deepseek/deepseek-v4.1-flash-1017",
     "npc": "deepseek/deepseek-v4.1-flash-1017",
     "extractor": "qwen/qwen3.8-omni-flash",
     "judge_first": "perplexity/pplx-decider-v1.2",
     "judge_llm": "deepseek/deepseek-v4.1-flash-1017",
+    "reader": "xiaomi/mimo-v2.6-flash",
 }
 # Sampling temperature per model, as used in the bake-off that chose it (task 22: 0.8). Models
 # not listed get the provider's default.

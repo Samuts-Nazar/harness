@@ -25,11 +25,15 @@ from . import clock as clk
 from . import news as nw
 from .canon_adapter import CanonSource, NullCanon, ScheduledEvent
 from .places import UNLINKED_MINUTES, Place, WorldMap
+from ..state import StateChange
 
 RECENT_NEWS, RECENT_NEWS_DAYS = 6, 2  # news items offered to the "is this new" judgment
 ROUTINE_HOURS = 8  # an agent with a goal and no news gets one judgment this often
 STEP_MINUTES, LONG_STEP_MINUTES, LONG_SPAN = 60, 180, 12 * 60
 SKIP_STEP_MINUTES, SKIP_SPAN = 720, 3 * 24 * 60  # a skip of days runs in half-day steps
+CANON_LATE_PER_STEP = 6  # deferred canon events released per world step (judge calls per tick)
+STALE_DAYS = 14  # a deferred canon event this many story days old is retired, never fired
+SITE_MINUTES = 5  # places this close are one site: a person at one has reached the others
 KINDS = ("town", "authority")
 
 # what an off-screen agent can do (the options offered depend on the situation)
@@ -647,13 +651,68 @@ class World:
             p = self.map.add_place(Place(ref, ref))
         return p.id
 
+    def _deferred(self, done: set[str]) -> dict[str, tuple[int, list[str]]]:
+        """Canon events held back and not yet executed: canon id -> (story stamp in campaign
+        minutes, the people it waits for)."""
+        retired = {e.payload["canon_id"] for e in self.eng.log.active([nw.CANON_RETIRED])}
+        return {e.payload["canon_id"]: (int(e.payload["t"]), list(e.payload.get("held", [])))
+                for e in self.eng.log.active([nw.CANON_DEFERRED])
+                if e.payload["canon_id"] not in done and e.payload["canon_id"] not in retired}
+
+    def _held(self, ce: ScheduledEvent, place: str) -> list[str]:
+        """The event's people who stand in the player's scene while the scene is at another site
+        than the event: it cannot happen to them there (they are with the player). A site is the
+        places within `SITE_MINUTES` of each other (a temple and its park). Nothing is held when
+        the scene's place is not on the map, or the event's place has no links (where it is
+        cannot be told)."""
+        here = self.here()
+        if here is None or not self.map.edges.get(place) or place == here:
+            return []
+        if self.map.minutes(place, here) <= SITE_MINUTES:
+            return []
+        present = set(self.eng.scene.present) - {PLAYER}
+        return [p for p in ce.participants if p in present]
+
     def run_canon(self, after: int, upto: int) -> list[Event]:
+        """Execute the canon events of (after, upto]. An event one of whose people stands in the
+        player's scene at another site is deferred (logged, not consumed), and so is every later
+        event of the same person while an earlier one waits (story order per person). A deferred
+        event happens on the first step after that no longer holds (they reached its site, or
+        left the player's scene), in story order, stamped at the step's start (so never after a
+        later on-time event), at most `CANON_LATE_PER_STEP` per step. One still waiting
+        `STALE_DAYS` story days after its stamp is retired (logged once, never fired), so the
+        backlog and the query window stay bounded."""
         done = self._executed()
+        pending = self._deferred(done)
         out: list[Event] = []
-        for ce in sorted(self.canon.scheduled(after, upto), key=lambda e: e.t):
+        for cid, (t, _h) in sorted(pending.items(), key=lambda kv: kv[1][0]):
+            if t < after - STALE_DAYS * clk.DAY:  # waited too long: the world moved on, no judgment
+                self._log(nw.CANON_RETIRED, after, {"canon_id": cid, "t": t, "reason": "stale"},
+                          notability=0.0)
+                del pending[cid]
+        since = min([after, *(t - 1 for t, _h in pending.values())])
+        late_fired = 0
+        blocked: set[str] = set()   # people with an earlier event still waiting in this pass
+        for ce in sorted(self.canon.scheduled(since, upto), key=lambda e: e.t):
             if ce.id in done:
                 continue
+            late = ce.id in pending
+            if not late and ce.t <= after:
+                continue
             place = self._place_id(ce.place)
+            held = self._held(ce, place)
+            held += [p for p in ce.participants if p in blocked and p not in held]
+            if not held and late and late_fired >= CANON_LATE_PER_STEP:
+                held = pending[ce.id][1]  # over the cap: waits one more step, keeps its people's order
+            if held:
+                blocked.update(held)
+                if not late:
+                    self._log(nw.CANON_DEFERRED, upto, {"canon_id": ce.id, "t": ce.t, "held": held},
+                              place=place, notability=0.0)
+                continue
+            if late:
+                late_fired += 1
+            at = after if late else ce.t
             touched = self._touched(ce, place)
             outcome, reason, new_summary = "as_written", "", None
             if touched and hasattr(self.canon, "verdict"):
@@ -670,9 +729,11 @@ class World:
                          "differently": "it happens, but differently or with other people",
                          "not_happen": "it does not happen any more"}, tag="canon_event")})
                 outcome = str(got["c"].answer) if got else "as_written"
-            ev = self._log(nw.CANON_EXECUTED, ce.t, {
-                "canon_id": ce.id, "outcome": outcome, "summary": ce.summary, "reason": reason,
-                "touched": [t.id for t in touched]}, place=place, notability=ce.notability)
+            payload = {"canon_id": ce.id, "outcome": outcome, "summary": ce.summary,
+                       "reason": reason, "touched": [t.id for t in touched]}
+            if late:
+                payload["deferred_from"] = ce.t
+            ev = self._log(nw.CANON_EXECUTED, at, payload, place=place, notability=ce.notability)
             out.append(ev)
             done.add(ce.id)
             if outcome == "not_happen":
@@ -682,12 +743,16 @@ class World:
             knowers = [(k, WITNESSED) for k in ce.participants]
             knowers += [(k, HEARD, None) for k in ce.knowers if k not in ce.participants]
             fid = self.eng.facts.add_campaign(
-                text, source_event_id=ev.id, game_time=ce.t, location=self.map.name(place),
+                text, source_event_id=ev.id, game_time=at, location=self.map.name(place),
                 notability=ce.notability, knowers=knowers)
             self.register_news([fid], origin=place)
         return out
 
     # -- advancing time ---------------------------------------------------------------------------
+    def expire_state(self, now: int) -> list[StateChange]:
+        """Timed effects whose `until` has passed are removed (ordinary `remove` events)."""
+        return self.eng.expire_state(now)
+
     def tick(self, to: int, *, interruptible: bool = False) -> str | None:
         """Catch the world up to `to` in steps. The clock ends at `to`. Returns why it stopped
         early (an authority's men arrived where the player is), else None."""
@@ -702,6 +767,7 @@ class World:
         while t < to:
             end = min(t + size, to)
             eng.scene.time = end
+            self.expire_state(end)
             self.run_canon(t, end)
             self.resolve(end, kinds=("authority",))
             jobs = [(c, j) for c in self._eligible(end) if (j := self._agent_job(c, t, end))]

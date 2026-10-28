@@ -71,6 +71,10 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 body.names .who { display: inline; }
 .act { color: var(--ink); }
 .act .act-text { font-style: italic; }
+.read { border-left: 2px solid var(--rule2); padding: 2px 0 2px 12px; color: var(--ink); }
+.read .read-label { display: block; font-size: 0.8em; font-variant: small-caps; color: var(--muted); }
+.read .read-text { white-space: pre-line; }
+.read-none .read-text { font-style: italic; color: var(--muted); }
 .cut::after { content: " ✋ перебито"; font-size: 0.75em; font-style: italic; color: var(--danger); white-space: nowrap; }
 .sel { background: var(--paper3); outline: 1px solid var(--rule2); outline-offset: 3px; }
 .streaming::after { content: ""; display: inline-block; width: 7px; height: 0.9em; margin-left: 3px;

@@ -12,9 +12,11 @@ from dataclasses import dataclass, replace
 from typing import Any, Callable, Sequence
 
 from .agents import Intents
+from . import items
 from .eventlog import EventLog
 from .facts import FactStore
 from .glossary import Glossary
+from .knowledge import OWN_LIFE, OWN_LIFE_OTHER_WORLD, read_item
 from .memory import CharacterMemory, MemoryDeriver
 from .models import (
     ACTION, CORRECTION, PLAYER, PORTRAIT_LEAK, SCENE_ENTRY, UTTERANCE, WITNESSED, CharacterProfile,
@@ -49,6 +51,7 @@ UNLIMITED_EXTRACTOR = (
     "miracle in front of a crowd is high).")
 SAID_LIMIT = 8  # own lines shown as "already said in this scene"
 SAID_CHARS = 220  # each shortened to this
+OWN_DETAILS = 160  # owner-only details of one item (condition, notes, power), at most
 CORRECTIONS_SHOWN = 5
 OUTCOME_EVENT = "outcome"  # harness/outcome.py (not imported: it imports the judge)
 # observable live state that means danger in the room (a drawn blade, a raised crossbow)
@@ -132,6 +135,12 @@ class ContextBuilder:
         self.style = style
         self.player_unlimited = player_unlimited
         self.outcomes = False  # set by the engine (harness/outcome.py)
+        # set by the engine: the extractor prompt lists item ids and locations and teaches
+        # move/realize. Off keeps the old prompt byte for byte, so old recordings still replay.
+        self.item_ids = False
+        # the owner-only details of listed items (condition, notes, power: inventory_meta), by
+        # item id; set by the engine. Shown only in the owner's own state lines, never perceived
+        self.item_meta: Callable[[], dict[str, Any]] | None = None
         # the player's wishes for the campaign, set at its start (a game package: tone, pace,
         # content limits, notes); shown to the narrator, never above the rules
         self.intent = ""
@@ -149,6 +158,25 @@ class ContextBuilder:
         # the rung each NPC starts on toward the player (a game package's person), by NPC id
         self.rung_seeds: dict[str, str] = {}
         self.relations = Relations(log, self.rung_seeds)
+
+    def own_item(self, e: Any, meta: dict[str, Any] | None = None) -> str:
+        """An element of the owner's own state with what only the owner knows of it (condition,
+        notes, power of a listed item), at most OWN_DETAILS characters. Never for observers."""
+        if meta is None:
+            meta = self.item_meta() if self.item_meta is not None else {}
+        m = meta.get(getattr(e, "id", None) or "", {}) if meta else {}
+        bits = [f"{k}: {' '.join(str(m[k]).split())}" for k in ("condition", "notes", "power")
+                if m.get(k)]
+        if not bits:
+            return e.item
+        extra = "; ".join(bits)
+        if len(extra) > OWN_DETAILS:
+            extra = extra[:OWN_DETAILS - 1].rsplit(" ", 1)[0] + "…"
+        return f"{e.item} — {extra}"
+
+    def own_meta(self) -> dict[str, Any]:
+        """Owner-only details of listed items by id (empty without a package inventory)."""
+        return self.item_meta() if self.item_meta is not None else {}
 
     # -- names ------------------------------------------------------------------------------
     def name(self, cid: str) -> str:
@@ -221,11 +249,19 @@ class ContextBuilder:
     def _known(self, f: Fact, k: Knower, viewer: str) -> str:
         """A knowledge line; second-hand knowledge carries its source."""
         text = self.mask(viewer, f.content)
-        if k.source == "own life":
+        if k.source == OWN_LIFE:  # old saves and canon backgrounds
             return f"- {text} (from your own life)"
+        if k.source == OWN_LIFE_OTHER_WORLD:  # the outsider's own past (player.knows)
+            return f"- {text} (з власного життя, з іншого світу)"
+        if (item := read_item(k.source)) is not None:
+            return f"- {text} (read in {self._item_name(item)})"
         if k.source is not None:
             return f"- {text} (heard from {self.ref(viewer, k.source)})"
         return f"- {text}"
+
+    def _item_name(self, item_id: str) -> str:
+        from .readable import item_name_in  # readable imports the engine side lazily
+        return item_name_in(self.live.snapshot(), item_id)
 
     def _seen(self, e: Event, viewer: str | None = None) -> str:
         if e.type == ACTION:
@@ -396,8 +432,8 @@ class ContextBuilder:
                 power = "self"
         if stakes == "low":
             snap = self.live.snapshot()
-            if any(obs and DANGER.search(item)
-                   for c in scene.present for (_, item), obs in snap.get(c, {}).items()):
+            if any(items.is_observable(el, snap) and DANGER.search(item)
+                   for c in scene.present for (_, item), el in snap.get(c, {}).items()):
                 stakes = "high"
         return Situation(power, audience, stakes)
 
@@ -503,11 +539,15 @@ class ContextBuilder:
         if canon:
             parts.append("Relevant canon:\n" + "\n".join(f"- {m(f.content)}" for f in canon))
         parts.append(self._scene_header(scene, PLAYER))
+        own_meta = self.own_meta()
         state_lines = [
-            f"- {self.ref(PLAYER, c)}: {cat}: {item} ({'observable' if obs else 'hidden'})"
+            f"- {self.ref(PLAYER, c)}: {cat}: "
+            f"{self.own_item(el, own_meta) if c == PLAYER else item} "
+            f"({'observable' if items.is_observable(el, snap) else 'hidden'})"
             for c in scene.present
-            for (cat, item), obs in snap.get(c, {}).items()
-        ]
+            for (cat, item), el in snap.get(c, {}).items()
+            if el.aware or c != PLAYER  # the player's narrator does not see what the player's
+        ]                               # character is not aware of (the world judge does)
         if state_lines:
             parts.append("Character state:\n" + "\n".join(state_lines))
         if recent:
@@ -627,9 +667,15 @@ class ContextBuilder:
         body = "\n".join(f"[{k}] {t}" for k, t in segments)
         snap = self.live.snapshot()
         cur = [
-            f"- {c}: {cat}: {item} ({'observable' if obs else 'hidden'})"
+            f"- {c}: {cat}: {item}"
+            + (f" [id: {el.id}]" if self.item_ids and el.id else "")
+            + (f" [location: {el.location}]" if self.item_ids and el.location else "")
+            + (" [container, open]" if self.item_ids and el.open else "")
+            + ((" [unaware to bearer; perceptible by magic only]" if el.channel == "magic"
+                else " [unaware to bearer]") if self.item_ids and not el.aware else "")
+            + f" ({'observable' if items.is_observable(el, snap) else 'hidden'})"
             for c, elems in snap.items()
-            for (cat, item), obs in elems.items()
+            for (cat, item), el in elems.items()
         ]
         hidden = self.names and any(self.names.hidden(c) for c in scene.present + scene.outside)
         instr = (
@@ -638,11 +684,27 @@ class ContextBuilder:
             '{"new_facts": [{"content": str, "source": <one of: ' + keys + '>, '
             '"notability": number 0..1, "location": optional str}],\n'
             ' "state_changes": [{"character": <id>, "category": "injury"|"clothing"|"inventory"|'
-            '"equipment"|"internal"|"appearance", "op": "add"|"remove"|"reveal"|"hide", "item": str, '
-            '"observable": true|false, "source": <segment>}]}\n'
+            '"equipment"|"internal"|"appearance", "op": "add"|"remove"|"reveal"|"hide"'
+            + ('|"move"|"realize"|"open"' if self.item_ids else "") + ', "item": str, '
+            '"observable": true|false, "source": <segment>'
+            + (', "id": optional existing item id, "location": optional str' if self.item_ids else "")
+            + '}]}\n'
             f"Characters: {who}. Do not say who knows or saw a fact; that is decided elsewhere. "
             '"remove" only works on an item the character currently has; "reveal"/"hide" change '
-            "whether an existing item is observable. Do not emit any other keys. Figures of speech and "
+            "whether an existing item is observable. "
+            + ('Items listed with an [id: ...] are referred to by that "id" for "remove", "move", '
+               '"reveal", "hide" and "realize" (never invent ids; a new item is added by its text '
+               'and gets its id elsewhere). "move" needs a "location": "worn", "in_hand", '
+               '"on:<place>" or "in:<container id>"; "add" may give one too. "realize" is for a '
+               'character who learns of an item they carried unaware; "realize" only when the text shows '
+               'the bearer being told of it or perceiving it himself (others noticing it is not '
+               'a "realize"). "open" is for opening, '
+               'unzipping or untying a container (listed as a container, or one with items '
+               '[location: in:<its id>]). Taking an item out of a container is a "move" of that '
+               'item to "in_hand", never a "remove": "remove" is only for an item that is gone '
+               '(eaten, given away, destroyed). Putting down or taking off a container is a '
+               '"move" of the container itself; its contents stay in it. ' if self.item_ids else "")
+            + "Do not emit any other keys. Figures of speech and "
             "gestures are not state (\'took his hand\' adds no hand to anyone's inventory).\n"
             + (f"Names (a passage may describe a person without naming them; in facts, use the "
                f"name): {'; '.join(names)}.\n" if hidden else "")

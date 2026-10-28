@@ -38,20 +38,33 @@ INTRO = (
 DEFAULT_CANON = "campaigns/canon/pilot_v3.db"
 
 
-def canon_path(explicit: str | os.PathLike[str] | None = None) -> Path | None:
+def canon_path(explicit: str | os.PathLike[str] | None = None, *, store: str = "") -> Path | None:
     """The canon store to use: the argument, $HARNESS_CANON_DB, or the local default; None if the
-    file is not there."""
+    file is not there. `store`: a start point's own store file (e.g. `be.db` for «Кров ельфів»),
+    looked up as $HARNESS_CANON_DB_<NAME> (BE for be.db), the argument when it is that file, else
+    next to the argument, to $HARNESS_CANON_DB and to the local default (campaigns/canon)."""
     if explicit is False:  # type: ignore[comparison-overlap]
         return None  # a scenario that must run without canon (the offline regression sessions)
-    for c in (explicit, os.environ.get("HARNESS_CANON_DB"), DEFAULT_CANON):
+    if not store:
+        for c in (explicit, os.environ.get("HARNESS_CANON_DB"), DEFAULT_CANON):
+            if c and Path(c).is_file():
+                return Path(c)
+        return None
+    env = os.environ.get("HARNESS_CANON_DB_" + Path(store).stem.upper().replace("-", "_"))
+    near = [explicit, os.environ.get("HARNESS_CANON_DB"), DEFAULT_CANON]
+    cands = [env, *[c for c in near if c and Path(c).name == store],
+             *[Path(c).parent / store for c in near if c]]
+    for c in cands:
         if c and Path(c).is_file():
             return Path(c)
     return None
 
 
-def load_canon(stack: Stack, canon_db: str | os.PathLike[str] | bool | None = None) -> Canon | None:
-    """The canon store of the Vizima arc, or None when it is not there."""
-    store = canon_path(canon_db)
+def load_canon(stack: Stack, canon_db: str | os.PathLike[str] | bool | None = None, *,
+               store: str = "") -> Canon | None:
+    """The canon store of the Vizima arc (or the start's own `store`), or None when it is not
+    there."""
+    store = canon_path(canon_db, store=store)
     if store is None:
         return None
     embedder = None
@@ -142,9 +155,32 @@ def _stand_ins(start: pilot.CanonStart) -> tuple[tuple[str, str, str, str, str],
     return tuple(_STAND_INS[c] for c in start.here if c in _STAND_INS)
 
 
+def _portrait_stand_ins(eng: Engine, start: pilot.CanonStart) -> None:
+    """A general-builder start without its canon store: each canon person of the start is made
+    from the portrait they play (its name and core), under their canon engine id, so the scene
+    keeps the person and the portrait's senses; they carry no canon knowledge."""
+    from harness.canon.play import cid_of
+    portraits = dict(start.portraits)
+    made: list[tuple[str, str]] = []
+    for ent, _home, _goal in start.people:
+        cid, pid = cid_of(ent), portraits.get(ent)
+        port = eng.ctx.portraits.get(pid) if pid else None
+        if port is None or cid in eng.profiles:
+            continue
+        # the portrait's look is the label until the name is learned (a name is knowledge)
+        eng.profiles[cid] = CharacterProfile(cid, port.name, " ".join(port.core.split()[:60]),
+                                             appearance=port.look)
+        made.append((cid, port.id))
+    eng._save_setup()
+    for cid, pid in made:
+        eng.bind_portrait(cid, pid)
+
+
 def _populate_without_canon(eng: Engine, start: pilot.CanonStart = pilot.SITUATION_A) -> None:
     """No canon store: the same place with the code-made people only (and a stand-in for each
     canon person who would have been here)."""
+    if start.general:
+        _portrait_stand_ins(eng, start)
     stand = _stand_ins(start)
     for slot, occ, _home, look, _goal in (*start.extras, *stand):
         eng.add_npc(eng.fresh_npc(slot, "northern", occupation=occ, appearance=look), appearance=look)
@@ -157,12 +193,18 @@ def _populate_without_canon(eng: Engine, start: pilot.CanonStart = pilot.SITUATI
         if a in eng.profiles and b in eng.profiles:
             eng.acquaint(a, b)
     here = [f"npc_{s}" for s, _o, home, _l, _g in stand if home == start.place_id]
+    if start.general:
+        from harness.canon.play import cid_of
+        here += [cid_of(e) for e in start.here if cid_of(e) in eng.profiles]
     for c in (*start.in_scene(), *here, "player"):
         eng.enter_scene(c)
 
 
 def _world_without_canon(eng: Engine, start: pilot.CanonStart = pilot.SITUATION_A) -> World:
     wmap = start.world_map()
+    if start.general:  # the portrait stand-ins live where the canon people would
+        cast = {c: h for c, h in start.cast().items() if c in eng.profiles}
+        return World(eng, wmap, collectives=[], cast=cast, goals=start.goals())
     stand = _stand_ins(start)
     ids = {**pilot.canon_extra_ids(start), **{s: f"npc_{s}" for s, *_ in stand}}
     cast = {ids[s]: home for s, _o, home, _l, _g in (*start.extras, *stand)}

@@ -66,8 +66,9 @@ from .outcome import (
     CHARACTER_DEATH, FAILS, OUTCOME, CampaignEnded, Outcome, OutcomeJudge, record_death, record_outcome,
 )
 from .perception import ACTION, DESCRIPTION, SPEECH, perceivers
+from . import readable
 from .policy import (
-    DEFAULT_EXTRACTOR, DEFAULT_JUDGE_LLM, DEFAULT_NARRATOR, DEFAULT_NPC, FALLBACKS,
+    DEFAULT_EXTRACTOR, DEFAULT_JUDGE_LLM, DEFAULT_NARRATOR, DEFAULT_NPC, DEFAULT_READER, FALLBACKS,
 )
 from .providers import Provider, ProviderError
 from .stylehits import count_by_kind, style_hits
@@ -80,7 +81,8 @@ from .settings import (
 )
 from .shape import (SPEECH_SHAPES, Shape, beat_wanted, fit_to_shape, sample_shape, shape_prior,
                     shape_weights, word_bounds)
-from .state import LiveState, StateChange, check_change, payload as change_payload
+from . import items
+from .state import Element, LiveState, StateChange, check_change, payload as change_payload
 from .streaming import InterruptHandle, StreamResult, run_stream
 from .style import (Style, beat_as_action, cut_foreign, foreign_runs, foreign_voice,
                     manner_messages, parse_manner, split_npc_output, tidy_speaker)
@@ -100,6 +102,14 @@ _OBSERVED = {  # how an observer sees a newly observable element
     "internal": "{who} visibly shows {item}",
     "appearance": "{who} has {item}",
 }
+# the same for an element only the magic sense perceives (an aura, a spell, a Source)
+_OBSERVED_MAGIC = "With the magic sense, {who} is perceived to carry {item}"
+
+
+def _observed_text(el: Element, who: str, cat: str | None = None, item: str | None = None) -> str:
+    channel = getattr(el, "channel", "sight")
+    tpl = _OBSERVED_MAGIC if channel != "sight" else _OBSERVED[cat or el.category]
+    return tpl.format(who=who, item=item or el.item)
 
 
 @dataclass
@@ -143,6 +153,8 @@ class ModelConfig:
     judge_fallback: str | None = None
     assistant: str = "assistant"  # the turn assistant's suggestions (harness/assistant.py)
     assistant_fallback: str | None = None
+    reader: str = "reader"  # term expansion and reading of readable items (harness/readable.py)
+    reader_fallback: str | None = None
 
     @classmethod
     def live(cls) -> "ModelConfig":
@@ -150,7 +162,8 @@ class ModelConfig:
         return cls(DEFAULT_NARRATOR, DEFAULT_NPC, DEFAULT_EXTRACTOR, DEFAULT_JUDGE_LLM,
                    FALLBACKS["narrator"], FALLBACKS["npc"], FALLBACKS["extractor"],
                    FALLBACKS["judge_llm"], assistant=DEFAULT_NPC,
-                   assistant_fallback=FALLBACKS["npc"])
+                   assistant_fallback=FALLBACKS["npc"], reader=DEFAULT_READER,
+                   reader_fallback=FALLBACKS["reader"])
 
 
 class _Timeout(RuntimeError):
@@ -246,6 +259,8 @@ class TurnResult:
     # living mode, in order: ("line", npc, delivered text), ("gesture", npc, the action as the
     # player sees it) or ("silence", npc, "")
     exchange: list[tuple[str, str, str]] = field(default_factory=list)
+    # what the player read this turn (harness/readable.py), None when the turn read nothing
+    read: Any = None
 
 
 class Engine:
@@ -278,6 +293,7 @@ class Engine:
         style: Style | None = None,
         player_unlimited: bool = False,
         outcomes: bool = False,
+        item_ids: bool = False,
         seed: int | str = 0,
         dialogue: str = DEFAULT_DIALOGUE,
         world_profile: WorldProfile | None = None,
@@ -384,6 +400,8 @@ class Engine:
                                   narration=narration, names=self.names, style=style,
                                   player_unlimited=player_unlimited)
         self.ctx.outcomes = outcomes
+        self.ctx.item_ids = item_ids  # the extractor prompt shows item ids and locations
+        self.ctx.item_meta = lambda: readable.inventory_meta(self)  # owner-only item details
         self.world = world
         self._short_portraits: dict[str, dict | None] = {}  # npc -> generated portrait (None: failed)
         try:  # a broken portrait file must not stop a campaign from opening
@@ -1091,7 +1109,7 @@ class Engine:
                 diff = validate_diff(self._ids_for_names(self._fix_tree(parse_diff(raw))),
                                      present=sc.present, sources=sources,
                                      state=self.live.snapshot(), characters=everyone,
-                                     texts=dict(segments))
+                                     texts=dict(segments), fuzzy=self.ctx.item_ids)
                 for d in diff.dropped:
                     self._note("state_change_dropped", **d)
                 return diff
@@ -1142,7 +1160,8 @@ class Engine:
     # -- live state and its perception ---------------------------------
     def _apply_change(self, ch: StateChange, cause: Event, *,
                       defer: list[_Job] | None = None) -> Event:
-        was = self.live.snapshot().get(ch.character, {}).get((ch.category, ch.item))
+        before = self.live.snapshot()
+        was = before.get(ch.character, {}).get((ch.category, ch.item))
         ev = self.log.append(
             STATE_CHANGE,
             game_time=self.scene.time,
@@ -1156,12 +1175,40 @@ class Engine:
         # only someone in the room can be seen; an absent character's change waits for entry
         observers = ([c for c in self.scene.present if c != ch.character]
                      if ch.character in self.scene.present else [])
-        if ch.op == "add" and ch.observable or ch.op == "reveal":
-            self._observe(_OBSERVED[ch.category].format(who=who, item=ch.item), observers, ev,
+        after = self.live.snapshot()
+        # observability is derived (a closed container hides its contents), so the new state
+        # decides what is perceived: whatever became observable is observed once
+        if ch.op in ("add", "reveal", "move", "open"):
+            for el in items.newly_observable(before, after, ch.character):
+                self._observe(_observed_text(el, who), self._perceivers(el, observers), ev,
+                              defer=defer)
+        elif ch.op == "remove" and was and items.is_observable(was, before):
+            self._observe(f"{who} no longer has {ch.item}", self._perceivers(was, observers), ev,
                           defer=defer)
-        elif ch.op == "remove" and was:
-            self._observe(f"{who} no longer has {ch.item}", observers, ev, defer=defer)
         return ev
+
+    def senses_of(self, character: str) -> frozenset[str]:
+        """What the character perceives with: the profile's senses (sight by default), the
+        portrait's, and any sense granted by an item they wear (`grants_sense` in inventory_meta)."""
+        prof = self.profiles.get(character)
+        got = set(prof.senses if prof else ("sight",))
+        port = self.ctx.portraits.get(prof.portrait) if prof and prof.portrait else None
+        got |= set(getattr(port, "senses", ()))
+        worn = [e.id for e in self.live.snapshot().get(character, {}).values()
+                if isinstance(e, Element) and e.id and e.location == "worn"]
+        if worn:
+            meta = readable.inventory_meta(self)
+            got |= {m["grants_sense"] for i in worn
+                    if isinstance(m := meta.get(i) or {}, dict) and m.get("grants_sense")}
+        return frozenset(got)
+
+    def _perceivers(self, el: Any, observers: Sequence[str]) -> list[str]:
+        """The observers who can perceive the element: a sight element is perceived as ever, a
+        magic one only by those with the magic sense."""
+        channel = getattr(el, "channel", "sight")
+        if channel == "sight":
+            return list(observers)
+        return [o for o in observers if channel in self.senses_of(o)]
 
     def _observe(self, text: str, observers: Sequence[str], cause: Event, *,
                  defer: list[_Job] | None = None) -> int | None:
@@ -1221,6 +1268,29 @@ class Engine:
         self.refresh_memory()
         return ev
 
+    def expire_state(self, now: int) -> list[StateChange]:
+        """Remove every element whose `until` has passed (`until <= now`) as an ordinary
+        `remove` event, caused by the event that added it (so rolling back the add takes the
+        removal with it) and perceived like any other removal. Elements without `until` never
+        expire."""
+        due = [(c, el) for c, elems in self.live.snapshot().items() for el in elems.values()
+               if isinstance(el, Element) and el.until is not None and el.until <= now]
+        if not due:
+            return []
+        adds = self.log.active([STATE_CHANGE])
+        out: list[StateChange] = []
+        for c, el in sorted(due, key=lambda d: (d[1].until, d[0], d[1].category, d[1].item)):
+            cause = next((e for e in reversed(adds) if e.payload["op"] == "add"
+                          and (e.payload["character"], e.payload["category"],
+                               e.payload["item"]) == (c, el.category, el.item)), None)
+            ch = StateChange(c, el.category, "remove", el.item, el.observable)
+            if cause is None:  # cannot happen for logged state; never invent an orphan removal
+                continue
+            self._apply_change(ch, cause)
+            out.append(ch)
+        self.refresh_memory()
+        return out
+
     def enter_scene(self, character: str) -> Event:
         """A character walks in: the room perceives their observable state, and they perceive
         everyone else's."""
@@ -1233,14 +1303,14 @@ class Engine:
         sc.present = sc.present + (character,)
         snap = self.live.snapshot()
         for (cat, item), obs in snap.get(character, {}).items():
-            if obs:
-                self._observe(_OBSERVED[cat].format(who=self.ctx.name(character), item=item),
-                              others, ev)
+            if items.is_observable(obs, snap):
+                self._observe(_observed_text(obs, self.ctx.name(character), cat, item),
+                              self._perceivers(obs, others), ev)
         for other in others:
             for (cat, item), obs in snap.get(other, {}).items():
-                if obs:
-                    self._observe(_OBSERVED[cat].format(who=self.ctx.name(other), item=item),
-                                  [character], ev)
+                if items.is_observable(obs, snap):
+                    self._observe(_observed_text(obs, self.ctx.name(other), cat, item),
+                                  self._perceivers(obs, [character]), ev)
         self.refresh_memory()
         return ev
 
@@ -1779,6 +1849,53 @@ class Engine:
         """Setup: `a` knows `b` by name (and `b` knows `a`): prior acquaintance, own life, canon."""
         self.names.acquaint(a, b, self.scene, how=how, mutual=mutual)
 
+    def _read_turn(self, model_text: str) -> "readable.ReadResult | None":
+        """If the player holds an item with content and this turn reads it (`read_intent`, one
+        judgment, asked only then), read it for what the player looks for."""
+        held = readable.readable_held(self, PLAYER)
+        if not held:
+            return None
+        try:
+            item = readable.read_intent(self, model_text, held)
+        except JudgeError as e:
+            self._note("read_intent_unavailable", error=str(e))
+            return None
+        if item is None:
+            return None
+        t0, mark = self.scene.time, max((e.id for e in self.log.active()), default=0)
+        # the request is what he looks up, not the whole turn (its other actions are no lookup)
+        topic = readable.lookup_topic(model_text, held[item])
+        try:
+            res = readable.read(self, PLAYER, item, topic)
+        except (JudgeError, ProviderError) as e:  # nothing read: no knowledge, no time
+            for ev in self.log.active([readable.READ_EVENT]):
+                if ev.id > mark:
+                    self.log.rollback(ev.id, "read failed")
+            self.scene.time = t0
+            self._note("read_failed", item=item, error=str(e))
+            res = readable.failed(self, PLAYER, item, topic)
+            self.refresh_memory()
+            return res
+        self._note("item_read", item=item, found=res.found, minutes=res.minutes,
+                   terms=res.terms, chars=res.chars)
+        return res
+
+    def _read_note(self, res: "readable.ReadResult") -> str:
+        """What the narrator is told about the reading: the text read, or that nothing was found
+        (so nothing is invented in its place)."""
+        private = (" This is private to him: he reads it to himself on his own page or screen, "
+                   "and nobody else sees or hears it unless he reads it aloud. Do not write any of "
+                   "it as something the others see or hear, nor as an observable action.")
+        if res.found:
+            return f"[What the player character read in {res.item}: {res.text}.{private}]"
+        return f"[The player character looked in {res.item} and found nothing: {res.text}]"
+
+    @staticmethod
+    def _reading_mark(res: "readable.ReadResult") -> str:
+        """What everybody but the narrator gets: that he reads, never what."""
+        return (f"[The player character reads {res.item} to himself; what he reads is private "
+                "to him.]")
+
     def turn(
         self,
         player_text: str,
@@ -1807,6 +1924,8 @@ class Engine:
         if self.ended:
             raise CampaignEnded("the player character is dead; the campaign is read-only")
         t_start = time.monotonic()
+        read_res: readable.ReadResult | None = None
+        read_minutes = 0  # the clock already moved by these while reading
         waited = self._settle_for_next_turn()
         marks = (len(self.judgments.entries), len(self.llm_calls), len(self.devlog))
         if self.canon_guard is not None:
@@ -1826,6 +1945,15 @@ class Engine:
             player_ev = player_pairs[0][1]
             turn_events.extend(ev for _, ev in player_pairs)
             self._learn_from_player(player_pairs)
+            narr_text = model_text  # the narrator alone also gets what was read
+            read_res = self._read_turn(model_text)  # the player reads an item with content
+            if read_res is not None:
+                read_minutes = read_res.minutes
+                narr_text = model_text + "\n" + self._read_note(read_res)
+                # the others (judges, director) only learn that he is reading, not what
+                model_text += "\n" + self._reading_mark(read_res)
+                if read_res.event_id is not None:
+                    turn_events.append(self.log.get(read_res.event_id))
             outcome: Outcome | None = None
             if self.outcomes_on:  # the world judges the attempt before any prose (task 19)
                 judged = self.outcome_judge.player(model_text, unbounded=self.ctx.player_unlimited)
@@ -1854,11 +1982,11 @@ class Engine:
                     launch = cand
                     return True
 
-                out = self._narrate(model_text, on_candidate, outcome)
+                out = self._narrate(narr_text, on_candidate, outcome)
                 if launch is None:  # speech stripped after the retries: nothing left to check
                     launch = self._launch(out, model_text, speakers, turn_events, check=False)
             else:
-                out = self._narrate(model_text, outcome=outcome)
+                out = self._narrate(narr_text, outcome=outcome)
                 launch = self._launch(out, model_text, speakers, turn_events, check=False)
 
             turn_events.extend(ev for ev, _, _ in self._admitted)  # undone with the turn
@@ -1872,7 +2000,7 @@ class Engine:
                 if (first_step is not None and not result.interrupted
                         and not any(u.payload.get("text", "").strip() for u in result.utterances)
                         and not any(k == "gesture" for k, _, _ in result.exchange)):
-                    out = self._narrate_empty(model_text, turn_events, sources, segments, result)
+                    out = self._narrate_empty(narr_text, turn_events, sources, segments, result)
                     if on_narration is not None:
                         on_narration(out.description)
             for npc in launch.speakers:  # classic, or a fixed list of speakers
@@ -1904,6 +2032,7 @@ class Engine:
             for e in turn_events:
                 self.log.rollback(e.id, "turn failed")
             self._unadmit(self._admitted)
+            sc.time -= read_minutes  # the reading did not happen either
             self.refresh_memory()
             raise
         if launch is not None and self.parallel:
@@ -1913,7 +2042,8 @@ class Engine:
                 launch.chains[n][1].cancel()
             if unused:
                 self._note("chains_unused_after_interruption", npcs=unused)
-        sc.time += self.minutes_per_turn
+        result.read = read_res
+        sc.time += max(0, self.minutes_per_turn - read_minutes)  # reading is part of the turn
         with self._slow_lock:
             self._slow = slow
             if defer_slow and self.parallel:
@@ -2385,6 +2515,12 @@ class Engine:
             first = last
         raw = str(first.payload.get("raw", first.payload["text"]))
         model_text = render_for_model(split_input(raw), raw)
+        reads = [e for e in self.log.active([readable.READ_EVENT])
+                 if first.id < e.id < old.id and e.payload.get("reader") == PLAYER]
+        if reads:  # a regenerated narration is told what was read, privately, as the first was
+            p = reads[-1].payload
+            model_text += "\n" + self._read_note(readable.ReadResult(
+                p.get("text", ""), found=bool(p.get("found")), item=p.get("item_name", "")))
         judged = [e for e in self.log.active([OUTCOME])
                   if first.id < e.id < old.id and e.payload.get("actor", PLAYER) == PLAYER]
         return model_text, (self._outcome_of(judged[-1]) if judged else None)
@@ -2733,6 +2869,7 @@ class Engine:
     def advance_offscreen(self, minutes: int) -> None:
         start = self.scene.time
         self.scene.time += minutes
+        self.expire_state(self.scene.time)
         for a in self.agents.agents():
             if a not in self.scene.present:
                 self.updater.update(a, start, self.scene.time)
@@ -2754,13 +2891,13 @@ class Engine:
         with self.conn:
             for k, v in {
                 "profiles": [[p.id, p.name, p.description, p.manner, p.appearance, p.core, p.sex,
-                              p.portrait] for p in self.profiles.values()],
+                              p.portrait, list(p.senses)] for p in self.profiles.values()],
                 "settings": {"output_language": self.output_language,
                              "record_language": self.record_language,
                              "narration": self.narration,
                              "minutes_per_turn": self.minutes_per_turn,
                              "player_unlimited": self.ctx.player_unlimited,
-                             "outcomes": self.outcomes_on, "seed": self.seed,
+                             "outcomes": self.outcomes_on, "item_ids": self.ctx.item_ids, "seed": self.seed,
                              "dialogue": self.dialogue, "world": self.world,
                              "rung_seeds": self.ctx.rung_seeds},
                 "vitals": self.vitals.to_json(),
@@ -2806,7 +2943,8 @@ class Engine:
             raise ValueError(f"campaign {name!r} has no saved setup")
         sc = meta["scene"]
         scene = Scene(sc["location"], tuple(sc["present"]), sc["time"], tuple(sc["outside"]))
-        profiles = [CharacterProfile(*p) for p in meta["profiles"]]
+        profiles = [CharacterProfile(*p[:8], *([tuple(p[8])] if len(p) > 8 else []))
+                    for p in meta["profiles"]]
         for k, v in meta.get("settings", {}).items():
             kw.setdefault(k, v)
         eng = cls(provider, kw.pop("profiles", profiles), scene, conn=conn, campaign_dir=d, **kw)

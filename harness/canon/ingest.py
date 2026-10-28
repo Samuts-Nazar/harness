@@ -1,6 +1,15 @@
 """Canon ingestion of one arc: chunk, extract (entities, then events per window), validate, load.
 
     python -m harness.canon.ingest --model deepseek/deepseek-v4.1-flash-1017 --out campaigns/canon/pilot_deepseek.db
+    python -m harness.canon.ingest --source data/witcher_books.txt --lines A-B --chapters "L:Title,L:Title" \
+        --from-json DIR --out X.db
+
+With `--from-json DIR` no provider is created and nothing goes over the network: each model call is
+replaced by reading a JSON file that a Claude Code subagent wrote (see reports/canon_be/EXTRACTION.md):
+    entities.json and/or entities_<A>-<B>.json   entity pass, {"entities": [...]} (all such files merged)
+    timeline.json                                scene timeline, only with --v2
+    window_<A>-<B>.json                          event pass for the arc lines A..B, {"new_entities", "events"}
+Window files are taken in order of A. Missing or unparsable files are counted in the report, not raised.
 
 Nothing here writes world state through an LLM: the model proposes JSON, code validates it (closed
 vocabularies, known entity ids, quote present in the source, line numbers inside the window) and
@@ -28,6 +37,8 @@ from .vocab import ATTITUDES, CHANNELS, EKINDS, PARTS, REACTIONS
 INGEST_VERSION = "pilot-1"
 BOOK_FIRST, BOOK_LAST = 7, 694
 CHAPTERS = [(7, "Голос розуму-1"), (19, "Відьмак")]
+SOURCE_ID, SOURCE_TITLE = "last-wish-arc", "Останнє бажання: Голос розуму-1, Відьмак"
+WINDOW_FILE = re.compile(r"^window_(\d+)-(\d+)\.json$")
 TYPE_OF_PREFIX = {"char": "person", "coll": "collective", "place": "place", "item": "item",
                   "creature": "creature"}
 ROLES = {"actor", "target", "victim", "speaker", "listener", "witness", "bystander", "subject"}
@@ -77,7 +88,8 @@ class Ingestor:
                  *, raw_dir: str | Path | None = None, spend: TokenSpend | None = None,
                  first: int = BOOK_FIRST, last: int = BOOK_LAST,
                  chapters: list[tuple[int, str]] | None = None, log=print, replay: bool = False,
-                 v2: bool = False, glossary: bool = False) -> None:
+                 v2: bool = False, glossary: bool = False, json_dir: str | Path | None = None,
+                 source_id: str = SOURCE_ID, source_title: str = SOURCE_TITLE) -> None:
         self.provider, self.model, self.source = provider, model, Path(source)
         self.out_db, self.raw_dir = out_db, Path(raw_dir) if raw_dir else None
         self.spend = spend or TokenSpend()
@@ -87,6 +99,11 @@ class Ingestor:
         self.v2 = v2          # scene-timeline pass supplies time and place (extract2)
         self.scenes: list[dict[str, Any]] = []
         self.replay = replay  # re-use the saved raw replies in raw_dir instead of calling the model
+        # read the subagent-written JSON files instead of calling the model (no provider needed)
+        self.json_dir = Path(json_dir) if json_dir else None
+        self.source_id, self.source_title = source_id, source_title
+        self.json_files: dict[str, Any] = {"read": 0, "missing": [], "invalid": [], "ignored": [],
+                                           "uncovered_lines": []}
         self.stats: dict[str, Any] = {"format_failures": 0, "dropped": [], "calls": 0, "window_failures": 0}
         self.entities: dict[str, dict[str, Any]] = {}
 
@@ -100,6 +117,22 @@ class Ingestor:
         if self.replay and self.raw_dir and (self.raw_dir / f"{name}.json").exists():
             return json.loads((self.raw_dir / f"{name}.json").read_text())
         return None
+
+    def _read_json(self, name: str, lists: tuple[str, ...]) -> dict[str, Any] | None:
+        """A subagent-written file in json_dir; None (and counted) when it is unreadable, not an object, or
+        one of its top-level `lists` fields is present but not a list (null counts as absent)."""
+        assert self.json_dir is not None
+        try:
+            obj = extract.parse_json((self.json_dir / name).read_text(encoding="utf-8"))
+            bad = [k for k in lists if obj.get(k) is not None and not isinstance(obj[k], list)]
+            if bad:
+                raise ValueError(f"field(s) {', '.join(bad)} must be lists")
+        except (OSError, ValueError) as e:  # JSONDecodeError is a ValueError
+            self.json_files["invalid"].append(name)
+            self._drop("file", "invalid json", file=name, err=str(e)[:160])
+            return None
+        self.json_files["read"] += 1
+        return obj
 
     def _drop(self, what: str, why: str, **kw: Any) -> None:
         self.stats["dropped"].append({"what": what, "why": why, **kw})
@@ -121,6 +154,14 @@ class Ingestor:
         self.entities[eid] = {**e, "type": typ, "aliases": list(e.get("aliases") or [])}
 
     def entity_pass(self, paras: list[chunk.Para]) -> None:
+        if self.json_dir:
+            names = sorted(f.name for f in self.json_dir.glob("entities*.json"))
+            if not names:
+                self.json_files["missing"].append("entities*.json")
+            for n in names:
+                for e in (self._read_json(n, ("entities",)) or {}).get("entities") or []:
+                    self._take_entity(e, n)
+            return
         text = "\n".join(f"[L{p.line}] {p.text}" for p in paras)
         obj = self._load_raw("entities")
         if obj is None:
@@ -132,7 +173,14 @@ class Ingestor:
 
     def timeline_pass(self, paras: list[chunk.Para]) -> None:
         text = "\n".join(f"[L{p.line}] {p.text}" for p in paras)
-        obj = self._load_raw("timeline")
+        if self.json_dir:
+            obj = {}
+            if (self.json_dir / "timeline.json").exists():
+                obj = self._read_json("timeline.json", ("scenes",)) or {}
+            else:
+                self.json_files["missing"].append("timeline.json")
+        else:
+            obj = self._load_raw("timeline")
         if obj is None:
             obj, fails = extract.ask_json(self.provider, self.model, extract2.timeline_prompt(text))
             self.stats["format_failures"] += fails
@@ -182,6 +230,51 @@ class Ingestor:
                 n_new += self._take_events(obj, lines, wi, out, prior)
             self.log(f"  window {wi + 1}/{len(windows)}: {n_new} events, {time.time() - t0:.0f}s, "
                      f"${self.spend.total:.4f}")
+        return out
+
+    def json_event_pass(self, paras: list[chunk.Para]) -> list[dict[str, Any]]:
+        """Event pass from window_<A>-<B>.json files: the window is the arc lines A..B."""
+        assert self.json_dir is not None
+        arc_lines = [p.line for p in paras]
+        files: list[tuple[int, int, str]] = []
+        for f in self.json_dir.glob("*.json"):
+            m = WINDOW_FILE.match(f.name)
+            if m and int(m[1]) <= int(m[2]):
+                files.append((int(m[1]), int(m[2]), f.name))
+            elif not (f.name.startswith("entities") or f.name in ("timeline.json",) or f.name.startswith("report")):
+                self.json_files["ignored"].append(f.name)
+        files.sort()
+        if not files:
+            self.json_files["missing"].append("window_<A>-<B>.json")
+        covered: set[int] = set()
+        out: list[dict[str, Any]] = []
+        prior: list[str] = []
+        for wi, (a, b, name) in enumerate(files):
+            obj = self._read_json(name, ("new_entities", "events"))
+            if obj is None:
+                self.stats["window_failures"] += 1
+                continue
+            lines = {ln for ln in arc_lines if a <= ln <= b}
+            if not lines:
+                self._drop("file", "window outside the arc", file=name)
+                continue
+            covered |= lines
+            for e in obj.get("new_entities") or []:
+                self._take_entity(e, name)
+            n_new = self._take_events(obj, lines, wi, out, prior)
+            self.log(f"  {name}: {n_new} events")
+        # arc paragraphs no window file covers, as "A-B" runs of consecutive paragraphs
+        runs: list[list[int]] = []
+        prev_in = True
+        for ln in arc_lines:
+            if ln in covered:
+                prev_in = True
+                continue
+            if prev_in:
+                runs.append([ln, ln])
+            runs[-1][1] = ln
+            prev_in = False
+        self.json_files["uncovered_lines"] = [f"{x}-{y}" for x, y in runs]
         return out
 
     def _fetch(self, name: str, win: list[chunk.Passage], prior: list[str]) -> list[tuple[dict[str, Any], set[int]]]:
@@ -238,13 +331,13 @@ class Ingestor:
                     ("witcher", INGEST_VERSION, sha, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                      json.dumps([self.model])))
         con.execute("INSERT INTO canon_source VALUES (?,?,?,?)",
-                    ("last-wish-arc", "Останнє бажання: Голос розуму-1, Відьмак", "uk", sha))
+                    (self.source_id, self.source_title, "uk", sha))
         pid_by_line: dict[int, int] = {}
         arc_text = "\n".join(p.text for p in paras)
         for ps in passages:
             rid = add_record(con, "canon_passage", ps.text, t_from=0, t_prec="unknown", writer_ref="chunker")
             con.execute("INSERT INTO canon_passage VALUES (?,?,?,?,?,?,?,?)",
-                        (rid, "last-wish-arc", ps.chapter, ps.ord, ps.char_from, ps.char_to,
+                        (rid, self.source_id, ps.chapter, ps.ord, ps.char_from, ps.char_to,
                          ps.line_from, ps.line_to))
             con.execute("INSERT INTO canon_passage_fts(rowid, text) VALUES (?,?)", (rid, ps.text))
             for p in ps.paras:
@@ -386,29 +479,60 @@ class Ingestor:
         paras = chunk.read_arc(self.source, self.first, self.last, self.chapters)
         passages = chunk.make_passages(paras)
         windows = chunk.make_windows(passages)
-        self.log(f"{self.model}: {len(paras)} paragraphs, {len(passages)} passages, {len(windows)} windows")
+        self.log(f"{self.model}: {len(paras)} paragraphs, {len(passages)} passages, "
+                 + (f"JSON from {self.json_dir}" if self.json_dir else f"{len(windows)} windows"))
         self.entity_pass(paras)
         self.log(f"  entities: {len(self.entities)}, ${self.spend.total:.4f}")
         if self.v2:
             self.timeline_pass(paras)
             self.log(f"  scenes: {len(self.scenes)}, ${self.spend.total:.4f}")
-        events = self.event_pass(windows)
+        events = self.json_event_pass(paras) if self.json_dir else self.event_pass(windows)
         con = self.load(paras, passages, events, chunk.file_sha256(self.source))
         counts = {t: con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in (
             "entity", "canon_passage", "canon_event", "canon_participant", "canon_knower", "canon_reaction")}
+        flagged: dict[str, int] = {}
+        for (meta,) in con.execute("SELECT meta FROM record WHERE kind='canon_event'"):
+            for f in json.loads(meta or "{}").get("flags") or []:
+                flagged[f] = flagged.get(f, 0) + 1
         con.close()
+        by_reason: dict[str, int] = {}
+        for d in self.stats["dropped"]:
+            k = f"{d['what']}: {d['why']}"
+            by_reason[k] = by_reason.get(k, 0) + 1
         rep = {"model": self.model, "seconds": round(time.time() - t0), "cost_usd": round(self.spend.total, 5),
                "calls": self.spend.calls, "tokens_in": self.spend.tokens_in, "tokens_out": self.spend.tokens_out,
                "counts": counts, "format_failures": self.stats["format_failures"],
-               "window_failures": self.stats["window_failures"], "dropped": self.stats["dropped"]}
+               "window_failures": self.stats["window_failures"], "flagged": flagged,
+               "dropped_by_reason": by_reason, "dropped": self.stats["dropped"]}
+        if self.json_dir:
+            rep["json_files"] = self.json_files
         self._save_raw("report_replay" if self.replay else "report", rep)
         return rep
+
+
+def parse_lines(s: str) -> tuple[int, int]:
+    """"A-B" -> (A, B), 1-based inclusive file lines."""
+    m = re.fullmatch(r"\s*(\d+)\s*-\s*(\d+)\s*", s)
+    if not m or not 1 <= int(m[1]) <= int(m[2]):
+        raise ValueError(f"--lines wants A-B with 1 <= A <= B, got {s!r}")
+    return int(m[1]), int(m[2])
+
+
+def parse_chapters(s: str) -> list[tuple[int, str]]:
+    """"L:Title,L:Title" -> [(L, Title)] sorted by line (a title may not contain a comma)."""
+    out = []
+    for item in s.split(","):
+        ln, sep, title = item.strip().partition(":")
+        if not sep or not ln.strip().isdigit() or not title.strip():
+            raise ValueError(f"--chapters wants L:Title items separated by commas, got {item!r}")
+        out.append((int(ln), title.strip()))
+    return sorted(out)
 
 
 def main() -> None:
     from dotenv import load_dotenv
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", required=True)
+    ap.add_argument("--model", help="extractor model (required unless --from-json; then only a label)")
     ap.add_argument("--source", default="data/witcher_books.txt")
     ap.add_argument("--out", required=True)
     ap.add_argument("--raw")
@@ -416,11 +540,35 @@ def main() -> None:
     ap.add_argument("--glossary", action="store_true", help="apply the canonical-name glossary to event text")
     ap.add_argument("--replay", action="store_true", help="reload from the saved raw replies, no API calls")
     ap.add_argument("--cap", type=float, default=0.2, help="spend cap in USD for this run")
+    ap.add_argument("--lines", help=f"arc as file lines A-B (default {BOOK_FIRST}-{BOOK_LAST}, the pilot arc)")
+    ap.add_argument("--chapters", help='"L:Title,L:Title" chapter starts (default: the pilot chapters; with --lines '
+                                       'only, one chapter named after the range)')
+    ap.add_argument("--from-json", metavar="DIR", help="read subagent-written JSON files instead of calling a model")
+    ap.add_argument("--source-id", default=SOURCE_ID)
+    ap.add_argument("--source-title", default=SOURCE_TITLE)
     a = ap.parse_args()
-    load_dotenv(os.environ.get("HARNESS_ENV", ".env"))
-    spend = TokenSpend(cap=a.cap)
-    prov = OpenRouterProvider(spend=spend, timeout=300)
-    rep = Ingestor(prov, a.model, a.source, a.out, raw_dir=a.raw, spend=spend, replay=a.replay, v2=a.v2, glossary=a.glossary).run()
+    try:
+        first, last = parse_lines(a.lines) if a.lines else (BOOK_FIRST, BOOK_LAST)
+        chapters = parse_chapters(a.chapters) if a.chapters else (
+            [(first, f"lines {first}-{last}")] if a.lines else CHAPTERS)
+    except ValueError as e:
+        ap.error(str(e))
+    if chapters[0][0] > first:
+        ap.error(f"the first chapter starts at line {chapters[0][0]}, after the arc start {first}")
+    kw = dict(raw_dir=a.raw, first=first, last=last, chapters=chapters, v2=a.v2, glossary=a.glossary,
+              source_id=a.source_id, source_title=a.source_title)
+    if a.from_json:
+        if not Path(a.from_json).is_dir():
+            ap.error(f"--from-json: {a.from_json} is not a directory")
+        ing = Ingestor(None, a.model or "subagent-json", a.source, a.out, json_dir=a.from_json, **kw)  # type: ignore[arg-type]
+    else:
+        if not a.model:
+            ap.error("--model is required unless --from-json is given")
+        load_dotenv(os.environ.get("HARNESS_ENV", ".env"))
+        spend = TokenSpend(cap=a.cap)
+        prov = OpenRouterProvider(spend=spend, timeout=300)
+        ing = Ingestor(prov, a.model, a.source, a.out, spend=spend, replay=a.replay, **kw)  # type: ignore[arg-type]
+    rep = ing.run()
     rep.pop("dropped")
     print(json.dumps(rep, ensure_ascii=False))
 

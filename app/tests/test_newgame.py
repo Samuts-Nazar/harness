@@ -599,6 +599,9 @@ def test_portrait_and_portrait_text_together_keep_the_id_with_a_warning():
 def test_canon_start_binds_portraits(tmp_path):
     points = newgame.start_points()
     for cid, sp in points.items():
+        assert set(sp["portraits"].values()) <= set(newgame.world_portraits()[0]), cid
+        if sp.get("builder", "vizima") != "vizima":
+            continue  # the Vizima arc's starts all have the innkeeper
         assert sp["portraits"]["char:innkeeper"] == "innkeeper_vizima", cid
         assert set(sp["portraits"].values()) <= set(newgame.world_portraits()[0]), cid
     g, stack = make(tmp_path, CANON)          # vidmak_A_tavern, no canon store: the stand-in

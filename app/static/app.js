@@ -130,6 +130,13 @@ function narrBlock(text, cls = "narr") {
   if (cls === "narr") p.tabIndex = 0;   // the line menu (model error) is reachable by keyboard
   return p;
 }
+// what the player character read in an item: its own block, labelled with the item
+function readBlock(label, text, found) {
+  const p = el("div", "read" + (found === false ? " read-none" : ""));
+  p.append(el("span", "read-label", label ? "Прочитано · " + label : "Прочитано"),
+           el("span", "read-text", text));
+  return p;
+}
 function meBlock(text) { const p = el("p", "me", text); p.dataset.line = "me"; return p; }
 function streaming(p) {
   for (const n of Array.from(feed.children)) if (n !== p && n.classList) n.classList.remove("streaming");
@@ -552,6 +559,7 @@ function render(state) {
       if (t.text && t.text.trim()) { n = narrBlock(t.text); if (t.event != null) n.dataset.event = t.event; }
     }
     else if (t.kind === "npc_act") n = actBlock(t.tok, t.label, t.text, t.event);
+    else if (t.kind === "read") n = readBlock(t.label, t.text, t.found);
     else n = sayBlock(t.tok, t.label, t.text, t.cut, t.event);
     if (!n) continue;
     add(n, false);
@@ -596,6 +604,7 @@ const handlers = {
     cur = add(sayBlock(e.tok, e.label, "")); turnNpc.push(cur); streaming(cur);
     setBusy(true, "speaking");
   },
+  read(e) { cur = add(readBlock(e.label, e.text, e.found)); streaming(null); },
   npc_act(e) { newSpeaker(e.tok); cur = add(actBlock(e.tok, e.label, e.text, e.event)); streaming(null); },
   word(e) {
     if (!cur || cur.dataset.line !== "say") return;
@@ -652,7 +661,7 @@ const handlers = {
   reset() { load(); },   // a new campaign (from another tab too): the page starts over
 };
 // events of a turn whose text the transcript already holds (a reload during its slow lane)
-const FEED_EVENTS = new Set(["turn_start", "narr_start", "narr_word", "narr_end", "speaker", "npc_act", "word", "turn_done"]);
+const FEED_EVENTS = new Set(["turn_start", "read", "narr_start", "narr_word", "narr_end", "speaker", "npc_act", "word", "turn_done"]);
 
 // the player character died: a final chronicle, the campaign is read-only
 function showFinale(lines) {

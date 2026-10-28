@@ -16,6 +16,7 @@ WORLDS = Path(__file__).resolve().parents[1] / "worlds"
 RUNGS = ("stranger", "client", "ally", "close", "lover", "rival", "enemy", "subordinate")
 LADDER = ("stranger", "client", "ally", "close", "lover")
 WHEN_KEYS = ("power", "audience", "stakes")
+SENSES = ("sight", "magic")  # what a character can perceive with
 MAX_WORDS = 260
 MAX_EXAMPLES = 2
 
@@ -67,6 +68,10 @@ class Portrait:
     voice: str
     never: str
     relations: dict[str, str]  # other character id -> rung (static NPC->NPC)
+    senses: tuple[str, ...] = ("sight",)  # `senses: [magic]` adds the magic sense to whoever plays it
+    # `look`: how a stranger sees this person (a short Ukrainian phrase, never a name): the label
+    # others use until they learn the name (harness/names.py). "" means none given.
+    look: str = ""
 
 
 def _req(path, d, key, types, where=""):
@@ -144,6 +149,16 @@ def parse_portrait(d: object, path: Path | str = "<portrait>") -> Portrait:
         raise PortraitError(path, "relations", "must be a mapping")
     for k, r in rel.items():
         _rung(path, r, f"relations.{k}")
+    senses = ("sight",)
+    if d.get("senses") is not None:
+        got = _str_list(path, d["senses"], "senses")
+        bad = [x for x in got if x not in SENSES]
+        if bad:
+            raise PortraitError(path, "senses", f"unknown sense {bad[0]!r}")
+        senses = tuple(dict.fromkeys(("sight", *got)))
+    look = d.get("look") or ""
+    if not isinstance(look, str):
+        raise PortraitError(path, "look", "must be text")
     return Portrait(
         id=_req(path, d, "id", str), character=_req(path, d, "character", str),
         name=_req(path, d, "name", str), phase=_req(path, d, "phase", str),
@@ -153,7 +168,7 @@ def parse_portrait(d: object, path: Path | str = "<portrait>") -> Portrait:
         hidden=_req(path, d, "hidden", str),
         leaks=_str_list(path, _req(path, d, "leaks", list), "leaks"),
         voice=_req(path, d, "voice", str), never=_req(path, d, "never", str),
-        relations=dict(rel),
+        relations=dict(rel), senses=senses, look=" ".join(look.split()),
     )
 
 
