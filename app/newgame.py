@@ -31,6 +31,7 @@ from typing import Any, Callable
 import yaml
 
 from harness.glossary import Glossary
+from harness.knowledge import OWN_LIFE, OWN_LIFE_OTHER_WORLD
 from harness.state import StateChange
 from harness.models import EQUIPMENT, INTERNAL, INVENTORY, PLAYER, CharacterProfile, Scene
 from harness.npcgen import NORTHERN, infer_sex, pick_name
@@ -80,7 +81,7 @@ CHOICE_UK = {
 TOP = ("version", "world", "player", "start", "canon", "tone", "pace", "limits", "outcomes",
        "dialogue", "assistant", "inks", "notes", "title", "pitch")
 PLAYER_KEYS = ("name", "description", "appearance", "traits", "knows", "unbounded", "hidden",
-               "inventory", "latent")
+               "inventory", "latent", "outsider")
 ITEM_KEYS = ("name", "where", "condition", "notes", "container", "open", "hidden", "content",
              "power", "grants_sense")
 from harness.portrait import SENSES as _ALL_SENSES
@@ -445,7 +446,7 @@ def _inventory(c: "_Checker", v: Any) -> list[dict[str, Any]] | None:
             path = c.text(f"{f}.content.file", content.get("file"), required=True)
             if path and (path.startswith(("/", "~")) or ".." in path.replace("\\", "/").split("/")):
                 c.err(f"{f}.content.file", "Шлях до файлу має бути відносним, без «..».",
-                      "Запишіть, наприклад: content: {file: notes/diary.txt}")
+                      "Запишіть шлях у теці data/, наприклад: content: {file: notes/diary.txt}")
                 path = None
             e["content"] = {"file": path} if path else None
         else:
@@ -564,6 +565,7 @@ def parse(text: str) -> Package:
         for k in ("traits", "knows", "hidden", "latent"):
             player[k] = c.texts(f"player.{k}", pl.get(k))
         player["unbounded"] = c.flag("player.unbounded", pl.get("unbounded"))
+        player["outsider"] = c.flag("player.outsider", pl.get("outsider"))
         inv = _inventory(c, pl.get("inventory"))
         if inv:
             player["inventory"] = inv
@@ -984,11 +986,14 @@ def open_package(stack: Stack, pkg: Package, *, root: Path | str = CAMPAIGNS,
 
     def setup(eng: Engine) -> None:
         """Before anyone enters: the player's live state and what the character knows."""
+        # an outsider (`player.outsider`, or a latent power) remembers another world; anyone else
+        # their own life here, as before
+        own = (OWN_LIFE_OTHER_WORLD if d["player"].get("outsider") or d["player"].get("latent")
+               else OWN_LIFE)
         for fact in d["player"].get("knows", []):
             # what the character believes from their own life: a claim, not world truth
             eng.facts.add_canon(f"{pname} вважає (з власного життя, може помилятися): {fact}",
-                                game_time=eng.scene.time,
-                                knowers=[(PLAYER, "told", "own life, from another world")])
+                                game_time=eng.scene.time, knowers=[(PLAYER, "told", own)])
         if inventory:  # the package's own list replaces the equipment/inventory of the sheet
             seed_player_state(eng, traits, base=(), skip=(EQUIPMENT, INVENTORY))
             seed_player_inventory(eng, inventory)

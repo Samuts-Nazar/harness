@@ -123,26 +123,20 @@ def item_name(eng: "Engine", item_id: str) -> str:
 
 def resolve_file(eng: "Engine", rel: str) -> Path | None:
     """The file a `{file: ...}` content names: a relative path under the project's `data/` (given
-    as `data/x` or `x`) or under the campaign directory. Anything else (absolute, `..`, a path
-    that leaves those folders through a link) is refused: None. Existence is not checked here."""
+    as `data/x` or `x`), nowhere else (not the campaign directory: its memory files are not a
+    book). Anything else (absolute, `..`, a path that leaves `data/` through a link) is refused:
+    None. `data/` itself may be a link (to the main checkout). Existence is not checked here."""
     if not isinstance(rel, str) or not rel.strip():
         return None
     p = Path(rel.strip())
     if p.is_absolute() or ".." in p.parts:
         return None
-    roots: list[tuple[Path, Path]] = []
-    if eng.campaign_dir is not None:
-        roots.append((eng.campaign_dir, eng.campaign_dir / p))
-    roots += [(DATA_DIR, PROJECT_ROOT / p), (DATA_DIR, DATA_DIR / p)]
-    for root, cand in roots:
-        base = root.resolve()
-        full = cand.resolve()
-        if full.is_relative_to(base) and full.is_file():
-            return full
-    for root, cand in roots:  # nothing exists: the first safe candidate (reported as missing)
-        if cand.resolve().is_relative_to(root.resolve()):
-            return cand.resolve()
-    return None
+    if p.parts and p.parts[0] == "data":  # `data/x` names the same file as `x`
+        p = Path(*p.parts[1:])
+    if not p.parts:
+        return None
+    base, full = DATA_DIR.resolve(), (DATA_DIR / p).resolve()
+    return full if full.is_relative_to(base) else None
 
 
 # -- term expansion ------------------------------------------------------------------------------

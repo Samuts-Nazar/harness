@@ -36,6 +36,12 @@ READER_OK = json.dumps({"found": True,
 TERMS = json.dumps({"terms": ["джин", "джини", "лампа", "бажання"]}, ensure_ascii=False)
 
 
+@pytest.fixture(autouse=True)
+def _data_in_tmp(tmp_path, monkeypatch):
+    """Content files are read from the project's data/ only: here a test's own tmp_path."""
+    monkeypatch.setattr(readable, "DATA_DIR", tmp_path)
+
+
 def book(tmp_path, text=TEXT, name="book.txt"):
     p = tmp_path / name
     p.write_text(text, encoding="utf-8")
@@ -260,7 +266,7 @@ def test_package_knows_get_other_world_source(tmp_path):
     from app.game import Game
     from app.stacks import fake_stack
 
-    text = ("version: 1\nworld: witcher\nplayer:\n  description: Інженер.\n  knows:\n"
+    text = ("version: 1\nworld: witcher\nplayer:\n  description: Інженер.\n  outsider: true\n  knows:\n"
             "    - Джини живуть у лампах.\nstart:\n  place: ринок\n  situation: Ринок.\n")
     stack = fake_stack()
     g = Game(lambda new: newgame.open_package(stack, newgame.parse(text), root=tmp_path,

@@ -51,6 +51,7 @@ UNLIMITED_EXTRACTOR = (
     "miracle in front of a crowd is high).")
 SAID_LIMIT = 8  # own lines shown as "already said in this scene"
 SAID_CHARS = 220  # each shortened to this
+OWN_DETAILS = 160  # owner-only details of one item (condition, notes, power), at most
 CORRECTIONS_SHOWN = 5
 OUTCOME_EVENT = "outcome"  # harness/outcome.py (not imported: it imports the judge)
 # observable live state that means danger in the room (a drawn blade, a raised crossbow)
@@ -137,6 +138,9 @@ class ContextBuilder:
         # set by the engine: the extractor prompt lists item ids and locations and teaches
         # move/realize. Off keeps the old prompt byte for byte, so old recordings still replay.
         self.item_ids = False
+        # the owner-only details of listed items (condition, notes, power: inventory_meta), by
+        # item id; set by the engine. Shown only in the owner's own state lines, never perceived
+        self.item_meta: Callable[[], dict[str, Any]] | None = None
         # the player's wishes for the campaign, set at its start (a game package: tone, pace,
         # content limits, notes); shown to the narrator, never above the rules
         self.intent = ""
@@ -154,6 +158,25 @@ class ContextBuilder:
         # the rung each NPC starts on toward the player (a game package's person), by NPC id
         self.rung_seeds: dict[str, str] = {}
         self.relations = Relations(log, self.rung_seeds)
+
+    def own_item(self, e: Any, meta: dict[str, Any] | None = None) -> str:
+        """An element of the owner's own state with what only the owner knows of it (condition,
+        notes, power of a listed item), at most OWN_DETAILS characters. Never for observers."""
+        if meta is None:
+            meta = self.item_meta() if self.item_meta is not None else {}
+        m = meta.get(getattr(e, "id", None) or "", {}) if meta else {}
+        bits = [f"{k}: {' '.join(str(m[k]).split())}" for k in ("condition", "notes", "power")
+                if m.get(k)]
+        if not bits:
+            return e.item
+        extra = "; ".join(bits)
+        if len(extra) > OWN_DETAILS:
+            extra = extra[:OWN_DETAILS - 1].rsplit(" ", 1)[0] + "…"
+        return f"{e.item} — {extra}"
+
+    def own_meta(self) -> dict[str, Any]:
+        """Owner-only details of listed items by id (empty without a package inventory)."""
+        return self.item_meta() if self.item_meta is not None else {}
 
     # -- names ------------------------------------------------------------------------------
     def name(self, cid: str) -> str:
@@ -516,8 +539,10 @@ class ContextBuilder:
         if canon:
             parts.append("Relevant canon:\n" + "\n".join(f"- {m(f.content)}" for f in canon))
         parts.append(self._scene_header(scene, PLAYER))
+        own_meta = self.own_meta()
         state_lines = [
-            f"- {self.ref(PLAYER, c)}: {cat}: {item} "
+            f"- {self.ref(PLAYER, c)}: {cat}: "
+            f"{self.own_item(el, own_meta) if c == PLAYER else item} "
             f"({'observable' if items.is_observable(el, snap) else 'hidden'})"
             for c in scene.present
             for (cat, item), el in snap.get(c, {}).items()
@@ -646,6 +671,8 @@ class ContextBuilder:
             + (f" [id: {el.id}]" if self.item_ids and el.id else "")
             + (f" [location: {el.location}]" if self.item_ids and el.location else "")
             + (" [container, open]" if self.item_ids and el.open else "")
+            + ((" [unaware to bearer; perceptible by magic only]" if el.channel == "magic"
+                else " [unaware to bearer]") if self.item_ids and not el.aware else "")
             + f" ({'observable' if items.is_observable(el, snap) else 'hidden'})"
             for c, elems in snap.items()
             for (cat, item), el in elems.items()
@@ -669,7 +696,9 @@ class ContextBuilder:
                '"reveal", "hide" and "realize" (never invent ids; a new item is added by its text '
                'and gets its id elsewhere). "move" needs a "location": "worn", "in_hand", '
                '"on:<place>" or "in:<container id>"; "add" may give one too. "realize" is for a '
-               'character who learns of an item they carried unaware. "open" is for opening, '
+               'character who learns of an item they carried unaware; "realize" only when the text shows '
+               'the bearer being told of it or perceiving it himself (others noticing it is not '
+               'a "realize"). "open" is for opening, '
                'unzipping or untying a container (listed as a container, or one with items '
                '[location: in:<its id>]). Taking an item out of a container is a "move" of that '
                'item to "in_hand", never a "remove": "remove" is only for an item that is gone '

@@ -4,6 +4,7 @@ version: 1
 world: witcher
 
 player:
+  outsider: true
   name: Ілько Ромащенко
   description: |
     Ілько, тридцять чотири роки, інженер-програміст із нашого світу. Ішов лісовою стежкою на

@@ -401,6 +401,7 @@ class Engine:
                                   player_unlimited=player_unlimited)
         self.ctx.outcomes = outcomes
         self.ctx.item_ids = item_ids  # the extractor prompt shows item ids and locations
+        self.ctx.item_meta = lambda: readable.inventory_meta(self)  # owner-only item details
         self.world = world
         self._short_portraits: dict[str, dict | None] = {}  # npc -> generated portrait (None: failed)
         try:  # a broken portrait file must not stop a campaign from opening

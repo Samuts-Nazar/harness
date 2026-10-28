@@ -108,6 +108,10 @@ Spec `docs/superpowers/specs/2026-10-26-outsider-campaign-design.md`; plans 2 an
 - A person the narration describes who is already present is not admitted again: by all distinctive words of their label in code, else by a typed `cast_same_person` choice; generic words never merge two people, and without a verdict the newcomer is admitted.
 - Taking an item out of a closed container opens it (a `move` out of it implies `open`); a `remove` means the item is gone and is never reinterpreted.
 - A read's request is the lookup topic of the turn (`lookup_topic`), not the turn's physical actions.
+- Only an outsider remembers another world: a package's `player.knows` gets the other-world source when `player.outsider: true` or `latent` is set; any other package keeps «own life».
+- An item's condition, notes and power are shown to its owner only, as a short suffix (at most 160 characters) on the owner's own state lines for the narrator and the assistant; observations and other people's prompts keep the bare name.
+- The extractor is told which elements are unaware to their bearer; `realize` only when the text shows the bearer told of it or perceiving it himself.
+- A content file comes from the project's `data/` only (never the campaign folder).
 
 ## Interaction
 

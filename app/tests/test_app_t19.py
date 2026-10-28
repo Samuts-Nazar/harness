@@ -71,9 +71,14 @@ def test_death_makes_the_campaign_read_only_and_shows_the_chronicle(tmp_path):
     assert st["ended"] is True and st["chronicle"][-1]["kind"] == "death"
 
 
-@pytest.mark.skipif(canon_path() is None, reason="the local canon store is not in this checkout")
+# evaluated once, at collection, with the environment as it is: the body sees the same path
+# (the autouse fixture removes $HARNESS_CANON_DB only inside the test)
+_REAL_CANON = canon_path()
+
+
+@pytest.mark.skipif(_REAL_CANON is None, reason="the local canon store is not in this checkout")
 def test_vizima_on_the_real_canon_store(tmp_path):
-    g = make(tmp_path, canon_db=canon_path())
+    g = make(tmp_path, canon_db=_REAL_CANON)
     eng = g.eng
     assert "velerad" in eng.profiles and eng.profiles["velerad"].name == "Велерад"
     assert any(f for f in eng.facts.visible_to("velerad", eng.scene.time, store="canon"))

@@ -63,9 +63,10 @@ def context(engine: "Engine") -> Context:
         parts.append(who + ("\n" + core if core else ""))
     if mem.knows:
         parts.append("What the character knows:\n" + "\n".join(ctx.knowledge_lines(mem)))
-    if mem.state:
+    if mem.state:  # the character's own items carry what only the owner knows of them
+        meta = ctx.own_meta()
         parts.append("The character's own condition:\n" + "\n".join(
-            f"- {e.category}: {e.item}" for e in mem.state))
+            f"- {e.category}: {ctx.own_item(e, meta)}" for e in mem.state))
     parts.append(ctx._scene_header(scene, PLAYER))
     if mem.noticed:
         parts.append("The character has just noticed:\n" + "\n".join(
