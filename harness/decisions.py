@@ -85,6 +85,8 @@ def full_role(messages: list[dict[str, str]]) -> str:
         return "reader"
     if "translate" in sys.lower():
         return "translator"
+    if "makes narrow judgments" in sys:  # LLMJudge.SYSTEM ("You are a module ..."), not an NPC
+        return "judge"
     if sys.startswith("You are "):
         return "npc: " + sys[8:].split(".")[0]
     return "judge"

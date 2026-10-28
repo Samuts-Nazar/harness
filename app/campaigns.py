@@ -25,6 +25,7 @@ from harness.models import (
 from harness.pipeline import Engine, ModelConfig
 from harness.profile import load_profile
 from harness.providers import Messages, Provider
+from harness.settings import FAST_TIMEOUT_S
 from harness.state import StateChange, StateError
 
 from .character import Traits, derive_traits
@@ -84,7 +85,11 @@ class Stack:
     judge: object
     models: ModelConfig
     spend: object | None = None  # harness.policy.Spend in live mode
-    live: bool = False
+    live: bool = False  # real models (OpenRouter or a local server), not the scripted fake
+    # seconds a narrator or NPC call may take before it is retried (Engine.fast_timeout); a local
+    # model with a long prompt needs much more than the hosted ones
+    fast_timeout: float | None = FAST_TIMEOUT_S
+    local: bool = False  # everything on a local server: no network at all (no hosted embedder)
 
 
 class Recorder:
@@ -436,7 +441,8 @@ def open_campaign(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = Fal
     if name and not new and Engine.campaign_exists(name, root):
         eng = Engine.open_campaign(name, rec, root=root, models=stack.models, judge=stack.judge,
                                    glossary=glossary, style=Style.load("witcher"),
-                                   dialogue=DIALOGUE, world_profile=load_profile("witcher"))
+                                   dialogue=DIALOGUE, world_profile=load_profile("witcher"),
+                                   fast_timeout=stack.fast_timeout)
     else:
         name = name if (new and name) else time.strftime("inn-%Y%m%d-%H%M%S")
         while Engine.campaign_exists(name, root):
@@ -447,7 +453,8 @@ def open_campaign(stack: Stack, *, root: Path | str = CAMPAIGNS, new: bool = Fal
             name, rec, profiles(traits.label if traits and traits.label else PLAYER_LOOK),
             Scene(TITLE, ("horst", "elza"), START_TIME), root=root,
             models=stack.models, judge=stack.judge, glossary=glossary,
-            style=Style.load("witcher"), dialogue=DIALOGUE, world_profile=load_profile("witcher"))
+            style=Style.load("witcher"), dialogue=DIALOGUE, world_profile=load_profile("witcher"),
+            fast_timeout=stack.fast_timeout)
         eng.acquaint("horst", "elza")  # neighbours: they know each other by name
         for text, knowers in SEEDS:
             eng.facts.add_canon(text, knowers=[(k, "told") for k in knowers])

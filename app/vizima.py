@@ -68,7 +68,7 @@ def load_canon(stack: Stack, canon_db: str | os.PathLike[str] | bool | None = No
     if store is None:
         return None
     embedder = None
-    if stack.live:
+    if stack.live and not stack.local:  # local mode: full-text recall only, no network
         from harness.canon.embed import OpenRouterEmbedder
         embedder = OpenRouterEmbedder("qwen/qwen3-embedding-8b")
     return Canon(store, embedder)
@@ -78,7 +78,8 @@ def engine_kw(stack: Stack, dialogue: str | None = None) -> dict:
     """What every Witcher campaign's engine gets (new or reopened)."""
     return dict(models=stack.models, judge=stack.judge, glossary=Glossary.for_world("witcher"),
                 style=Style.load("witcher"), dialogue=dialogue or campaigns.DIALOGUE,
-                world_profile=load_profile("witcher"), world="witcher")
+                world_profile=load_profile("witcher"), world="witcher",
+                fast_timeout=stack.fast_timeout)
 
 
 def create_situation_a(rec: Recorder, root: Path, name: str, canon: Canon | None, kw: dict, *,

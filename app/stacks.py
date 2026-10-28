@@ -1,4 +1,5 @@
-"""Model stacks: an offline scripted Ukrainian fake (default) and the live OpenRouter stack."""
+"""Model stacks: an offline scripted Ukrainian fake (default), the live OpenRouter stack and the
+local stack (one model on a local llama.cpp server, docs/local-llm.md)."""
 from __future__ import annotations
 
 import json
@@ -14,7 +15,7 @@ from harness.director import EXCHANGE_HEADER, NOBODY, PLAYER_FLOOR
 from harness.npcgen import PORTRAIT_PREFIX
 from harness.pipeline import ModelConfig
 from harness.policy import DEFAULT_JUDGE_FIRST, FALLBACKS, Spend
-from harness.providers import Messages, OpenRouterProvider
+from harness.providers import LOCAL_URL, LocalProvider, Messages, OpenRouterProvider
 
 from .campaigns import Stack
 
@@ -242,3 +243,22 @@ def live_stack(budget: float = 0.25) -> Stack:
                           DecisionJudge(key, FALLBACKS["judge_first"], spend=spend))
     judge = EscalatingJudge(first, LLMJudge(provider, models.judge, models.judge_fallback))
     return Stack(provider, judge, models, spend, live=True)
+
+
+LOCAL_MODEL = "gemma-local"  # the server's --alias (docs/local-llm.md)
+LOCAL_TIMEOUT_S = 120.0  # a narrator call with a long prompt: ~10 s prefill + 300 words at ~27 tok/s
+
+
+def local_stack(url: str = LOCAL_URL, model: str = LOCAL_MODEL, *,
+                timeout: float = LOCAL_TIMEOUT_S) -> Stack:
+    """Every role on the one model of a local server. Typed judgments go to that model as an
+    LLMJudge (no hosted decision model); no key, no network, no cost.
+
+    No fallbacks and no fast-lane timeout: the server holds one model, so a retry or an abandoned
+    call only adds load to its two slots (an abandoned call keeps running there). A call is bounded
+    by the provider's read timeout (`timeout`) instead, and is not retried after it."""
+    provider = LocalProvider(url, timeout=timeout)
+    r = model
+    models = ModelConfig(r, r, r, r, assistant=r, reader=r)
+    return Stack(provider, LLMJudge(provider, r, compact=True), models, provider.spend,
+                 live=True, fast_timeout=None, local=True)

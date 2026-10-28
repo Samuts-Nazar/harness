@@ -182,9 +182,14 @@ class LLMJudge(Judge):
     """A cheap allowed LLM answering typed questions as JSON (one call per batch)."""
 
     SYSTEM = "You are a module of a game engine that makes narrow judgments. Answer JSON only."
+    # a local model pretty-prints its JSON: on one line it writes about a third of the tokens
+    COMPACT = " Write the JSON on one line, without spaces or line breaks."
 
-    def __init__(self, provider: Provider, model: str, fallback_model: str | None = None) -> None:
+    def __init__(self, provider: Provider, model: str, fallback_model: str | None = None, *,
+                 compact: bool = False) -> None:
+        """`compact`: ask for one-line JSON (the local stack: output tokens are its cost)."""
         self.provider, self.model, self.fallback_model = provider, model, fallback_model
+        self.system = self.SYSTEM + (self.COMPACT if compact else "")
 
     def _complete(self, messages: list[dict[str, str]]) -> str:
         try:
@@ -218,18 +223,38 @@ class LLMJudge(Judge):
         raw = ""
         for attempt in range(2):  # one retry with a stricter instruction, like a strict matcher
             raw = self._complete(
-                [{"role": "system", "content": self.SYSTEM},
+                [{"role": "system", "content": self.system},
                  {"role": "user", "content": prompt + (
                      "\nJSON object only: no prose, no code fences, every question "
                      "name present." if attempt else "")}])
             m = re.search(r"\{.*\}", raw, re.DOTALL)
             try:
-                data = json.loads(m.group(0)) if m else None
-                data = {k.strip().strip("[]").strip(): v for k, v in data.items()}  # "[name]" too
+                data = self._keyed(json.loads(m.group(0)) if m else None, questions)
                 return {n: self._parse(q, data[n]) for n, q in questions.items()}
             except (TypeError, KeyError, ValueError, AttributeError):
                 continue
         raise JudgeError(f"unparseable LLM judgment: {raw[:200]!r}")
+
+    @staticmethod
+    def _keyed(data: Any, questions: Mapping[str, Question]) -> dict[str, Any]:
+        """The answers by question name. Smaller local models key an answer by the question's
+        text instead of its name ("[q] ..." too), or, for a single question, reply with the bare
+        answer object or under any one key."""
+        def norm(k: str) -> str:
+            return re.sub(r"\s+", " ", str(k).strip().strip("[]").strip()).casefold()
+
+        if len(questions) == 1 and isinstance(data, dict) and "answer" in data:
+            return {next(iter(questions)): data}
+        got = {norm(k): v for k, v in data.items()}
+        out: dict[str, Any] = {}
+        for n, q in questions.items():
+            for k in (norm(n), norm(q.text), norm(f"[{n}] {q.text}")):
+                if k in got:
+                    out[n] = got[k]
+                    break
+        if len(questions) == 1 and not out and len(got) == 1:
+            out[next(iter(questions))] = next(iter(got.values()))
+        return out
 
     @staticmethod
     def _parse(q: Question, a: Mapping[str, Any]) -> Judgment:
